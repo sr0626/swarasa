@@ -1,0 +1,39 @@
+# Copy to infra/envs/dev.tfvars and fill in real values.
+# NEVER commit infra/envs/dev.tfvars — it is in .gitignore (see infra/.gitignore).
+# Prefer TF_VAR_* environment variables for secrets in CI/CD.
+#
+# Select this file explicitly on every command — never rely on Terraform's
+# auto-load of a bare "terraform.tfvars" (infra/CLAUDE.md "Environment
+# promotion convention" — one var-file per environment, chosen on purpose,
+# not by default):
+#   terraform plan  -var-file=envs/dev.tfvars
+#   terraform apply -var-file=envs/dev.tfvars
+
+aws_region  = "us-east-1"
+env         = "dev"
+project     = "swarasa"
+phase       = "phase1"
+
+db_username = "restaurantadmin"
+
+github_repo_url     = "https://github.com/sr0626/swarasa"
+# Numeric ids, not secrets — safe to commit, but this file is .example so
+# they're left as placeholders. Look up with:
+#   gh api repos/<org>/<repo> --jq '{owner_id: .owner.id, repo_id: .id}'
+github_owner_id     = "REPLACE_WITH_NUMERIC_OWNER_ID"
+github_repo_id      = "REPLACE_WITH_NUMERIC_REPO_ID"
+github_access_token = "github_pat_REPLACE_ME"
+
+allowed_origins = [
+  "http://localhost:3000",
+  "https://main.REPLACE_WITH_AMPLIFY_ID.amplifyapp.com"
+]
+
+aurora_max_capacity = 4
+
+# Optional. Leave unset to default to the ECR repo's ":bootstrap" tag (see
+# main.tf "module lambda" comment) — that tag must be pushed manually, once,
+# before the very first apply of a new environment. DevOps's CI/CD pipeline
+# moves the running image forward after that; Terraform never overwrites it
+# (aws_lambda_function.api has lifecycle.ignore_changes = [image_uri]).
+# lambda_image_uri = "REPLACE_WITH_ECR_REPO_URL:bootstrap"

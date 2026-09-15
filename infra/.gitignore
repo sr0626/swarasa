@@ -13,6 +13,12 @@ override.tf.json
 *_override.tf
 *_override.tf.json
 
+# Per-environment var-files (infra/CLAUDE.md "Environment promotion
+# convention") — real values per env are gitignored same as the root
+# terraform.tfvars above; the committed .example counterpart shows shape only.
+envs/*.tfvars
+!envs/*.tfvars.example
+
 # Lambda build artifacts
 *.zip
 
