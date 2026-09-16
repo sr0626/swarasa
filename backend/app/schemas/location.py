@@ -18,6 +18,10 @@ class HoursOut(BaseModel):
 class GalleryPhotoOut(BaseModel):
     id: int
     url: str
+    # Added 2026-09-16 alongside restaurant_photo.thumbnail_s3_key — see
+    # app/schemas/photo.py PhotoOut.thumbnail_url and docs/DECISIONS.md
+    # "Resize Lambda: thumbnail variant". Additive: `url` unchanged.
+    thumbnail_url: str
     display_order: int
 
 
@@ -40,6 +44,9 @@ class LocationOut(BaseModel):
     is_open_now: bool | None
     hours: list[HoursOut]
     cover_photo_url: str | None
+    # Added 2026-09-16 alongside GalleryPhotoOut.thumbnail_url (see that
+    # field's comment) — None exactly when cover_photo_url is None.
+    cover_photo_thumbnail_url: str | None
     gallery_photos: list[GalleryPhotoOut]
 
 

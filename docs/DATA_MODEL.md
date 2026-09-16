@@ -113,18 +113,33 @@ of something every writer path must remember to do.
 ## restaurant_photo
 
 *(Added in a follow-up migration, `20260912_0002_photo_gallery_and_claim_schema.py`
-— closes the "Gallery photo storage" open item below.)*
+— closes the "Gallery photo storage" open item below. `thumbnail_s3_key`
+added in `20260916_0003_photo_thumbnail_key.py` — see "S3 image resize
+pipeline" below.)*
 
 | Column | Type | Notes |
 |---|---|---|
 | id | bigint PK | |
 | location_id | bigint FK -> restaurant_location, not null | `ON DELETE CASCADE` |
-| s3_key | varchar(512), not null | S3 object key only (root CLAUDE.md media pattern) — service layer resolves to a CloudFront URL |
+| s3_key | varchar(512), not null | S3 object key only (root CLAUDE.md media pattern) — service layer resolves to a CloudFront URL. Despite the plain name, always the resize pipeline's `processed/` key, never the client's original `raw/` upload key |
+| thumbnail_s3_key | varchar(512), nullable | Added 2026-09-16, S3 image resize pipeline's thumbnail variant (`thumbnails/` key) — see below. Nullable only for direct/legacy construction; every real write path always sets it |
 | is_cover | boolean default false, not null | `true` = the single cover photo (allowed regardless of tier). `false` = a counted gallery photo. See judgment call below |
 | display_order | smallint default 0, not null | Order within the gallery; meaningless for the cover row |
 | uploaded_by | varchar(64), nullable | Cognito `sub` of the uploader (owner or assigned manager) |
 | created_at | timestamptz, not null | |
 | updated_at | timestamptz, not null | |
+
+**S3 image resize pipeline** (`docs/PROJECT_PLAN.csv` "S3 image resize
+pipeline", `docs/DECISIONS.md` "S3 image resize pipeline" / "Resize
+Lambda: thumbnail variant"): the client uploads to a `raw/` key; an S3
+event triggers a resize Lambda that writes a 1200px/quality-85 JPEG to
+`processed/` (stored in `s3_key`) and a 400px/quality-80 JPEG to
+`thumbnails/` (stored in `thumbnail_s3_key`), then deletes the `raw/`
+original. Both stored keys are the API's **predicted** transform of the
+raw key, computed and written synchronously at `POST
+/locations/{id}/photos` time — not read back from S3 after the
+asynchronous resize actually completes (see `docs/DECISIONS.md` for the
+eventual-consistency tradeoff this implies).
 
 Indexes:
 - `ix_restaurant_photo_location_cover` on (`location_id`, `is_cover`) — makes the gallery-count check cheap: `SELECT count(*) FROM restaurant_photo WHERE location_id = :id AND is_cover = false`

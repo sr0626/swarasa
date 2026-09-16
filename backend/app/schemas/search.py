@@ -25,6 +25,13 @@ class SearchResultOut(BaseModel):
     nearest_location: NearestLocationOut
     location_count_nearby: int
     cover_photo_url: str | None
+    # Added 2026-09-16 — search result cards are exactly the
+    # bandwidth-sensitive, card-style-listing use case the resize
+    # pipeline's thumbnail variant was added for (see
+    # app/schemas/location.py GalleryPhotoOut.thumbnail_url and
+    # docs/DECISIONS.md "Resize Lambda: thumbnail variant"). None exactly
+    # when cover_photo_url is None.
+    cover_photo_thumbnail_url: str | None
 
 
 class SearchResponse(BaseModel):

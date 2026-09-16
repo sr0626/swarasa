@@ -85,8 +85,24 @@ class RestaurantPhoto(TimestampMixin, Base):
     )
 
     # S3 object key (never a full URL — root CLAUDE.md "Media" pattern:
-    # S3 + CloudFront, presigned URLs for upload).
+    # S3 + CloudFront, presigned URLs for upload). Despite the plain
+    # column name, this always holds the resize pipeline's `processed/`
+    # key (BRD 5.3), never the client's original `raw/` upload key — see
+    # app/services/location_service.py's create_location_photo, which
+    # computes the transform before this row is ever created.
     s3_key: Mapped[str] = mapped_column(String(512), nullable=False)
+
+    # Added 2026-09-16 (migration 0003_photo_thumbnail_key) alongside the
+    # resize Lambda's second output variant — a smaller `thumbnails/`
+    # JPEG for card/list-view and email/notification imagery (user
+    # request beyond the BRD's documented single-processed-image spec;
+    # see docs/DECISIONS.md "Resize Lambda: thumbnail variant"). Nullable
+    # (unlike `s3_key`) purely so direct construction (tests, or a photo
+    # row that somehow predates this column) doesn't require it — every
+    # real write path (app/services/location_service.py
+    # create_location_photo) always computes and sets it, same
+    # predictable-key timing as `s3_key` itself.
+    thumbnail_s3_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
     # True = the single cover photo for this location (allowed regardless
     # of tier — DECISIONS.md "Photo gallery" treats the cover photo as

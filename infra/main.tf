@@ -70,6 +70,23 @@ module "ecr" {
 }
 
 # -------------------------------------------------------------------
+# ECR — resize Lambda's own container image repository (added 2026-09-16,
+# see docs/DECISIONS.md "Resize Lambda packaging" and "S3 image resize
+# pipeline"). Same multi-service-scaling pattern as module.ecr above — a
+# second `module "ecr"` block with a different service_name, not a rename
+# or a shared repo (DECISIONS.md "Multi-service scaling" explicitly
+# rejected sharing one ECR repo across services).
+# -------------------------------------------------------------------
+module "ecr_resize" {
+  source = "./modules/ecr"
+
+  env          = var.env
+  project      = var.project
+  phase        = var.phase
+  service_name = "resize"
+}
+
+# -------------------------------------------------------------------
 # Cognito — User Pool with 4 groups; transactional email via SES
 # -------------------------------------------------------------------
 module "cognito" {
@@ -160,6 +177,7 @@ module "iam" {
   stripe_secret_key_arn     = aws_secretsmanager_secret.stripe_secret_key.arn
   stripe_webhook_secret_arn = aws_secretsmanager_secret.stripe_webhook_secret.arn
   ecr_repository_arn        = module.ecr.repository_arn
+  ecr_resize_repository_arn = module.ecr_resize.repository_arn
   github_repo_url           = var.github_repo_url
   github_owner_id           = var.github_owner_id
   github_repo_id            = var.github_repo_id
@@ -225,6 +243,71 @@ module "lambda" {
   media_bucket_name    = module.s3.media_bucket_name
   cognito_user_pool_id = module.cognito.user_pool_id
   allowed_origins      = var.allowed_origins
+}
+
+# -------------------------------------------------------------------
+# Resize Lambda — S3 image resize pipeline (BRD 5.3 steps 3-5 + the
+# thumbnail variant, docs/DECISIONS.md "Resize Lambda: thumbnail
+# variant"). Own container image, own IAM role, own ECR repo (module.iam
+# resize_lambda_role_arn / module.ecr_resize above) — see
+# modules/lambda_resize/main.tf's header for why it's a dedicated module
+# rather than a second `module "lambda"` block.
+#
+# Same bootstrap chicken-and-egg as the API Lambda (see `module "lambda"`
+# comment above for the full explanation): one-time manual push to
+# module.ecr_resize.repository_url's `:bootstrap` tag required before the
+# very first apply of a new environment — Lambda validates the image
+# exists in ECR at function-create time.
+# -------------------------------------------------------------------
+locals {
+  resize_image_uri = coalesce(var.resize_image_uri, "${module.ecr_resize.repository_url}:bootstrap")
+}
+
+module "lambda_resize" {
+  source = "./modules/lambda_resize"
+
+  env        = var.env
+  project    = var.project
+  phase      = var.phase
+  aws_region = var.aws_region
+
+  resize_lambda_role_arn = module.iam.resize_lambda_role_arn
+  resize_image_uri       = local.resize_image_uri
+  media_bucket_name      = module.s3.media_bucket_name
+  media_bucket_arn       = module.s3.media_bucket_arn
+}
+
+# -------------------------------------------------------------------
+# S3 event notification — wires the media bucket's raw/ prefix to the
+# resize Lambda (BRD 5.3 step 3). Lives here in the root module (not
+# inside module "s3") to avoid a circular module dependency:
+# module.lambda_resize already needs module.s3's bucket name/ARN (for its
+# IAM role and invoke permission), so module.s3 can't also depend on
+# module.lambda_resize.
+#
+# Explicit `depends_on = [module.lambda_resize]` ensures the S3 invoke
+# permission (aws_lambda_permission.s3_invoke, inside module.lambda_resize)
+# exists before S3 will accept this notification config — S3 validates the
+# target Lambda's resource policy at notification-config-write time, and a
+# plain output reference alone (e.g. via resize_lambda_arn) only orders
+# against aws_lambda_function.resize, not the separate
+# aws_lambda_permission sibling resource.
+#
+# filter_prefix = "raw/" is the entire reason this never re-triggers
+# itself: the resize Lambda only ever writes to processed/ and
+# thumbnails/, both excluded by this filter by construction, not by any
+# code-side guard.
+# -------------------------------------------------------------------
+resource "aws_s3_bucket_notification" "media_raw_upload" {
+  bucket = module.s3.media_bucket_name
+
+  lambda_function {
+    lambda_function_arn = module.lambda_resize.resize_lambda_arn
+    events              = ["s3:ObjectCreated:*"]
+    filter_prefix       = "raw/"
+  }
+
+  depends_on = [module.lambda_resize]
 }
 
 # -------------------------------------------------------------------

@@ -66,6 +66,17 @@ to revisit later, not a final sign-off.
   Lambda's first create) — the real backend image still needs its first
   push, which happens automatically via `deploy-backend.yml` on the next
   `backend/**` merge to `main`
+- S3 image resize pipeline (`docs/PROJECT_PLAN.csv` "S3 image resize
+  pipeline") — code complete: presigned-upload-URL endpoint switched to
+  presigned POST with a `raw/` key (S3-enforced 5MB cap — see
+  DECISIONS.md), `POST /locations/{id}/photos` now stores the predicted
+  `processed/`/`thumbnails/` keys instead of waiting on the async resize,
+  new resize Lambda (`backend/app/lambda_handlers/resize_photo.py`)
+  writes a 1200px processed JPEG + a 400px thumbnail (thumbnail was a
+  user-requested addition beyond the BRD spec) then deletes `raw/`. Not
+  deployed yet — needs its own `terraform apply` + one-time `:bootstrap`
+  ECR push + `DEV_DEPLOY_RESIZE_ROLE_ARN` GitHub secret before it runs
+  for real (see the PR)
 
 ## Frontend (Next.js)
 - [x] Project scaffold, typed API client, auth helpers, route skeleton
@@ -120,6 +131,15 @@ to revisit later, not a final sign-off.
   and the real backend image deployed first
 - State key convention set (`envs/dev/terraform.tfstate`) — in use, no
   migration needed (fresh state store on a fresh account)
+- S3 image resize pipeline infra written, not yet applied: new
+  `infra/modules/lambda_resize` module (resize Lambda, no VPC — S3-only,
+  never touches Aurora), a second `module "ecr_resize"` (service_name
+  "resize"), a resize-scoped IAM role (S3 get `raw/*`, put `processed/*`
+  + `thumbnails/*`, delete `raw/*` only) and its own GitHub Actions OIDC
+  deploy role, an `aws_s3_bucket_notification` wiring the media bucket's
+  `raw/` prefix to it, and an `expire-stale-raw-uploads` S3 lifecycle
+  rule as a cost backstop. See the PR's post-merge checklist for the
+  exact human steps (apply, bootstrap image push, GitHub secret)
 
 ## DevOps (CI/CD)
 - [x] `deploy-backend.yml` reviewed and fixed (PR #39) — the image-scan
@@ -129,6 +149,12 @@ to revisit later, not a final sign-off.
       real now (2026-09-15) — pipeline is ready to fire
 - [ ] Still never actually run — needs a real push under `backend/**` to
       `main` to trigger the first end-to-end pipeline run
+- `deploy-resize.yml` written (S3 image resize pipeline) — mirrors
+      `deploy-backend.yml`'s exact pattern for the resize Lambda's own
+      image, its own path filter, its own OIDC role. Human review
+      required before it's live, same as `deploy-backend.yml` was; not
+      yet run even once — needs `terraform apply`, the one-time
+      `:bootstrap` push, and the `DEV_DEPLOY_RESIZE_ROLE_ARN` secret first
 
 ## QA / Tests
 - [x] pytest: 109 passing, 3 skipped (need real Postgres), 0 failing

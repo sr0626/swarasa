@@ -30,3 +30,8 @@ aurora_max_capacity = 4
 # moves the running image forward after that; Terraform never overwrites it
 # (aws_lambda_function.api has lifecycle.ignore_changes = [image_uri]).
 # lambda_image_uri = "REPLACE_WITH_ECR_REPO_URL:bootstrap"
+
+# Optional. Same reasoning as lambda_image_uri above, for the resize
+# Lambda's own image (module.ecr_resize / module.lambda_resize, added
+# 2026-09-16 — S3 image resize pipeline).
+# resize_image_uri = "REPLACE_WITH_ECR_RESIZE_REPO_URL:bootstrap"

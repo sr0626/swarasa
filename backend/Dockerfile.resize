@@ -1,0 +1,40 @@
+# ============================================================================
+# Resize Lambda container image — S3 image resize pipeline (BRD 5.3), steps
+# 3-5 (S3 event -> 1200px processed/ JPEG + 400px thumbnails/ JPEG -> delete
+# raw/). Separate image from backend/Dockerfile (the API Lambda) because
+# this Lambda needs Pillow, a compiled C extension — see docs/DECISIONS.md
+# "Resize Lambda packaging: container image, not zip+layer" for the full
+# comparison against a zip + Lambda Layer.
+#
+# Deliberately minimal: only boto3 + Pillow (requirements-resize.txt), and
+# only the two source files this handler actually needs
+# (app/lambda_handlers/resize_photo.py + app/media/key_transform.py) — never
+# the full FastAPI app, sqlalchemy, mangum, alembic, migrations/, etc. Keep
+# it that way; a smaller image means a faster cold start on every photo
+# upload.
+#
+# Built/pushed/deployed by DevOps's own pipeline
+# (.github/workflows/deploy-resize.yml), same OIDC/ECR/scan-gate pattern as
+# .github/workflows/deploy-backend.yml — see that file and devops/CLAUDE.md.
+# ============================================================================
+
+# Same base image family as the API Lambda (root CLAUDE.md stack: Python
+# 3.12) — sets WORKDIR=/var/task and bakes in the Lambda Runtime Interface
+# Client/entrypoint already; do not override ENTRYPOINT.
+FROM public.ecr.aws/lambda/python:3.12
+
+COPY requirements-resize.txt ${LAMBDA_TASK_ROOT}/requirements-resize.txt
+RUN pip install --no-cache-dir -r "${LAMBDA_TASK_ROOT}/requirements-resize.txt"
+
+# Package layout mirrors app/ so `app.lambda_handlers.resize_photo.handler`
+# (the CMD below) resolves the same way app.main.handler does in the API
+# image — just with far fewer files copied in.
+COPY app/__init__.py ${LAMBDA_TASK_ROOT}/app/__init__.py
+COPY app/media/ ${LAMBDA_TASK_ROOT}/app/media/
+COPY app/lambda_handlers/ ${LAMBDA_TASK_ROOT}/app/lambda_handlers/
+
+# package_type = "Image" Lambda functions have no separate "handler" config
+# — CMD here *is* the handler, in "<module>.<callable>" form (see
+# infra/CLAUDE.md "Lambda + API Gateway"). Matches
+# app/lambda_handlers/resize_photo.py's `handler(event, context)`.
+CMD ["app.lambda_handlers.resize_photo.handler"]

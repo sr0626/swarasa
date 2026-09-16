@@ -54,8 +54,8 @@ locals {
   # needing another Terraform change — the whole point of GitHub adding the
   # ids to the claim in the first place.
   github_repo_slug_immutable = "${local.github_repo_slug_owner}@${var.github_owner_id}/${local.github_repo_slug_name}@${var.github_repo_id}"
-  github_repo_slug_owner      = split("/", local.github_repo_slug)[0]
-  github_repo_slug_name       = split("/", local.github_repo_slug)[1]
+  github_repo_slug_owner     = split("/", local.github_repo_slug)[0]
+  github_repo_slug_name      = split("/", local.github_repo_slug)[1]
 
   # Constructed from the known naming convention (same technique this module
   # already uses for the CloudWatch log group ARNs above) instead of taking
@@ -70,6 +70,13 @@ locals {
   # module's service_name for this Lambda ever changes — see DECISIONS.md
   # "Multi-service scaling".
   api_lambda_arn = "arn:aws:lambda:${var.aws_region}:${var.account_id}:function:${var.project}-${var.service_name}-${var.env}"
+
+  # Same constructed-not-referenced reasoning as api_lambda_arn above
+  # (avoids a circular dependency on module.lambda_resize, which itself
+  # depends on this iam module for its execution role). "resize" is
+  # hardcoded rather than parameterized — see the resize_log_group_arn
+  # comment in main.tf for why.
+  resize_lambda_arn = "arn:aws:lambda:${var.aws_region}:${var.account_id}:function:${var.project}-resize-${var.env}"
 }
 
 # -------------------------------------------------------------------
@@ -184,6 +191,69 @@ resource "aws_iam_role_policy" "github_actions_deploy" {
           "lambda:GetFunctionConfiguration",
         ]
         Resource = local.api_lambda_arn
+      }
+    ]
+  })
+}
+
+# -------------------------------------------------------------------
+# Second GitHub Actions OIDC role — resize Lambda's own deploy pipeline
+# (.github/workflows/deploy-resize.yml). A SEPARATE role, not an addition
+# to the policy above, per devops/CLAUDE.md "Multi-service scaling": each
+# service's deploy role is scoped to "one repo, one function", never
+# widened to cover a second service. Reuses the same OIDC provider
+# (`aws_iam_openid_connect_provider.github_actions`, an account-level
+# singleton) and the same trust condition (this repo, `main` branch only)
+# as the API's deploy role above — only the permissions differ.
+# -------------------------------------------------------------------
+resource "aws_iam_role" "github_actions_deploy_resize" {
+  name               = "${var.project}-github-actions-deploy-resize-${var.env}"
+  assume_role_policy = data.aws_iam_policy_document.github_actions_trust.json
+
+  tags = local.common_tags
+}
+
+resource "aws_iam_role_policy" "github_actions_deploy_resize" {
+  name = "${var.project}-github-actions-deploy-resize-policy-${var.env}"
+  role = aws_iam_role.github_actions_deploy_resize.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        # Same account-level-only exception as EcrAuthToken above —
+        # GetAuthorizationToken has no resource-level permission support.
+        Sid      = "EcrAuthToken"
+        Effect   = "Allow"
+        Action   = ["ecr:GetAuthorizationToken"]
+        Resource = "*"
+      },
+      {
+        Sid    = "EcrPushPullOwnRepo"
+        Effect = "Allow"
+        Action = [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage",
+          "ecr:InitiateLayerUpload",
+          "ecr:UploadLayerPart",
+          "ecr:CompleteLayerUpload",
+          "ecr:PutImage",
+          "ecr:DescribeImages",
+          "ecr:DescribeImageScanFindings",
+          "ecr:StartImageScan",
+        ]
+        Resource = var.ecr_resize_repository_arn
+      },
+      {
+        Sid    = "LambdaUpdateOwnFunctionCode"
+        Effect = "Allow"
+        Action = [
+          "lambda:UpdateFunctionCode",
+          "lambda:GetFunction",
+          "lambda:GetFunctionConfiguration",
+        ]
+        Resource = local.resize_lambda_arn
       }
     ]
   })

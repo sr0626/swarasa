@@ -252,6 +252,173 @@ same-day fallback if the new version needs correcting)*
 
 ## Infrastructure & Hosting
 
+**S3 image resize pipeline: `raw/`/`processed/`/`thumbnails/` key convention, predictable key instead of read-after-write**
+2026-09-16 | Completed the pipeline BRD 5.3 "S3 Image Upload Pipeline"
+already fully specified but that was only half-built (`docs/PROJECT_PLAN.csv`
+"S3 image resize pipeline" — the presigned-upload-URL half existed, the
+resize Lambda did not). Two judgment calls made while implementing an
+already-decided spec (Decision-Making Autonomy):
+- **Key convention:** the upload-url endpoint now generates
+  `raw/locations/{id}/photos/{uuid}.<ext>` (previously `locations/{id}/
+  photos/{uuid}.<ext>`, no `raw/` prefix at all). The resize Lambda's
+  output keys are a pure-string transform of that path — `raw/` swapped
+  for `processed/`, extension normalized to `.jpg` (the resize Lambda
+  always outputs JPEG regardless of input format, per BRD). Lives in
+  `backend/app/media/key_transform.py`, a dependency-free module shared
+  by the FastAPI app and the resize Lambda's own minimal container image
+  (see "Resize Lambda packaging" below for why it has to stay
+  dependency-free).
+- **Predictable key, not read-after-write:** `POST /locations/{id}/photos`
+  (the "record it" call) happens immediately after the client's direct
+  S3 upload completes, but the resize Lambda runs asynchronously off the
+  S3 event and will not have finished by then. Rather than block/poll for
+  that, the API computes and stores the *predicted* `processed/`/
+  `thumbnails/` keys synchronously via the same pure transform, so the DB
+  record and the response are correct on the very first call — the actual
+  S3 objects typically appear a few seconds later. Considered and
+  rejected: (a) polling S3 for the processed object before responding —
+  adds latency and a timeout failure mode to every photo-record call for
+  no real benefit; (b) a `status` field (`pending`/`ready`) the client
+  polls — real complexity (a new state machine, a new poll loop on the
+  frontend) for a window that's normally a few seconds; (c) doing the
+  resize synchronously in the request path — directly reintroduces the
+  6MB Lambda payload problem presigned uploads exist to avoid, and BRD
+  5.3 explicitly specifies an async S3-event-triggered Lambda. Tradeoff
+  accepted: a client that requests the photo URL in that narrow window
+  gets a 404 from CloudFront until the resize Lambda finishes — acceptable
+  for Phase 1 traffic, revisit only if it proves to be a real problem.
+*Rejected: read-after-write polling, a pending/ready status field,
+synchronous in-request resize (see above)*
+
+**S3 image resize pipeline: presigned POST for location-photo uploads, not presigned PUT**
+2026-09-16 | Same pipeline as above. BRD 5.3 requires the 5MB cap to be
+"enforced by S3 ... before the upload completes" — verified (not assumed)
+that this is achievable ONLY via a presigned POST's `content-length-range`
+condition: AWS's own bucket-policy-condition-key documentation
+(`amazon-s3-policy-keys.html`) has no `PutObject` size-limiting example,
+`content-length-range` is documented as a presigned-POST-policy construct,
+and a plain presigned `PUT` (SigV4 query-string signing) has no way to
+pin an exact/max `Content-Length` either — it isn't part of what that
+signature covers. This is a deviation from `backend/CLAUDE.md`'s general
+"S3 presigned URL generation" pattern (still the exact plain-`PUT` pattern
+for every other upload in this app, e.g. claim documents) — narrowly
+scoped to the one endpoint that actually needs a hard, S3-enforced size
+cap. `POST /locations/{id}/photos/upload-url` now returns `{upload_url,
+fields, s3_key, expires_in}` (added `fields`) instead of the previous
+`{upload_url, s3_key, expires_in}` — a documented, flagged contract
+change (root CLAUDE.md "never change an API contract silently"); no
+frontend consumer existed yet (this pipeline was "Not Started" end to end
+before this change), so the blast radius is this backend + its docs only.
+*Rejected: presigned PUT with a signed Content-Length parameter (confirmed
+not supported — Content-Length isn't signable on a SigV4 query-string
+presigned URL), app-side-only size validation with no S3-side enforcement
+(doesn't satisfy the BRD's literal "before the upload completes"), a
+post-upload verify-and-delete-if-oversized callback (upload still
+completes first, same problem)*
+
+**Resize Lambda: thumbnail variant added alongside the main 1200px processed image**
+2026-09-16 | **User-requested addition beyond BRD 5.3's documented spec**
+(BRD only specifies the single 1200px/quality-85 processed JPEG) — not a
+misreading of the BRD, an explicit scope addition for future card/list-view
+and email/notification imagery. The resize Lambda now writes a SECOND
+JPEG per upload: 400px on the long edge, quality 80, to a third prefix
+mirroring the existing convention — `thumbnails/locations/{id}/photos/
+{uuid}.jpg`. Dimension/quality judgment call: 400px comfortably covers a
+2x-density card thumbnail at a common ~200 CSS px listing-card width, or
+an inline email image, while meaningfully cutting bytes vs. the 1200px
+image for those bandwidth-sensitive contexts; quality dialed down a notch
+from the main image's 85 (fine detail loss matters less at this size, and
+the extra size reduction matters more for the "cheap, frequent load"
+contexts this variant targets). Derived from the same decoded source
+image as the 1200px variant (not re-derived from the already-JPEG-encoded
+1200px output), avoiding a second generation-loss pass. `restaurant_photo`
+gained a nullable `thumbnail_s3_key` column (migration
+`20260916_0003_photo_thumbnail_key.py`) and every photo-shaped API
+response gained a `..._thumbnail_url` field alongside (never replacing)
+its existing `..._url` field — `PhotoOut.thumbnail_url`,
+`GalleryPhotoOut.thumbnail_url`, `LocationOut.cover_photo_thumbnail_url`,
+`SearchResultOut.cover_photo_thumbnail_url`. The resize Lambda's IAM
+`s3:PutObject` grant was widened from one prefix (`processed/*`) to two
+(`processed/*` and `thumbnails/*`) — still least-privilege, still no
+`s3:GetObject`/`s3:DeleteObject` outside `raw/*`.
+*Rejected: deriving the thumbnail from the 1200px JPEG output instead of
+the original decode (extra generation-loss pass for no benefit), a single
+configurable-size endpoint instead of a fixed second variant (real
+complexity — signed transform URLs / on-the-fly resizing — for a Phase 1
+need that's fully met by one fixed extra size)*
+
+**Resize Lambda packaging: own container image, not a zip + Lambda Layer**
+2026-09-16 | The resize Lambda needs Pillow, a compiled C extension —
+can't ship as a plain zip without a Lambda-compatible binary wheel.
+Compared the two real options:
+- **Container image** (chosen) — `backend/Dockerfile.resize`, built from
+  the same `public.ecr.aws/lambda/python:3.12` base as the API Lambda,
+  `pip install`s Pillow inside that base image so the wheel is guaranteed
+  built for the actual Lambda execution environment's architecture/glibc.
+  Needs its own ECR repo — `infra/modules/ecr` already has a
+  `service_name` variable for exactly this multi-service case
+  (DECISIONS.md "Multi-service scaling"), so `module "ecr_resize"` with
+  `service_name = "resize"` is a straight copy of the established pattern,
+  not a new one.
+- **Zip + Lambda Layer** — lighter weight (no container build/push step),
+  but needs a Lambda-compatible Pillow wheel from somewhere: either build
+  one in CI (real, ongoing build-environment-matching risk — "works on
+  the build machine, breaks in Lambda" is a well-known trap for compiled
+  deps) or depend on a public third-party layer (e.g. Klayers/SAR).
+  Rejected the public-layer path specifically: root CLAUDE.md's "no
+  external vendors" is about SaaS vendors (Stripe, Vercel, etc.), not
+  AWS-hosted resources, so it wouldn't literally violate that guardrail —
+  but a public Lambda Layer is an unversioned-by-us, unaudited third-party
+  artifact this Lambda's execution role would run at full trust,
+  unpinned to anything this repo controls or reviews. The container-image
+  route gets an equivalent-or-better binary-compat guarantee (same base
+  image family already proven for the API Lambda) with a supply chain
+  this repo actually controls (ECR scan-on-push + an explicit
+  `ecr:StartImageScan` step, same as the API image).
+- **New Terraform module, not a second `module "lambda"` block:** the
+  DECISIONS.md "Multi-service scaling" precedent (a second `module
+  "lambda"` block with a different `service_name`) doesn't fit here —
+  `infra/modules/lambda` bundles the API Lambda, the deal-expiry Lambda,
+  AND the shared API Gateway into one module; reusing it would duplicate
+  the deal-expiry Lambda and stand up a second, useless API Gateway just
+  to get a third Lambda function. `infra/modules/lambda_resize` is a new,
+  narrowly-scoped module instead — same tagging/naming/`service_name`
+  conventions as every other module, just sized to one event-triggered
+  Lambda with no API Gateway integration. Also not placed in a VPC (unlike
+  the API/deal-expiry Lambdas) — it only ever talks to S3's public
+  regional endpoint, never Aurora, so VPC attachment would only add
+  ENI-attach cold-start cost for no benefit.
+- **Own DevOps pipeline:** `.github/workflows/deploy-resize.yml`, mirroring
+  `.github/workflows/deploy-backend.yml`'s exact pattern (OIDC, idempotent
+  build/push, explicit `ecr:StartImageScan`, critical-findings gate,
+  `update-function-code` + wait) with its own path filter and its own
+  OIDC deploy role (`aws_iam_role.github_actions_deploy_resize`, GitHub
+  secret `DEV_DEPLOY_RESIZE_ROLE_ARN`) scoped to exactly this one ECR repo
+  and this one Lambda function — devops/CLAUDE.md "Multi-service scaling"
+  is explicit that a second service's deploy role must never widen an
+  existing one to cover both. Known minor overlap, flagged rather than
+  silently accepted: `deploy-backend.yml`'s path filter is `backend/**`,
+  which also matches the resize Lambda's own files (they live under
+  `backend/app/lambda_handlers/` and `backend/app/media/`) — so a
+  resize-only change triggers an unnecessary API-image rebuild/redeploy
+  too (harmless/idempotent, just wasted CI minutes). Narrowing
+  `deploy-backend.yml`'s filter to exclude those paths was considered and
+  deferred — not done here to avoid touching a workflow this task didn't
+  need to change, on top of everything else in this PR; a fast-follow if
+  the wasted CI time becomes a real cost.
+- **Same one-time bootstrap chicken-and-egg as the API Lambda:** the
+  resize Lambda function can't be created until an image exists at
+  `module.ecr_resize`'s repo, so the same manual one-time `:bootstrap`
+  tag push documented for the API Lambda (`infra/main.tf`'s `module
+  "lambda"` comment) is required here too, before the very first
+  `terraform apply` of a new environment — see this task's post-merge
+  checklist for the exact commands.
+*Rejected: a zip + public Lambda Layer for Pillow (unaudited third-party
+supply chain), a second `module "lambda"` block (would duplicate
+deal-expiry + API Gateway), sharing the API image's Dockerfile/ECR repo
+(mixes an unrelated heavy dependency into the API image, and violates the
+one-repo-one-function IAM scoping convention)*
+
 **Migrations applied to the real database via a Lambda management command (`alembic_upgrade`), human-invoked via `aws lambda invoke` — not run by any agent, ever**
 2026-09-15 | Found while investigating why the first fully-successful
 deploy 500'd on every DB-touching endpoint: `relation "restaurant_location"

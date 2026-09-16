@@ -9,6 +9,11 @@ locals {
   # Construct log group ARNs from known naming convention (avoids circular deps)
   api_log_group_arn         = "arn:aws:logs:${var.aws_region}:${var.account_id}:log-group:/aws/lambda/${var.project}-api-${var.env}:*"
   deal_expiry_log_group_arn = "arn:aws:logs:${var.aws_region}:${var.account_id}:log-group:/aws/lambda/${var.project}-deal-expiry-${var.env}:*"
+  # "resize" is hardcoded here the same way "deal-expiry" is above (not
+  # parameterized via a service_name variable) — modules/lambda_resize's
+  # own service_name variable defaults to "resize" too; if that default is
+  # ever overridden this ARN would need to be updated alongside it.
+  resize_log_group_arn = "arn:aws:logs:${var.aws_region}:${var.account_id}:log-group:/aws/lambda/${var.project}-resize-${var.env}:*"
 }
 
 # -------------------------------------------------------------------
@@ -134,6 +139,65 @@ resource "aws_iam_role_policy" "deal_expiry_lambda_custom" {
           "logs:PutLogEvents"
         ]
         Resource = local.deal_expiry_log_group_arn
+      }
+    ]
+  })
+}
+
+# -------------------------------------------------------------------
+# Resize Lambda execution role — S3 image resize pipeline (BRD 5.3 +
+# thumbnail variant). Least privilege per infra/CLAUDE.md "IAM
+# Least-Privilege Rules": S3 get raw/, put processed/ AND thumbnails/
+# (two prefixes since 2026-09-16's thumbnail addition — see
+# docs/DECISIONS.md "Resize Lambda: thumbnail variant"), delete raw/ —
+# nothing else, never shared with the API Lambda's role. No RDS/VPC
+# permissions attached (unlike api_lambda/deal_expiry_lambda above) — this
+# function isn't in a VPC (see modules/lambda_resize/main.tf) and never
+# touches Aurora.
+# -------------------------------------------------------------------
+resource "aws_iam_role" "resize_lambda" {
+  name               = "${var.project}-resize-lambda-${var.env}"
+  assume_role_policy = data.aws_iam_policy_document.lambda_trust.json
+
+  tags = local.common_tags
+}
+
+resource "aws_iam_role_policy" "resize_lambda_custom" {
+  name = "${var.project}-resize-lambda-policy-${var.env}"
+  role = aws_iam_role.resize_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "S3ReadRawUploads"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject"]
+        Resource = "${var.media_bucket_arn}/raw/*"
+      },
+      {
+        Sid    = "S3WriteProcessedAndThumbnails"
+        Effect = "Allow"
+        Action = ["s3:PutObject"]
+        Resource = [
+          "${var.media_bucket_arn}/processed/*",
+          "${var.media_bucket_arn}/thumbnails/*",
+        ]
+      },
+      {
+        Sid      = "S3DeleteRawAfterProcessing"
+        Effect   = "Allow"
+        Action   = ["s3:DeleteObject"]
+        Resource = "${var.media_bucket_arn}/raw/*"
+      },
+      {
+        Sid    = "CloudWatchLogs"
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = local.resize_log_group_arn
       }
     ]
   })

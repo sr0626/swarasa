@@ -79,10 +79,14 @@ async def _location_to_out(db: AsyncSession, location: RestaurantLocation) -> Lo
             for row in hours_rows
         ],
         cover_photo_url=s3_service.resolve_media_url(cover.s3_key) if cover else None,
+        cover_photo_thumbnail_url=(
+            s3_service.resolve_media_url(cover.thumbnail_s3_key or cover.s3_key) if cover else None
+        ),
         gallery_photos=[
             GalleryPhotoOut(
                 id=photo.id,
                 url=s3_service.resolve_media_url(photo.s3_key),
+                thumbnail_url=s3_service.resolve_media_url(photo.thumbnail_s3_key or photo.s3_key),
                 display_order=photo.display_order,
             )
             for photo in gallery
@@ -331,15 +335,41 @@ async def create_photo_upload_url(
     db: AsyncSession, location_id: int, content_type: str
 ) -> UploadUrlResponse:
     await get_location_or_404(db, location_id)
-    url, key, expires_in = s3_service.generate_location_photo_upload_url(location_id, content_type)
-    return UploadUrlResponse(upload_url=url, s3_key=key, expires_in=expires_in)
+    url, fields, key, expires_in = s3_service.generate_location_photo_upload_url(
+        location_id, content_type
+    )
+    return UploadUrlResponse(upload_url=url, fields=fields, s3_key=key, expires_in=expires_in)
 
 
 async def create_location_photo(
     db: AsyncSession, location_id: int, body: PhotoCreate, current_user
 ) -> PhotoOut:
+    """`body.s3_key` (as received from the client) is the RAW upload key
+    from `create_photo_upload_url` above — BRD 5.3's steps 3-5 (resize,
+    write processed/thumbnails, delete raw/) run asynchronously off the S3
+    event, so they will almost certainly NOT have finished by the time
+    this call lands right after the client's direct-to-S3 upload
+    completes. Rather than block/poll for that, this predicts the
+    resize Lambda's eventual `processed/`/`thumbnails/` output keys from
+    the raw key (`s3_service.processed_key_for_upload`/
+    `thumbnail_key_for_upload` — pure string transforms, see
+    app/media/key_transform.py) and stores THOSE immediately. The DB
+    record — and the URLs this endpoint returns — are correct from the
+    first response; the actual S3 objects typically appear a few seconds
+    later (real eventual consistency: e.g. an image requested from
+    CloudFront in that narrow window would 404 until the resize Lambda
+    finishes). See docs/DECISIONS.md "S3 image resize pipeline:
+    predictable key, not read-after-write" for the full reasoning and the
+    tradeoffs considered (polling, a status field, synchronous resize in
+    the request path — all rejected).
+    """
     location = await get_location_or_404(db, location_id)
-    photo = await photo_service.create_photo(db, location, body, current_user.cognito_sub)
+    processed_key = s3_service.processed_key_for_upload(body.s3_key, location_id)
+    thumbnail_key = s3_service.thumbnail_key_for_upload(body.s3_key, location_id)
+    stored_body = body.model_copy(update={"s3_key": processed_key})
+    photo = await photo_service.create_photo(
+        db, location, stored_body, current_user.cognito_sub, thumbnail_s3_key=thumbnail_key
+    )
     return photo_service.to_photo_out(photo)
 
 

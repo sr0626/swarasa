@@ -187,6 +187,11 @@ async def search(
                 ),
                 location_count_nearby=card.location_count_nearby,
                 cover_photo_url=s3_service.resolve_media_url(cover.s3_key) if cover else None,
+                cover_photo_thumbnail_url=(
+                    s3_service.resolve_media_url(cover.thumbnail_s3_key or cover.s3_key)
+                    if cover
+                    else None
+                ),
             )
         )
 

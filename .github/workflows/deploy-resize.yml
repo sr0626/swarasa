@@ -1,0 +1,152 @@
+# ============================================================================
+# Deploy pipeline for the resize Lambda — S3 image resize pipeline (BRD 5.3
+# + thumbnail variant, docs/DECISIONS.md "S3 image resize pipeline" /
+# "Resize Lambda: thumbnail variant" / "Resize Lambda packaging").
+#
+# Mirrors .github/workflows/deploy-backend.yml's exact pattern (OIDC auth,
+# idempotent build/push, explicit ecr:StartImageScan rather than relying on
+# scan_on_push alone, critical-findings gate, update-function-code + wait)
+# per devops/CLAUDE.md — this is a second, independent pipeline for a
+# second, independent Lambda service, not a shared/matrix job with the API
+# pipeline (devops/CLAUDE.md "Multi-service scaling": its own workflow,
+# its own path filter, its own OIDC role scoped to its own one repo and
+# one function).
+#
+# A HUMAN MUST REVIEW THIS FILE BEFORE IT IS EVER ENABLED/MERGED TO A
+# BRANCH THAT RUNS IT — same guardrail as deploy-backend.yml
+# (devops/CLAUDE.md: "NEVER build and deploy without the human having
+# reviewed the workflow file itself first").
+#
+# What still has to happen before this workflow can run for real (human
+# actions, out of this task's scope — see the PR description / final
+# report's post-merge checklist):
+#   1. Human runs `terraform apply` (never this agent) — creates
+#      module.ecr_resize, module.iam's resize_lambda role AND
+#      github_actions_deploy_resize role, module.lambda_resize, and the
+#      S3 event notification.
+#   2. Human creates the GitHub secret DEV_DEPLOY_RESIZE_ROLE_ARN from
+#      `terraform output github_actions_resize_role_arn`.
+#   3. Human does the one-time manual `:bootstrap` image push to
+#      module.ecr_resize's repository (see infra/main.tf's
+#      `module "lambda_resize"` comment) — required before the very
+#      first apply can even succeed (the Lambda resource requires an
+#      existing image at create time).
+# ============================================================================
+
+name: Deploy Resize Lambda
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/app/lambda_handlers/resize_photo.py"
+      - "backend/app/lambda_handlers/__init__.py"
+      - "backend/app/media/**"
+      - "backend/app/__init__.py"
+      - "backend/Dockerfile.resize"
+      - "backend/requirements-resize.txt"
+
+permissions:
+  id-token: write   # required for OIDC — no static AWS keys, ever
+  contents: read
+
+env:
+  AWS_REGION: us-east-1                     # matches deploy-backend.yml — see DECISIONS.md "Region"
+  ECR_REPOSITORY: swarasa-resize-dev        # confirmed against infra/modules/ecr (service_name="resize") + infra/main.tf's module "ecr_resize"
+  LAMBDA_FUNCTION_NAME: swarasa-resize-dev  # confirmed against infra/modules/lambda_resize + infra/main.tf's module "lambda_resize" (service_name defaults to "resize")
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC role assumption, no static keys)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          # A SEPARATE role from deploy-backend.yml's DEV_DEPLOY_ROLE_ARN —
+          # devops/CLAUDE.md "Multi-service scaling": one repo, one
+          # function per service's deploy role, never widened to cover
+          # both. Defined in infra/modules/iam/github_actions.tf
+          # (aws_iam_role.github_actions_deploy_resize), output as
+          # github_actions_resize_role_arn — not yet applied to a real
+          # account (see header comment's post-merge checklist).
+          role-to-assume: ${{ secrets.DEV_DEPLOY_RESIZE_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # Idempotency guard — same reasoning as deploy-backend.yml: IMMUTABLE
+      # tag mutability means re-pushing the same commit-SHA tag on a re-run
+      # would fail outright, so skip build/push if already pushed.
+      - name: Check whether this commit's image was already pushed
+        id: check-image
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          if aws ecr describe-images \
+              --repository-name "$ECR_REPOSITORY" \
+              --image-ids imageTag="$IMAGE_TAG" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Build context/Dockerfile differ from deploy-backend.yml on purpose:
+      # this Lambda has its own, much smaller Dockerfile
+      # (backend/Dockerfile.resize) — see that file's own header for why
+      # it isn't backend/Dockerfile.
+      - name: Build and push image (tagged with commit SHA, never :latest)
+        if: steps.check-image.outputs.exists == 'false'
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -f backend/Dockerfile.resize -t "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" backend/
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+
+      # Same reasoning as deploy-backend.yml's equivalent step — kept
+      # deliberately unconditional (not gated on check-image's output) and
+      # calls start-image-scan explicitly (scan_on_push confirmed
+      # unreliable live in this account, see that file's own comment).
+      - name: Start image scan (don't rely on scan_on_push alone — see comment)
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          aws ecr start-image-scan \
+            --repository-name "$ECR_REPOSITORY" \
+            --image-id imageTag="$IMAGE_TAG" || true
+
+      - name: Wait for image scan, stop on critical findings
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          aws ecr wait image-scan-complete \
+            --repository-name "$ECR_REPOSITORY" \
+            --image-id imageTag="$IMAGE_TAG"
+          CRITICAL=$(aws ecr describe-image-scan-findings \
+            --repository-name "$ECR_REPOSITORY" \
+            --image-id imageTag="$IMAGE_TAG" \
+            --query 'imageScanFindings.findingSeverityCounts.CRITICAL' \
+            --output text)
+          if [ "$CRITICAL" != "None" ] && [ "$CRITICAL" -gt 0 ] 2>/dev/null; then
+            echo "::error::$CRITICAL critical vulnerability finding(s) in image — aborting deploy."
+            exit 1
+          fi
+
+      - name: Point Lambda at the new image
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          aws lambda update-function-code \
+            --function-name "$LAMBDA_FUNCTION_NAME" \
+            --image-uri "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+
+      - name: Wait for the update to finish applying
+        run: |
+          aws lambda wait function-updated \
+            --function-name "$LAMBDA_FUNCTION_NAME"
