@@ -35,7 +35,15 @@ if config.config_file_name is not None:
 # Pull the connection string from the environment, not from alembic.ini.
 database_url = os.environ.get("DATABASE_URL")
 if database_url:
-    config.set_main_option("sqlalchemy.url", database_url)
+    # Config.set_main_option() goes through configparser, which treats a
+    # bare "%" as the start of an interpolation sequence like "%(name)s".
+    # A URL-encoded password (app/db/session.py's quote_plus) legitimately
+    # contains literal "%XX" escapes, which configparser then tries to
+    # interpolate and fails on ("invalid interpolation syntax"). "%%" is
+    # configparser's own documented escape for a literal "%" -- this does
+    # not change the URL's actual value, only how it survives this one
+    # config layer.
+    config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
 
 # add your model's MetaData object here for 'autogenerate' support
 target_metadata = Base.metadata
