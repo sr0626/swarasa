@@ -30,25 +30,46 @@ resource "aws_ecr_repository" "api" {
   tags = local.common_tags
 }
 
-# Expire untagged images (dangling layers left behind when a tag is
-# re-pointed at a new digest, or a failed/aborted push) after 14 days.
-# Tagged images are never touched by this rule — IMMUTABLE tags plus no
-# tagged-image expiry means every tag DevOps has ever pushed stays
-# retrievable indefinitely (promotion/rollback safety).
+# Two rules:
+# 1. Expire untagged images (dangling layers left behind when a tag is
+#    re-pointed at a new digest, or a failed/aborted push) after 14 days.
+# 2. Cap TAGGED image retention too (added 2026-09-15, user request) — every
+#    real deploy pushes a new commit-SHA tag (IMMUTABLE, devops/CLAUDE.md
+#    "ALWAYS tag images immutably") and nothing was ever removing old ones,
+#    so the repo would grow forever. Keeps the most recent 20 tagged images
+#    (by push time, any tag pattern via tagPatternList — commit SHAs have
+#    no fixed prefix to match on) once there are more than 20, expiring the
+#    rest. 20 is a judgment call: generous enough for realistic
+#    rollback/promotion needs at Phase 1's deploy cadence, not "keep
+#    everything forever" (the previous, now-superseded design). Revisit the
+#    count if rollback needs turn out to reach further back than that.
 resource "aws_ecr_lifecycle_policy" "api" {
   repository = aws_ecr_repository.api.name
 
   policy = jsonencode({
-    rules = [{
-      rulePriority = 1
-      description  = "Expire untagged images after 14 days"
-      selection = {
-        tagStatus   = "untagged"
-        countType   = "sinceImagePushed"
-        countUnit   = "days"
-        countNumber = 14
+    rules = [
+      {
+        rulePriority = 1
+        description  = "Expire untagged images after 14 days"
+        selection = {
+          tagStatus   = "untagged"
+          countType   = "sinceImagePushed"
+          countUnit   = "days"
+          countNumber = 14
+        }
+        action = { type = "expire" }
+      },
+      {
+        rulePriority = 2
+        description  = "Keep only the most recent 20 tagged images"
+        selection = {
+          tagStatus      = "tagged"
+          tagPatternList = ["*"]
+          countType      = "imageCountMoreThan"
+          countNumber    = 20
+        }
+        action = { type = "expire" }
       }
-      action = { type = "expire" }
-    }]
+    ]
   })
 }
