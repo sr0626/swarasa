@@ -80,3 +80,21 @@ def run_management_command(event: dict, context: Any) -> dict:
     except Exception as exc:  # noqa: BLE001 - top-level Lambda invoke boundary
         logger.exception("management command %r failed", command)
         return {"ok": False, "command": command, "error": str(exc)}
+    finally:
+        # Every command here runs `asyncio.run(...)` somewhere underneath
+        # it (this file's own seed_dev_data call, or run_migrations.py's
+        # alembic env.py) -- and asyncio.run()'s own cleanup explicitly
+        # does `asyncio.set_event_loop(None)` when it finishes (confirmed
+        # against cpython's asyncio/runners.py, not assumed). On a warm
+        # Lambda execution environment, the *thread* survives between
+        # invocations, so that None persists into whatever this container
+        # handles next. Found live: a management-command invocation landed
+        # on the same warm container as a later real HTTP request, and
+        # Mangum's lifespan handling (`asyncio.get_event_loop()` in
+        # mangum/protocols/lifespan.py) crashed with "There is no current
+        # event loop in thread 'MainThread'" -- a management command had
+        # silently broken the *next* unrelated HTTP request on that
+        # container. Setting a fresh loop back before returning leaves the
+        # thread in the state Mangum expects, whatever runs on this
+        # container next.
+        asyncio.set_event_loop(asyncio.new_event_loop())
