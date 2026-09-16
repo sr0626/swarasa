@@ -63,3 +63,28 @@ output "github_actions_role_arn" {
   description = "IAM role ARN DevOps's GitHub Actions pipeline assumes via OIDC — set this as the GitHub repo secret DEV_DEPLOY_ROLE_ARN referenced in devops/CLAUDE.md's deploy-backend.yml"
   value       = module.iam.github_actions_role_arn
 }
+
+output "ecr_resize_repository_url" {
+  description = "ECR repository URL for the resize Lambda image (docker push target) — also the one-time :bootstrap push target before the first apply, see module \"lambda_resize\" comment in main.tf"
+  value       = module.ecr_resize.repository_url
+}
+
+output "ecr_resize_repository_arn" {
+  description = "ECR repository ARN for the resize Lambda image"
+  value       = module.ecr_resize.repository_arn
+}
+
+output "resize_lambda_arn" {
+  description = "ARN of the resize Lambda function"
+  value       = module.lambda_resize.resize_lambda_arn
+}
+
+output "resize_lambda_name" {
+  description = "Name of the resize Lambda function"
+  value       = module.lambda_resize.resize_lambda_name
+}
+
+output "github_actions_resize_role_arn" {
+  description = "IAM role ARN DevOps's resize-Lambda GitHub Actions pipeline assumes via OIDC — set this as the GitHub repo secret DEV_DEPLOY_RESIZE_ROLE_ARN referenced in devops/CLAUDE.md and .github/workflows/deploy-resize.yml"
+  value       = module.iam.github_actions_resize_role_arn
+}

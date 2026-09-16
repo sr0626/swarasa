@@ -44,7 +44,16 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "media" {
   }
 }
 
-# Lifecycle rule: clean up incomplete multipart uploads after 7 days
+# Lifecycle rules: clean up incomplete multipart uploads after 7 days, and
+# (added 2026-09-16, S3 image resize pipeline — docs/DECISIONS.md "S3
+# image resize pipeline") expire anything still sitting under raw/ after 2
+# days. The resize Lambda deletes a raw/ object itself once it's
+# successfully processed (BRD 5.3 step 5) — normally raw/ objects live for
+# seconds, not days. This is a defense-in-depth cost/hygiene backstop for
+# the failure case only (a resize Lambda bug, a corrupt upload it can't
+# decode, or a raw/ object it never got invoked for at all) — root
+# CLAUDE.md "NEVER — Cost" guardrail spirit, not a load-bearing part of
+# the pipeline's normal operation.
 resource "aws_s3_bucket_lifecycle_configuration" "media" {
   bucket = aws_s3_bucket.media.id
 
@@ -54,6 +63,29 @@ resource "aws_s3_bucket_lifecycle_configuration" "media" {
 
     abort_incomplete_multipart_upload {
       days_after_initiation = 7
+    }
+  }
+
+  rule {
+    id     = "expire-stale-raw-uploads"
+    status = "Enabled"
+
+    filter {
+      prefix = "raw/"
+    }
+
+    expiration {
+      days = 2
+    }
+
+    # Versioning is enabled on this bucket (aws_s3_bucket_versioning.media
+    # above) — `expiration` alone only adds a delete marker on the current
+    # version after 2 days, it does NOT remove the actual object bytes.
+    # Without this, a failed/never-processed raw/ upload would keep
+    # costing storage indefinitely as a noncurrent version, defeating the
+    # whole point of this rule.
+    noncurrent_version_expiration {
+      noncurrent_days = 2
     }
   }
 }

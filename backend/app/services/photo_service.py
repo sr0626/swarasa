@@ -62,18 +62,39 @@ async def count_gallery_photos(db: AsyncSession, location_id: int) -> int:
 
 
 def to_photo_out(photo: RestaurantPhoto) -> PhotoOut:
+    # thumbnail_s3_key is nullable at the DB layer (see the model's own
+    # comment) purely for direct/legacy construction; every real write
+    # path always sets it. Fall back to the main processed image rather
+    # than crashing/returning a broken URL on the rare row that lacks one.
+    thumbnail_key = photo.thumbnail_s3_key or photo.s3_key
     return PhotoOut(
         id=photo.id,
         location_id=photo.location_id,
         url=s3_service.resolve_media_url(photo.s3_key),
+        thumbnail_url=s3_service.resolve_media_url(thumbnail_key),
         is_cover=photo.is_cover,
         display_order=photo.display_order,
     )
 
 
 async def create_photo(
-    db: AsyncSession, location, body: PhotoCreate, uploaded_by: str
+    db: AsyncSession,
+    location,
+    body: PhotoCreate,
+    uploaded_by: str,
+    *,
+    thumbnail_s3_key: str | None = None,
 ) -> RestaurantPhoto:
+    """`body.s3_key` must already be the predicted `processed/` key by the
+    time it reaches here — the raw/ -> processed/ transform (and, for
+    `thumbnail_s3_key`, the raw/ -> thumbnails/ transform) happens one
+    layer up, in `location_service.create_location_photo`, via
+    `s3_service.processed_key_for_upload`/`thumbnail_key_for_upload`. This
+    function only stores whatever keys it's given — see
+    docs/DECISIONS.md "S3 image resize pipeline" for why that split
+    exists (keeps this function's cap-enforcement logic testable without
+    needing real raw/-key validation in every test).
+    """
     if body.is_cover:
         existing_cover = await get_cover_photo(db, location.id)
         if existing_cover is not None:
@@ -83,6 +104,7 @@ async def create_photo(
         photo = RestaurantPhoto(
             location_id=location.id,
             s3_key=body.s3_key,
+            thumbnail_s3_key=thumbnail_s3_key,
             is_cover=True,
             display_order=0,
             uploaded_by=uploaded_by,
@@ -99,6 +121,7 @@ async def create_photo(
         photo = RestaurantPhoto(
             location_id=location.id,
             s3_key=body.s3_key,
+            thumbnail_s3_key=thumbnail_s3_key,
             is_cover=False,
             display_order=count,
             uploaded_by=uploaded_by,

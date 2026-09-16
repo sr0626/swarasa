@@ -66,6 +66,11 @@ variable "ecr_repository_arn" {
   type        = string
 }
 
+variable "ecr_resize_repository_arn" {
+  description = "ARN of the resize Lambda's own ECR repository (module.ecr_resize) — scopes the resize deploy GitHub Actions role's ECR push/pull permissions to this repo only, separate from ecr_repository_arn above (devops/CLAUDE.md \"Multi-service scaling\": one repo, one function per service role)"
+  type        = string
+}
+
 variable "github_repo_url" {
   description = "GitHub HTTPS URL of this repo (e.g. https://github.com/org/repo) — same value passed to the amplify module; used to scope the GitHub Actions OIDC trust policy's sub claim to this exact repo"
   type        = string

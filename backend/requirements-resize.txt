@@ -1,0 +1,17 @@
+# Resize Lambda's own minimal dependency set — see backend/Dockerfile.resize
+# and docs/DECISIONS.md "Resize Lambda packaging". Deliberately NOT the same
+# file as requirements.txt: fastapi/sqlalchemy/alembic/mangum/geoalchemy2 are
+# dead weight this Lambda never imports (app/lambda_handlers/resize_photo.py
+# only touches boto3 + Pillow + the stdlib-only app/media/key_transform.py).
+
+boto3==1.35.36
+
+# Compiled C extension (libjpeg/zlib bindings) — this is the whole reason
+# the resize Lambda needs its own container image rather than a plain zip
+# (see docs/DECISIONS.md "Resize Lambda packaging"). Installing it inside
+# the same public.ecr.aws/lambda/python:3.12 base image used by the API
+# Lambda (backend/Dockerfile.resize) gets a manylinux wheel built for
+# exactly the Lambda execution environment's architecture/glibc, avoiding
+# the "works on my machine, breaks in Lambda" binary-compat trap a
+# hand-built Lambda Layer risks.
+Pillow==11.0.0

@@ -84,7 +84,8 @@ Response:
         "is_open_now": true
       },
       "location_count_nearby": 3,
-      "cover_photo_url": null
+      "cover_photo_url": null,
+      "cover_photo_thumbnail_url": null
     }
   ],
   "page": 1,
@@ -104,6 +105,10 @@ Notes:
 - Default sort: `is_verified` desc, then `distance_mi` asc, then `name`
   asc (DECISIONS.md "Search default sort").
 - `cover_photo_url` — see the photo note at the top of this doc.
+  `cover_photo_thumbnail_url` (added 2026-09-16, S3 image resize
+  pipeline — `docs/DECISIONS.md` "Resize Lambda: thumbnail variant") is
+  the smaller 400px variant, for exactly this card-style-listing use
+  case; `null` whenever `cover_photo_url` is `null`.
   **Cross-reference note (flagged for review):** `restaurant_photo` is
   keyed by `location_id`, not `brand_id` (a brand card here is really
   a rollup of its locations — DECISIONS.md "Brand-level search
@@ -374,6 +379,7 @@ Response:
     { "day_of_week": 1, "open_time": "11:00:00", "close_time": "22:00:00", "is_closed": false }
   ],
   "cover_photo_url": null,
+  "cover_photo_thumbnail_url": null,
   "gallery_photos": []
 }
 ```
@@ -389,11 +395,13 @@ Notes:
 - `cover_photo_url` — the `restaurant_photo` row for this location with
   `is_cover=true` (at most one), resolved to a CloudFront URL from its
   `s3_key`. `null` if no cover photo has been uploaded yet. See
-  `docs/DATA_MODEL.md` "restaurant_photo".
+  `docs/DATA_MODEL.md` "restaurant_photo". `cover_photo_thumbnail_url`
+  (added 2026-09-16 — `docs/DECISIONS.md` "Resize Lambda: thumbnail
+  variant") is the 400px variant, `null` under the same condition.
 - `gallery_photos` — up to 2 entries if `is_paid=false`, up to 10 if
-  `is_paid=true`, each `{ id, url, display_order }` (an array of
-  objects, not bare URL strings — the `id` is needed for the `PATCH`/
-  `DELETE` photo endpoints below), ordered by `display_order`, sourced
+  `is_paid=true`, each `{ id, url, thumbnail_url, display_order }` (an
+  array of objects, not bare URL strings — the `id` is needed for the
+  `PATCH`/`DELETE` photo endpoints below), ordered by `display_order`, sourced
   from `restaurant_photo` rows with `is_cover=false`.
 
 ### POST /locations
@@ -477,46 +485,134 @@ same as it covers hours) rather than introducing a new top-level
 `/photos` family. Uploads follow root CLAUDE.md's S3 presigned-URL
 pattern exactly — never through Lambda.
 
+**Full pipeline completed 2026-09-16** (see `docs/PROJECT_PLAN.csv` "S3
+image resize pipeline" and `docs/DECISIONS.md` "S3 image resize
+pipeline" / "Resize Lambda: thumbnail variant" for the full design
+writeup). BRD 5.3's 6-step flow, end to end:
+1. Client calls `POST /locations/{id}/photos/upload-url` below → gets a
+   presigned upload target for a `raw/` key.
+2. Client uploads directly to S3.
+3. An S3 `ObjectCreated` event (filtered to the `raw/` prefix) triggers
+   the resize Lambda.
+4. Resize Lambda writes a 1200px JPEG (quality 85) to `processed/...`
+   and a 400px JPEG (quality 80) to `thumbnails/...`.
+5. Resize Lambda deletes the original from `raw/...`.
+6. `POST /locations/{id}/photos` below stores the **predicted**
+   `processed/`/`thumbnails/` keys immediately — it does not wait for
+   steps 3-5 to finish (see that endpoint's own note below).
+
 Auth for all four routes below: owner (owns parent brand) or manager
 with an active `location_manager` row for this location — same as
 `PATCH /locations/{id}` and `PUT /locations/{id}/hours`.
 
 #### POST /locations/{id}/photos/upload-url
 
-Body: `{ "content_type": "image/jpeg" }`
+Body: `{ "content_type": "image/jpeg" }` — JPEG or PNG only (BRD 5.3);
+any other `content_type` is rejected with `400 unsupported_content_type`.
 
 Response: `200`
 ```json
 {
-  "upload_url": "https://<bucket>.s3.amazonaws.com/...",
-  "s3_key": "locations/456/photos/8f14e-....jpg",
+  "upload_url": "https://<bucket>.s3.amazonaws.com/",
+  "fields": {
+    "Content-Type": "image/jpeg",
+    "key": "raw/locations/456/photos/8f14e-....jpg",
+    "...": "additional S3-generated presigned-POST fields (policy, signature, etc.)"
+  },
+  "s3_key": "raw/locations/456/photos/8f14e-....jpg",
   "expires_in": 600
 }
 ```
-Presigned S3 `PUT` URL (`backend/CLAUDE.md` "S3 presigned URL
-generation" — `ExpiresIn=600`). The client uploads the file directly to
-`upload_url`, then calls `POST /locations/{id}/photos` below with the
-same `s3_key` to record it.
+**Presigned S3 `POST`, not `PUT`** — a deliberate, documented deviation
+from `backend/CLAUDE.md`'s general "S3 presigned URL generation"
+pattern (still the plain-`PUT` pattern for every other upload in this
+app, e.g. claim documents). Reason: BRD 5.3 requires the 5MB cap to be
+"enforced by S3 ... before the upload completes." S3's
+`content-length-range` condition — the only mechanism S3 itself
+enforces before accepting an object — only exists for presigned POST
+policies; it cannot be expressed as a bucket policy `Condition` on a
+plain presigned `PUT`, and `PUT`'s SigV4 query-string signing has no way
+to pin a Content-Length either (verified against AWS's own
+bucket-policy-condition-key documentation and multiple corroborating
+sources — see `docs/DECISIONS.md` for citations). The client uploads by
+POSTing a multipart form to `upload_url`: every entry in `fields` as a
+form field, plus the file itself under the field name `file` (S3's own
+presigned-POST convention) — then calls `POST /locations/{id}/photos`
+below with the same `s3_key` to record it.
+
+**Key convention:** `raw/locations/{id}/photos/{uuid}.<ext>`. The `raw/`
+prefix is what the resize Lambda's S3 event notification is scoped to.
+
+**This is a contract change** from the previously-documented shape
+(`upload_url` + `s3_key` + `expires_in`, a plain `PUT` target, no
+`fields`, no `raw/` prefix) — flagged explicitly per root CLAUDE.md's
+"never change an API contract silently" rule. No frontend consumer of
+this endpoint existed yet (this pipeline was "Not Started" end to end
+per `docs/PROJECT_PLAN.csv` before this change).
 
 #### POST /locations/{id}/photos
 
-Body: `{ "s3_key": "locations/456/photos/8f14e-....jpg", "is_cover": false }`
+Body: `{ "s3_key": "raw/locations/456/photos/8f14e-....jpg", "is_cover": false }`
+— `s3_key` is the **raw** key echoed back from the `upload-url` call
+above, not a processed one.
 
-Creates the `restaurant_photo` row once the client confirms the S3
-upload succeeded. Server-assigned `display_order` (appended to the
-end) when `is_cover=false`. Enforcement, all at the service layer (not
-a DB constraint, same pattern as `location_manager`'s manager cap):
+Creates the `restaurant_photo` row. **Does not wait for the resize
+Lambda.** BRD 5.3's steps 3-5 (resize, write `processed/`+`thumbnails/`,
+delete `raw/`) run asynchronously off the S3 event and will almost
+certainly not have finished by the time this call lands right after the
+client's direct-to-S3 upload completes. Instead, the server predicts the
+resize Lambda's eventual output keys via a pure transform of the raw key
+(`raw/locations/{id}/photos/{uuid}.<ext>` →
+`processed/locations/{id}/photos/{uuid}.jpg` and
+`thumbnails/locations/{id}/photos/{uuid}.jpg` — always `.jpg`,
+regardless of the original extension, since the resize Lambda always
+outputs JPEG) and stores those predicted keys immediately. The response
+below is correct from the first call; the actual S3 objects typically
+appear a few seconds later (e.g. a client requesting the URL from
+CloudFront in that narrow window sees a 404 until the resize Lambda
+finishes — see `docs/DECISIONS.md` for the alternatives considered and
+rejected: polling, a `status` field, synchronous resize in the request
+path).
+
+Also validates that `s3_key` actually matches this location's own
+upload-url convention (`raw/locations/{id}/photos/...`) — `400
+invalid_s3_key` if it doesn't (e.g. a foreign/crafted key, or a key
+that's already a `processed/`/`thumbnails/` one).
+
+Server-assigned `display_order` (appended to the end) when
+`is_cover=false`. Enforcement, all at the service layer (not a DB
+constraint, same pattern as `location_manager`'s manager cap):
 - **Gallery cap:** rejects with `409 Conflict` if the location already
   has 2 (`is_paid=false`) or 10 (`is_paid=true`) `is_cover=false` rows.
 - **Cover replace, not stack:** if `is_cover=true` and a cover row
   already exists for this location, the existing one is deleted (or
   demoted) as part of the same write — there is only ever one.
 
-Response: `201`, `{ "id": 12, "location_id": 456, "url": "https://<cloudfront-domain>/...", "is_cover": false, "display_order": 2 }`.
+Response: `201`
+```json
+{
+  "id": 12,
+  "location_id": 456,
+  "url": "https://<cloudfront-domain>/processed/locations/456/photos/8f14e-....jpg",
+  "thumbnail_url": "https://<cloudfront-domain>/thumbnails/locations/456/photos/8f14e-....jpg",
+  "is_cover": false,
+  "display_order": 2
+}
+```
+`thumbnail_url` added 2026-09-16 alongside `url` — user-requested
+beyond BRD 5.3's own documented spec (a single processed image); see
+`docs/DECISIONS.md` "Resize Lambda: thumbnail variant." The same
+predicted-key/eventual-consistency note above applies to it too.
 
 `restaurant_photo` is not in root CLAUDE.md's audit-required table
 list, so no `audit_log` row is required here (consistent with
 `restaurant_hours` above).
+
+**Also affects, additively (no field removed, `thumbnail_url`/
+`cover_photo_thumbnail_url` added alongside the existing `url`/
+`cover_photo_url`):** `GET /locations/{id}`'s `cover_photo_url` /
+`gallery_photos[].url` and `GET /search`'s `cover_photo_url` — see
+those endpoints' own entries.
 
 #### PATCH /locations/{id}/photos/{photo_id}
 
