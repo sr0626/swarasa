@@ -191,3 +191,68 @@ aws cognito-idp admin-set-user-password --user-pool-id us-east-1_w2387tOf6 --pas
 aws cognito-idp admin-add-user-to-group --user-pool-id us-east-1_w2387tOf6 --profile swarasa-dev --region us-east-1   # claude  (x6, one per role group)
 aws cognito-idp list-users --user-pool-id us-east-1_w2387tOf6 --profile swarasa-dev --region us-east-1   # claude  (verification — all 6 CONFIRMED)
 ```
+
+## 2026-09-15
+```bash
+git push -u origin infra/fix-oidc-trust-policy-immutable-ids   # claude
+gh pr create --draft --base main --head infra/fix-oidc-trust-policy-immutable-ids   # claude
+gh pr ready 50   # claude  (Architect approved PR #50)
+terraform apply --auto-approve   # user  (infra/, swarasa-dev — applied PR #50's OIDC trust policy fix)
+aws iam get-role --role-name swarasa-github-actions-deploy-dev --profile swarasa-dev   # claude  (verify trust policy took effect)
+gh run rerun 35001155382 --repo sr0626/swarasa   # claude  (re-test deploy-backend pipeline; x3 across this stretch as each new fix landed)
+aws cloudtrail lookup-events --lookup-attributes AttributeKey=EventName,AttributeValue=AssumeRoleWithWebIdentity --profile swarasa-dev --region us-east-1   # claude  (root-cause diagnosis, x2)
+gh api repos/sr0626/swarasa --jq '{owner_id: .owner.id, repo_id: .id}'   # claude  (verify numeric ids for OIDC sub claim)
+git push -u origin devops/ecr-scan-explicit-trigger   # claude
+gh pr create --draft --base main --head devops/ecr-scan-explicit-trigger   # claude
+gh pr ready 52   # claude  (Architect approved PR #52)
+git push -u origin frontend/admin-listings-management   # claude
+gh pr create --base main --head frontend/admin-listings-management   # claude
+git push -u origin frontend/sitemap-robots   # claude
+gh pr create --base main --head frontend/sitemap-robots   # claude
+git push -u origin docs/aws-commands-default-to-human   # claude
+gh pr create --draft --base main --head docs/aws-commands-default-to-human   # claude
+gh pr ready 54   # claude  (Architect approved PR #54)
+terraform apply --auto-approve   # user  (infra/, swarasa-dev — applied PR #52's ecr:StartImageScan permission)
+aws ecr describe-image-scan-findings --repository-name swarasa-api-dev --profile swarasa-dev --region us-east-1   # claude  (verify scan-trigger fix, x2)
+git push -u origin infra/lambda-get-function-configuration-perm   # claude
+gh pr create --draft --base main --head infra/lambda-get-function-configuration-perm   # claude
+gh pr ready 55   # claude  (Architect approved PR #55)
+terraform apply --auto-approve   # user  (infra/, swarasa-dev — applied PR #55's lambda:GetFunctionConfiguration permission; first attempt was a no-op against a stale local checkout, re-run after git pull)
+aws lambda get-function --function-name swarasa-api-dev --profile swarasa-dev --region us-east-1   # claude  (confirm real backend image deployed)
+curl https://qfqiaztj14.execute-api.us-east-1.amazonaws.com/cuisine-tags   # claude  (smoke test, repeated across this stretch as each fix landed)
+aws logs tail /aws/lambda/swarasa-api-dev --profile swarasa-dev --region us-east-1   # claude  (diagnose live 500s, repeated across this stretch)
+git push -u origin fix/204-response-model-none   # claude
+gh pr create --draft --base main --head fix/204-response-model-none   # claude
+gh pr ready 56   # claude  (Architect approved PR #56)
+git push -u origin backend/alembic-upgrade-management-command   # claude
+gh pr create --draft --base main --head backend/alembic-upgrade-management-command   # claude
+gh pr ready 57   # claude  (Architect approved PR #57)
+git push -u origin infra/per-env-tfvars   # claude
+git push -u origin infra/ecr-tagged-image-lifecycle   # claude
+```
+
+## 2026-09-16
+```bash
+gh pr create --draft --base main --head infra/per-env-tfvars   # claude
+gh pr ready 58   # claude  (Architect approved PR #58)
+gh pr create --draft --base main --head infra/ecr-tagged-image-lifecycle   # claude
+gh pr ready 59   # claude  (Architect approved PR #59)
+terraform apply --auto-approve   # user  (infra/, swarasa-dev — failed once on a transient DynamoDB ResourceNotFoundException, succeeded on retry; applied PRs #58/#59)
+aws dynamodb describe-table --table-name swarasa-tfstate-lock --profile swarasa-dev --region us-east-1   # claude  (diagnose the transient lock error)
+aws ecr get-lifecycle-policy --repository-name swarasa-api-dev --profile swarasa-dev --region us-east-1   # claude  (verify PR #59 took effect)
+git push -u origin fix/alembic-url-percent-escaping   # claude
+gh pr create --draft --base main --head fix/alembic-url-percent-escaping   # claude
+gh pr ready 60   # claude  (Architect approved PR #60)
+git push -u origin fix/alembic-0002-revision-id-length   # claude
+gh pr create --draft --base main --head fix/alembic-0002-revision-id-length   # claude
+gh pr ready 61   # claude  (Architect approved PR #61)
+git push -u origin fix/management-command-event-loop-leak   # claude
+gh pr create --draft --base main --head fix/management-command-event-loop-leak   # claude
+gh pr ready 62   # claude  (Architect approved PR #62)
+aws sso login --profile swarasa-dev   # user  (expired session, repeated several times across this stretch)
+aws lambda invoke --function-name swarasa-api-dev --cli-binary-format raw-in-base64-out --payload '{"_management_command": "alembic_upgrade"}' --profile swarasa-dev --region us-east-1 /tmp/migrate-output.json   # user  (x3 — first two failed: %-escaping bug then 0002 revision-id-too-long bug, each fixed and redeployed; third succeeded)
+git push -u origin feature/phase1-s3-image-resize-pipeline   # claude
+gh pr create --draft --base main --head feature/phase1-s3-image-resize-pipeline   # claude
+gh pr ready 63   # claude  (Architect self-review approved PR #63)
+terraform init -backend=false   # claude  (infra/, unintentional — made a real HeadObject call against swarasa-tfstate-sr0626 before being caught and stopped; see PR #63's Architect review comment)
+```
