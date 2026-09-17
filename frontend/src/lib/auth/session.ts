@@ -17,17 +17,20 @@
 import { cookies } from "next/headers";
 import { CognitoJwtVerifier } from "aws-jwt-verify";
 import { assertCognitoConfig } from "./config";
+import { SESSION_COOKIE_NAME } from "./sessionConstants";
 import type { Session, UserRole } from "@/types/auth";
 
-/** Set by the sign-in flow (app/api/auth/session/route.ts) once Cognito issues tokens. */
-export const SESSION_COOKIE_NAME = "rp_access_token";
-
-/**
- * Matches the Cognito access token TTL (docs/DECISIONS.md "Manager
- * permissions validated server-side on every write" — "JWT TTL is 15
- * minutes"). The session cookie must never outlive the token it carries.
- */
-export const SESSION_MAX_AGE_SECONDS = 15 * 60;
+// Cookie names/max-ages now live in ./sessionConstants (no `next/headers`
+// dependency, so client components can import them too — see that file's
+// header comment) and are re-exported here so every existing import of
+// `SESSION_COOKIE_NAME`/`SESSION_MAX_AGE_SECONDS` from "./session" (or the
+// "@/lib/auth" barrel) keeps working unchanged.
+export {
+  SESSION_COOKIE_NAME,
+  SESSION_MAX_AGE_SECONDS,
+  REMEMBER_ME_MAX_AGE_SECONDS,
+  REMEMBER_ME_COOKIE_NAME,
+} from "./sessionConstants";
 
 const ROLES: readonly UserRole[] = [
   "owner",

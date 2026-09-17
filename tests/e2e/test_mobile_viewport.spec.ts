@@ -46,3 +46,41 @@ test("login page has no horizontal scroll at 375px", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Sign In" })).toBeVisible();
   await expectNoHorizontalScroll(page);
 });
+
+test("sign-up page has no horizontal scroll at 375px", async ({ page }) => {
+  await page.goto("/signup");
+  await expect(
+    page.getByRole("heading", { name: "Create an Account" })
+  ).toBeVisible();
+  await expectNoHorizontalScroll(page);
+});
+
+test("confirm sign-up page has no horizontal scroll at 375px", async ({
+  page,
+}) => {
+  await page.goto("/signup/confirm?email=diner%40example.com");
+  await expect(
+    page.getByRole("heading", { name: "Confirm Your Account" })
+  ).toBeVisible();
+  await expectNoHorizontalScroll(page);
+});
+
+test("forgot-password page has no horizontal scroll at 375px", async ({
+  page,
+}) => {
+  await page.goto("/forgot-password");
+  await expect(
+    page.getByRole("heading", { name: "Forgot Password" })
+  ).toBeVisible();
+  await expectNoHorizontalScroll(page);
+});
+
+test("reset-password page has no horizontal scroll at 375px", async ({
+  page,
+}) => {
+  await page.goto("/forgot-password/confirm?email=diner%40example.com");
+  await expect(
+    page.getByRole("heading", { name: "Reset Password" })
+  ).toBeVisible();
+  await expectNoHorizontalScroll(page);
+});

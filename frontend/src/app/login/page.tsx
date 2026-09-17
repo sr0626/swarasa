@@ -15,7 +15,24 @@ export const metadata: Metadata = {
   title: "Sign In",
 };
 
-export default function LoginPage() {
+/**
+ * `?confirmed=1` (from app/signup/confirm) and `?reset=1` (from
+ * app/forgot-password/confirm) both land here after their respective flow
+ * finishes — read server-side from `searchParams` (this page stays a plain
+ * Server Component, same as before) so the confirmation banner survives a
+ * full page load with no client-side state needed.
+ */
+export default function LoginPage({
+  searchParams,
+}: {
+  searchParams: { confirmed?: string; reset?: string };
+}) {
+  const banner = searchParams.confirmed
+    ? "Your account is confirmed — sign in below."
+    : searchParams.reset
+      ? "Your password has been reset — sign in with your new password."
+      : null;
+
   return (
     <main className="min-h-screen bg-brand-bg">
       <TopBar />
@@ -29,6 +46,15 @@ export default function LoginPage() {
             Sign in to manage your restaurant listing or continue as a
             registered user.
           </p>
+
+          {banner && (
+            <p
+              role="status"
+              className="mt-4 rounded-brand-control bg-brand-success-bg px-3 py-2 text-sm text-brand-success"
+            >
+              {banner}
+            </p>
+          )}
 
           <div className="mt-6">
             <LoginForm />
