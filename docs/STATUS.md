@@ -28,7 +28,10 @@ fully satisfied and asked to stop iterating for now, with an explicit intent
 to revisit later, not a final sign-off.
 
 ## Open PRs
-- None — all merged through #39 (see DECISIONS.md for what each did)
+- #78 (draft, Architect self-review pending) — `GET /auth/me/managed-locations`
+  (manager location-discovery endpoint), manager reactivation verified (no
+  bug found), and platform admin full-access parity on `PATCH
+  /locations/{id}` / `PUT /locations/{id}/hours` / `/locations/{id}/photos*`
 
 ## Architect (schema + contracts)
 - [x] 13 entities modeled, 2 migrations written (never run)
@@ -43,6 +46,14 @@ to revisit later, not a final sign-off.
 - [x] `/search`, `/restaurants` CRUD + owner-scoped list, `/restaurants/{id}/locations`
 - [x] `/locations` CRUD + hours + photos sub-resource
 - [x] `/locations/{id}/managers` (assign/list/remove)
+- [ ] PR #78 (draft, not yet merged): `GET /auth/me/managed-locations`
+      (a manager can now discover their own assigned locations without a
+      location id up front); manager reactivation (soft-remove then
+      re-assign to the same location) verified working, no bug found;
+      platform admin full-access parity on `PATCH /locations/{id}`,
+      `PUT /locations/{id}/hours`, and all four `/locations/{id}/photos*`
+      routes (`POST /locations` and `POST /locations/{id}/managers` stay
+      owner-only, deliberately — see `docs/DECISIONS.md`)
 - [x] `/claim` (submit/approve/reject), `/auth/me`
 - [x] `/cuisine-tags` (public read list)
 - [x] `/restaurants/{id}/follow` (follow/unfollow, both idempotent) +
