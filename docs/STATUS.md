@@ -49,8 +49,8 @@ to revisit later, not a final sign-off.
       `/auth/me/follows` (paginated) — PR #66, closes the tracked
       `docs/PROJECT_PLAN.csv` gap (`user_follow` table existed, no
       endpoint did)
-- [x] CCPA data export/deletion — `GET /auth/me/data-export` (synchronous
-      JSON, no async job/SES), `POST`/`GET /auth/me/data-deletion` +
+- [x] CCPA data export/deletion (PR #70) — `GET /auth/me/data-export`
+      (synchronous JSON, no async job/SES), `POST`/`GET /auth/me/data-deletion` +
       admin `/data-deletion/{id}/approve|reject` (review queue modeled on
       `/claim`). New `data_deletion_request` table + nullable
       `owner_account.personal_data_deleted_at` column (migration
