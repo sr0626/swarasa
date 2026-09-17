@@ -98,3 +98,30 @@ export const resetPasswordSchema = z
   });
 
 export type ResetPasswordFormValues = z.infer<typeof resetPasswordSchema>;
+
+/**
+ * Change-password from a signed-in session (app/account/security,
+ * components/account/ChangePasswordForm.tsx — docs/PROJECT_PLAN.csv
+ * "Signed-in account dropdown in site header", the Security menu item).
+ * Unlike `resetPasswordSchema` above (forgot-password flow, no current
+ * password known), this is Cognito's `updatePassword({ oldPassword,
+ * newPassword })` — it needs the current password to re-authenticate the
+ * change, not a policy-shaped value, so it only requires non-empty rather
+ * than reusing `passwordSchema`.
+ */
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, "Enter your current password"),
+    newPassword: passwordSchema,
+    confirmNewPassword: z.string().min(1, "Please confirm your new password"),
+  })
+  .refine((data) => data.newPassword === data.confirmNewPassword, {
+    message: "Passwords do not match",
+    path: ["confirmNewPassword"],
+  })
+  .refine((data) => data.currentPassword !== data.newPassword, {
+    message: "New password must be different from your current password",
+    path: ["newPassword"],
+  });
+
+export type ChangePasswordFormValues = z.infer<typeof changePasswordSchema>;

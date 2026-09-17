@@ -19,6 +19,7 @@ const GATED_PAGES: Array<{ path: string; label: string }> = [
   { path: "/portal/locations/1", label: "location editor" },
   { path: "/admin/claims", label: "admin claims queue" },
   { path: "/account", label: "account/profile page" },
+  { path: "/account/security", label: "account security/change-password page" },
 ];
 
 for (const { path, label } of GATED_PAGES) {

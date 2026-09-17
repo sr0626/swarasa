@@ -22,6 +22,16 @@
 // same route doubles as the re-mint endpoint SessionKeepAlive calls after a
 // successful `fetchAuthSession({ forceRefresh: true })` — verify-then-set is
 // exactly what a refresh also needs, so no separate route was added.
+//
+// DELETE (added for docs/PROJECT_PLAN.csv "Signed-in account dropdown in
+// site header" — the Logout menu item, components/home/AccountMenu.tsx):
+// clears both cookies this route sets. A new `DELETE` on the same route
+// rather than a separate `/api/auth/logout` route — it's the same cookie
+// pair, verify-then-set and clear are the two halves of one lifecycle, and
+// it keeps cookie name/options (path, sameSite, secure) defined in exactly
+// one place instead of two routes having to stay in sync. Needs no request
+// body and returns no session data — deleting doesn't require re-verifying
+// anything, unlike POST.
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { resolveSession } from "@/lib/auth/session";
@@ -93,4 +103,23 @@ export async function POST(request: Request) {
   // page (LoginForm.tsx), nothing more sensitive than what's already in
   // the JWT the client itself just supplied.
   return NextResponse.json({ role: session.role });
+}
+
+/**
+ * Ends the session: deletes the httpOnly `rp_access_token` cookie
+ * `getServerSession()` reads, and the `rp_remember_me` flag cookie
+ * alongside it. Explicit `path: "/"` on both deletes to match exactly how
+ * POST above sets them — cookie deletion only takes effect when path (and
+ * domain) match the cookie that was set.
+ *
+ * Always succeeds (200) even when no session cookie was present — deleting
+ * an absent cookie is a no-op, not an error, and the caller
+ * (AccountMenu.tsx's logout handler) treats this as best-effort anyway: the
+ * cookie clear is what actually ends the session, regardless of whether
+ * there was anything to clear.
+ */
+export async function DELETE() {
+  cookies().delete({ name: SESSION_COOKIE_NAME, path: "/" });
+  cookies().delete({ name: REMEMBER_ME_COOKIE_NAME, path: "/" });
+  return NextResponse.json({ ok: true });
 }

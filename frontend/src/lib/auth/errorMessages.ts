@@ -14,7 +14,8 @@ export type AuthErrorContext =
   | "confirm-sign-up"
   | "resend-code"
   | "forgot-password"
-  | "reset-password";
+  | "reset-password"
+  | "change-password";
 
 const DEFAULT_MESSAGE: Record<AuthErrorContext, string> = {
   "sign-in": "Something went wrong signing in. Please try again.",
@@ -26,6 +27,8 @@ const DEFAULT_MESSAGE: Record<AuthErrorContext, string> = {
     "Something went wrong requesting a reset code. Please try again.",
   "reset-password":
     "Something went wrong resetting your password. Please try again.",
+  "change-password":
+    "Something went wrong changing your password. Please try again.",
 };
 
 /** Non-DONE sign-in steps we can explain without building a full challenge UI (out of Phase 1 scope). */
@@ -61,7 +64,11 @@ export function messageForAuthError(
         ? "Incorrect email or password."
         : "We couldn't process that request. Please check the email address and try again.";
     case "NotAuthorizedException":
-      return "Incorrect email or password.";
+      return context === "change-password"
+        ? "Your current password is incorrect."
+        : "Incorrect email or password.";
+    case "UserUnAuthenticatedException":
+      return "Your sign-in has expired in this tab. Please sign in again to change your password.";
     case "UserNotConfirmedException":
       return "Please confirm your email before signing in.";
     case "UsernameExistsException":
