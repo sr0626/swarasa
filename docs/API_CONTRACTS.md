@@ -1203,3 +1203,75 @@ Body: `{ "reviewer_notes": "Active fraud investigation — legal hold." }`
 Effect: `status: "rejected"`. No data is touched.
 
 Response: `200`, updated request shape (`status: "rejected"`).
+
+## Admin (bulk operations)
+
+Added alongside PR #74 (`app/routers/admin.py`) — the first endpoint under
+a dedicated `/admin` prefix rather than living inside another resource's
+own router, since it doesn't act on one existing `restaurant_brand`/
+`restaurant_location` id the way the admin-gated actions elsewhere in this
+doc do (`DELETE /restaurants/{id}`, `POST /claim/{id}/approve`, etc.) —
+it creates many new brand/location rows in one call instead.
+
+### POST /admin/restaurants/bulk-import
+
+Auth: admin
+
+Body:
+```json
+{
+  "owner_id": 42,
+  "restaurants": [
+    {
+      "name": "Namaste Grill & Sports Bar",
+      "description": null,
+      "address_line1": "2234 W Walnut Hill Ln",
+      "address_line2": null,
+      "city": "Irving",
+      "state": "TX",
+      "postal_code": "75038",
+      "country": "US",
+      "phone": null,
+      "timezone": "America/Chicago",
+      "latitude": 32.8651921,
+      "longitude": -96.9763165,
+      "is_verified": true
+    }
+  ]
+}
+```
+`restaurants`: 1–500 rows per call. `owner_id` names the local
+`owner_account.id` every row in the batch is created under — every row
+shares the same owner (this endpoint does not accept a per-row owner).
+
+Effect: creates one `restaurant_brand` + one `restaurant_location` per
+row (see `app/services/restaurant_bulk_import_service.py` for the exact
+idempotent create-or-skip logic: slug natural key for the brand,
+`(brand_id, address_line1)` for the location — re-running the same batch
+creates zero duplicates). One malformed/conflicting row does not abort
+the rest of the batch; it's reported as a per-row `error` instead.
+`audit_log` entries are written for every created brand/location.
+
+Response: `200`
+```json
+{
+  "created": 1,
+  "skipped": 0,
+  "errors": 0,
+  "rows": [
+    { "index": 0, "name": "Namaste Grill & Sports Bar", "status": "created", "brand_id": 101, "location_id": 501, "detail": null }
+  ]
+}
+```
+`rows[].status` is one of `created` | `skipped` | `error`. `detail` is
+null for `created`, a short human-readable reason for `skipped` (already
+existed) or `error` (validation failure, or a slug collision with a
+different owner's existing brand).
+
+Errors:
+| Status | Code | When |
+|---|---|---|
+| 403 | `forbidden` | caller is not admin |
+| 404 | `not_found` | `owner_id` does not match any `owner_account` row |
+| 400 | `bulk_import_failed` | batch-level problem (empty `restaurants` list, or over the 500-row cap) — distinct from a per-row `error` entry in a 200 response |
+| 422 | `validation_error` | request body itself fails schema validation (e.g. `restaurants` missing) |

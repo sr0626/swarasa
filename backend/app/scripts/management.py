@@ -51,6 +51,107 @@ def _run_seed_dev_data(event: dict) -> dict:
     return {"ok": True, "command": "seed_dev_data", "counts": counts}
 
 
+@_command("bulk_import_restaurants")
+def _run_bulk_import_restaurants(event: dict) -> dict:
+    """One-off/reusable restaurant basic-detail bulk import, run the same
+    way `seed_dev_data` is (see this file's module docstring for why: no
+    NAT/bastion/RDS Data API, so a script that writes to Aurora has to run
+    inside a Lambda invocation).
+
+    Event payload shape:
+        {
+          "_management_command": "bulk_import_restaurants",
+          "owner_email": "owner@example.com",       # OR "owner_cognito_sub"
+          "restaurants": [ {"name": ..., "address_line1": ..., ...}, ... ]
+        }
+
+    `owner_email`/`owner_cognito_sub` resolves an EXISTING local
+    `owner_account` row -- this command does not create one (unlike
+    `seed_dev_data`'s owner provisioning). The owner must already exist,
+    e.g. from a prior `seed_dev_data` run; if resolution fails, this
+    returns `ok: False` with a clear reason rather than silently
+    provisioning a new owner_account for what might be a typo'd email.
+    """
+    from app.db.session import get_session_factory
+    from app.services import auth_service, cognito_service
+    from app.services.restaurant_bulk_import_service import BulkImportError, bulk_import_restaurants
+
+    restaurants = event.get("restaurants")
+    if not restaurants:
+        return {
+            "ok": False,
+            "command": "bulk_import_restaurants",
+            "error": "Event payload is missing a non-empty 'restaurants' list.",
+        }
+
+    owner_cognito_sub = event.get("owner_cognito_sub")
+    owner_email = event.get("owner_email")
+    if not owner_cognito_sub and not owner_email:
+        return {
+            "ok": False,
+            "command": "bulk_import_restaurants",
+            "error": "Event payload needs either 'owner_cognito_sub' or 'owner_email'.",
+        }
+
+    async def _run() -> dict:
+        sub = owner_cognito_sub
+        if not sub:
+            sub = cognito_service.find_sub_by_email(owner_email)
+            if sub is None:
+                return {
+                    "ok": False,
+                    "command": "bulk_import_restaurants",
+                    "error": f"No Cognito user found for owner_email {owner_email!r}.",
+                }
+
+        session_factory = get_session_factory()
+        async with session_factory() as db:
+            owner = await auth_service.get_owner_account_by_sub(db, sub)
+            if owner is None:
+                return {
+                    "ok": False,
+                    "command": "bulk_import_restaurants",
+                    "error": (
+                        f"No local owner_account row for cognito_sub {sub!r} "
+                        f"(owner_email={owner_email!r}). This command looks up "
+                        f"an existing owner_account, it does not create one -- "
+                        f"run the 'seed_dev_data' command first if this owner "
+                        f"hasn't been seeded yet."
+                    ),
+                }
+
+            try:
+                result = await bulk_import_restaurants(
+                    db,
+                    restaurants,
+                    owner_id=owner.id,
+                    actor_id="system:bulk_import_restaurants",
+                    actor_role="admin",
+                )
+            except BulkImportError as exc:
+                return {"ok": False, "command": "bulk_import_restaurants", "error": str(exc)}
+
+        return {
+            "ok": True,
+            "command": "bulk_import_restaurants",
+            "owner_id": owner.id,
+            "summary": {"created": result.created, "skipped": result.skipped, "errors": result.errors},
+            "rows": [
+                {
+                    "index": row.index,
+                    "name": row.name,
+                    "status": row.status.value,
+                    "brand_id": row.brand_id,
+                    "location_id": row.location_id,
+                    "detail": row.detail,
+                }
+                for row in result.rows
+            ],
+        }
+
+    return asyncio.run(_run())
+
+
 @_command("alembic_upgrade")
 def _run_alembic_upgrade(event: dict) -> dict:
     from app.scripts.run_migrations import run_upgrade
