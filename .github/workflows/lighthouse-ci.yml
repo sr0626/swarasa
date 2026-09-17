@@ -92,3 +92,11 @@ jobs:
           name: lighthouse-reports
           path: frontend/.lighthouseci
           retention-days: 14
+          # frontend/lighthouserc.js's outputDir ("./.lighthouseci") is a
+          # dot-directory — actions/upload-artifact excludes hidden files
+          # by default and silently warns "No files were found" instead of
+          # failing the job, so this was found live on this workflow's own
+          # first passing run: the check went green but the report never
+          # actually got archived. include-hidden-files makes the glob
+          # pick it up.
+          include-hidden-files: true
