@@ -33,6 +33,7 @@ from app.models.owner_account import OwnerAccount
 from app.models.restaurant_brand import RestaurantBrand
 from app.models.restaurant_location import RestaurantLocation
 from app.models.restaurant_photo import RestaurantPhoto
+from app.models.user_follow import UserFollow
 
 
 def _cognito_sub() -> str:
@@ -113,6 +114,14 @@ class LocationManagerFactory(factory.Factory):
     revoked_at = None
 
 
+class UserFollowFactory(factory.Factory):
+    class Meta:
+        model = UserFollow
+
+    user_id = factory.LazyFunction(_cognito_sub)
+    brand_id = factory.Sequence(lambda n: n + 1)
+
+
 class ClaimRequestFactory(factory.Factory):
     class Meta:
         model = ClaimRequest
@@ -189,6 +198,13 @@ async def create_location_manager(db: AsyncSession, **overrides) -> LocationMana
     db.add(manager)
     await db.flush()
     return manager
+
+
+async def create_follow(db: AsyncSession, **overrides) -> UserFollow:
+    follow = UserFollowFactory(**overrides)
+    db.add(follow)
+    await db.flush()
+    return follow
 
 
 async def create_claim(db: AsyncSession, **overrides) -> ClaimRequest:

@@ -798,6 +798,103 @@ deleted).
 
 ---
 
+## Follows (`user_follow`)
+
+Closes the Phase 1 gap tracked in `docs/PROJECT_PLAN.csv` ("User follow /
+unfollow API") — the `user_follow` table has existed since the initial
+schema migration, but no endpoint was ever added. Follow target is the
+**brand**, not a specific location (`docs/DATA_MODEL.md` "user_follow" —
+already a settled judgment call, not re-litigated here).
+
+**Route shape judgment call (flagged for review):** `POST`/`DELETE
+/restaurants/{id}/follow`, nested under the existing `/restaurants`
+resource, rather than a separate top-level `/follows` resource. Same
+reasoning as `/locations/{id}/hours`, `/locations/{id}/photos`, and
+`/locations/{id}/managers` above — a follow is an action on a specific
+restaurant, not an independently addressable resource with its own
+identity that any endpoint needs to reference (nothing ever looks up a
+follow by its own `user_follow.id`; both routes below are addressed by
+`brand_id`). The one exception is the read side: "what do I follow" is a
+property of the *caller*, not of any one restaurant, so it lives at
+`GET /auth/me/follows` — the same "me"-scoped convention `GET /auth/me`
+already established — rather than as a third `/restaurants/{id}/...`
+route (there is no single `{id}` to nest it under) or a new `/users`
+resource introduced for this one endpoint alone.
+
+Auth: `registered_user` only, all three routes below (root CLAUDE.md
+"Permission model" — "Registered user: read-only + follow + deals"; no
+owner/manager/admin use case exists for following a brand). New
+`require_registered_user` dependency in `backend/app/dependencies/auth.py`,
+same shape as `require_admin`/`require_owner` — none of the existing
+dependencies gate to this one role.
+
+### POST /restaurants/{id}/follow
+
+Auth: registered_user
+
+**Idempotent**: following a brand the caller already follows returns the
+existing follow (its original `followed_at`, not a refreshed one) rather
+than erroring or creating a duplicate row — `uq_user_follow_user_brand`
+(`docs/DATA_MODEL.md`) is the last line of defense against a concurrent
+duplicate, caught the same way `location_manager_service.assign_manager`
+catches its own unique-constraint race, but the common case never reaches
+the DB constraint at all: it's checked first and short-circuited.
+
+Response: `200` (same shape whether this created a new follow or the
+caller already followed this brand — no separate "already following"
+signal, since the caller doesn't need to distinguish the two to decide
+what to do next):
+```json
+{ "brand_id": 123, "followed_at": "2026-09-16T10:00:00Z" }
+```
+
+Errors:
+| Status | Code | When |
+|---|---|---|
+| 404 | `not_found` | `brand_id` doesn't exist |
+| 403 | `forbidden` | Caller is not a `registered_user` |
+
+Audit: none — `user_follow` is not on root CLAUDE.md's audit-required
+table list (restaurant_brand, restaurant_location, menu_item, deal,
+owner_account, location_manager).
+
+### DELETE /restaurants/{id}/follow
+
+Auth: registered_user
+
+**Idempotent**, same posture as `DELETE /locations/{id}/managers/{id}`
+above: unfollowing a brand the caller doesn't currently follow (or that
+doesn't exist) is a no-op `204`, not a `404`/`409` — plain REST-delete
+idempotency, no side effect on a no-op.
+
+Response: `204 No Content`.
+
+### GET /auth/me/follows
+
+Auth: registered_user
+
+Query params: `page`, `page_size` (default 20, max 100 — backend/CLAUDE.md
+"ALWAYS include pagination on list endpoints"; unlike
+`GET /locations/{id}/managers`, this list has no small natural cap —
+DECISIONS.md "No follow cap for registered users" — so it needs real
+paging, not a bounded single page).
+
+Response: `200`, brand summaries only (not the full `RestaurantOut` shape
+— this is "what do I follow", not a restaurant detail page):
+```json
+{
+  "results": [
+    { "brand_id": 123, "name": "Spice Garden", "slug": "spice-garden-irving", "is_claimed": true, "followed_at": "2026-09-16T10:00:00Z" }
+  ],
+  "page": 1,
+  "page_size": 20,
+  "total": 1
+}
+```
+Ordered most-recently-followed first.
+
+---
+
 ## Claim flow (`/claim`)
 
 Implements DECISIONS.md "Claim flow": Google Business Profile match OR
