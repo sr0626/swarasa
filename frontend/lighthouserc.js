@@ -42,7 +42,11 @@ module.exports = {
         // workaround for headless Chrome in a container like this one;
         // --disable-dev-shm-usage avoids a second, separate failure mode
         // from /dev/shm being too small in the same environment.
-        chromeFlags: ["--no-sandbox", "--disable-dev-shm-usage"],
+        // --disable-gpu added defensively alongside the other two — a
+        // commonly-needed third flag for headless Chrome in the same kind
+        // of constrained CI container, even though this run's crash was
+        // specifically the sandbox, not GPU init.
+        chromeFlags: ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
         // Explicit mobile emulation — frontend/CLAUDE.md's target is a
         // MOBILE score, not desktop. This mirrors Lighthouse's own
         // built-in "mobile" defaults (Moto G-class CPU/network profile,
