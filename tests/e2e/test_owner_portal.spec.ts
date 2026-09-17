@@ -7,7 +7,7 @@
 // data (a brand/location owned by that test user, and a second owner's
 // location to prove the boundary against) — see fixtures/auth.ts for what's
 // missing and what unblocks it.
-import { test } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import { loginAs } from "./fixtures/auth";
 
 test.fixme("owner sees their brands and locations on the dashboard", async ({ page }) => {
@@ -16,6 +16,41 @@ test.fixme("owner sees their brands and locations on the dashboard", async ({ pa
   await loginAs(page, "owner");
   await page.goto("/portal/dashboard");
 });
+
+test.fixme(
+  "owner sees tier/billing status, active/inactive state, and assigned managers per location",
+  async ({ page }) => {
+    // docs/PROJECT_PLAN.csv "Owner dashboard: richer restaurant table
+    // (tier/billing status, active/inactive, assigned managers per
+    // restaurant)" — BrandCard.tsx renders LocationTierBadge,
+    // LocationStatusBadge, and LocationManagersSummary per location row.
+    // Needs: a real owner session with at least one free-tier location,
+    // one paid-tier location, and one location with an actively assigned
+    // manager (to exercise all three non-empty-state branches), plus real
+    // seeded data for the "no managers assigned" empty state.
+    await loginAs(page, "owner");
+    await page.goto("/portal/dashboard");
+
+    // Tier: a free-tier location shows "Free tier"; a paid-tier location
+    // shows "Paid" (no date suffix expected yet — paid_until isn't
+    // serialized by the backend today, see the flagged contract gap on
+    // LocationSummary.paid_until in frontend/src/types/location.ts).
+    await expect(page.getByText("Free tier").first()).toBeVisible();
+    await expect(page.getByText(/^Paid\b/).first()).toBeVisible();
+
+    // Active/inactive: renders "Active" today for every listed location
+    // (is_active isn't serialized yet either, and the owner-scoped list
+    // endpoint currently filters to is_active=true only — same flagged
+    // gap). Once Backend closes that gap this assertion should be
+    // extended to also cover an "Inactive" row.
+    await expect(page.getByText("Active").first()).toBeVisible();
+
+    // Managers: at least one location shows an assigned-manager summary,
+    // and at least one shows the empty state.
+    await expect(page.getByText(/\d+ managers?:/).first()).toBeVisible();
+    await expect(page.getByText("No managers assigned").first()).toBeVisible();
+  }
+);
 
 test.fixme(
   "owner can edit basic listing info for their own location (free tier)",

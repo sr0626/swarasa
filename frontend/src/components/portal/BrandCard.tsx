@@ -3,12 +3,20 @@
 // per brand via the existing public `GET /restaurants/{id}/locations`,
 // since the owner-scoped list only returns a `location_count`, not the
 // location rows themselves — see docs/API_CONTRACTS.md "GET /restaurants").
+// Each location row also shows tier/billing status, active/inactive state,
+// and assigned managers (docs/PROJECT_PLAN.csv "Owner dashboard: richer
+// restaurant table") — see `portal/dashboard/page.tsx` for where that data
+// is loaded and `LocationTierBadge`/`LocationStatusBadge`/
+// `LocationManagersSummary` for the flagged contract gaps on tier/status.
 // Server Component — no interactivity here, just links into the location
 // editor (`/portal/locations/{id}`).
 import Link from "next/link";
 import { LocationPinIcon, PencilIcon, StoreIcon } from "@/components/ui/icons";
 import OpenStatusBadge from "@/components/ui/OpenStatusBadge";
-import type { LocationSummary } from "@/types/location";
+import LocationTierBadge from "@/components/portal/LocationTierBadge";
+import LocationStatusBadge from "@/components/portal/LocationStatusBadge";
+import LocationManagersSummary from "@/components/portal/LocationManagersSummary";
+import type { LocationWithManagers } from "@/types/location";
 import type { RestaurantBrand } from "@/types/restaurant";
 
 export default function BrandCard({
@@ -17,7 +25,7 @@ export default function BrandCard({
   locationsError,
 }: {
   brand: RestaurantBrand;
-  locations: LocationSummary[];
+  locations: LocationWithManagers[];
   locationsError: string | null;
 }) {
   return (
@@ -66,11 +74,14 @@ export default function BrandCard({
 
         {!locationsError && locations.length > 0 && (
           <ul className="flex flex-col gap-2">
-            {locations.map((location) => (
-              <li key={location.id}>
+            {locations.map(({ location, managers, managersError }) => (
+              <li
+                key={location.id}
+                className="rounded-brand-control border border-brand-border bg-white"
+              >
                 <Link
                   href={`/portal/locations/${location.id}`}
-                  className="flex min-h-[44px] items-center justify-between gap-3 rounded-brand-control border border-brand-border bg-white px-4 py-2.5 transition hover:border-brand-ink-subtle"
+                  className="flex min-h-[44px] items-center justify-between gap-3 px-4 py-2.5 transition hover:bg-brand-bg"
                 >
                   <span className="flex min-w-0 items-center gap-2 text-sm text-brand-ink">
                     <LocationPinIcon className="h-4 w-4 shrink-0 text-brand-ink-subtle" />
@@ -84,6 +95,12 @@ export default function BrandCard({
                     <PencilIcon className="h-4 w-4 text-brand-ink-subtle" />
                   </span>
                 </Link>
+
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-brand-border px-4 py-2.5">
+                  <LocationTierBadge isPaid={location.is_paid} paidUntil={location.paid_until} />
+                  <LocationStatusBadge isActive={location.is_active} />
+                  <LocationManagersSummary managers={managers} error={managersError} />
+                </div>
               </li>
             ))}
           </ul>
