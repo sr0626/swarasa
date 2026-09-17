@@ -1130,16 +1130,37 @@ requiring a separate signup-sync step.
 
 ### PATCH /auth/me
 
-Auth: owner
+Auth: any authenticated user (changed — was `owner`-only; see
+docs/PROJECT_PLAN.csv "Broaden PATCH /auth/me beyond owner-only". The
+owner-only gate was an oversight from when this route was first built with
+only owner accounts in mind, not a deliberate restriction — `GET /auth/me`
+already worked for every role.)
 
 Body: `{ "full_name": "Priya Rao", "phone": "+14695559876" }`
 
 Updates the caller's own `owner_account` row only — no `owner_id` in
 the body, it's always the authenticated caller (root CLAUDE.md
 "Permission model" — never trust a client-supplied identity for a
-write that should be self-scoped).
+write that should be self-scoped). Same lazy-provisioning as `GET
+/auth/me`: an `owner`-role caller's first-ever write creates their
+`owner_account` row rather than 404ing.
 
-Response: `200`, `owner_account` shape from `GET /auth/me`.
+Response for an `owner` caller: `200`, `owner_account` shape from `GET
+/auth/me`.
+
+Response for `manager` / `admin` / `registered_user`: `404`,
+`{"detail": "...", "code": "no_editable_profile"}` — deliberately NOT the
+old `403`. It is not a permissions problem (every authenticated role may
+call this route); those three roles simply have no local profile record
+in this schema to write to today (only `owner_account` has
+`full_name`/`phone` — see `docs/DATA_MODEL.md`'s identity note and
+`backend/app/models/` — there is no manager/admin/registered_user profile
+table). If those roles ever need editable name/phone, the honest home for
+it is Cognito attributes (`given_name`/`family_name`/`phone_number`) via a
+frontend Amplify/Cognito `updateUserAttributes` call, not a write through
+this endpoint — out of scope for this fix; adding a new Postgres table for
+it is a schema decision for Architect, not something invented here
+unilaterally.
 
 ---
 
