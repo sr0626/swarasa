@@ -1,4 +1,7 @@
 // Homepage top bar: wordmark + tagline, nav links, "Add Your Restaurant" CTA.
+// Shared across "/", "/login", "/search", "/about", "/contact", and "/terms"
+// (frontend/CLAUDE.md's shared-component convention) — the wordmark links
+// back to "/" so every one of those pages has a way home, per user request.
 //
 // JUDGMENT CALL (flagged in final report): "For Owners", "Sign In", and
 // "Add Your Restaurant" all point at `/login` — the only real auth entry
@@ -12,7 +15,7 @@ export default function TopBar() {
   return (
     <header className="border-b border-brand-border bg-brand-bg">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
-        <div className="flex flex-col leading-tight">
+        <Link href="/" className="flex flex-col leading-tight">
           <span className="flex items-center gap-1.5 font-display text-xl font-bold text-brand-ink sm:text-2xl">
             <SwarasaMark className="h-5 w-auto text-brand-accent sm:h-6" />
             Swarasa
@@ -20,7 +23,7 @@ export default function TopBar() {
           <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-ink-subtle sm:text-xs">
             Discover Your Taste
           </span>
-        </div>
+        </Link>
 
         <nav className="hidden items-center gap-6 text-sm font-medium text-brand-ink-muted sm:flex">
           <Link href="/login" className="transition hover:text-brand-ink">
