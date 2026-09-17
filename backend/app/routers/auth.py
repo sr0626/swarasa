@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies.auth import (
     CurrentUser,
     get_current_user,
-    require_owner,
     require_registered_user,
 )
 from app.dependencies.db import get_db
@@ -40,8 +39,19 @@ async def get_me(
 async def update_me(
     body: MeUpdateRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(require_owner),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> OwnerAccountOut:
+    """Any authenticated role, self-scoped (docs/PROJECT_PLAN.csv "Broaden
+    PATCH /auth/me beyond owner-only") — same auth posture GET /auth/me
+    already uses. `require_owner` was an oversight from when this route was
+    first built with only owner accounts in mind, not a deliberate
+    restriction: there is no local editable profile record for
+    manager/admin/registered_user today (only `owner_account` has
+    `full_name`/`phone`), so `auth_service.update_me` still 404s those
+    three roles with an explicit `no_editable_profile` code — never a bare
+    403, which would (incorrectly) read as a permissions problem rather
+    than "there's nothing here to update yet."
+    """
     return await auth_service.update_me(db, current_user, body)
 
 

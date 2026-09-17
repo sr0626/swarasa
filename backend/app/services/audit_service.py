@@ -1,7 +1,10 @@
 """audit_log writes — backend/CLAUDE.md "Audit log" pattern, implemented
 verbatim. Required on writes to: restaurant_brand, restaurant_location,
-location_manager (root CLAUDE.md "ALWAYS — Quality"; menu_item/deal don't
-exist until Phase 2).
+location_manager, owner_account (root CLAUDE.md "ALWAYS — Quality";
+menu_item/deal don't exist until Phase 2). `owner_account` was missing a
+caller until `auth_service.update_me` added one (docs/PROJECT_PLAN.csv
+"Broaden PATCH /auth/me beyond owner-only" — found during that fix's
+self-review, not a new requirement).
 
 Never commits — the caller commits as part of the same transaction as the
 write being audited, so the audit row and the write it describes always
