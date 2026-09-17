@@ -35,6 +35,7 @@ import { ensureAmplifyConfigured } from "@/lib/auth/amplifyClient";
 import { startSessionKeepAlive } from "@/lib/auth/sessionKeepAlive";
 import { signInSchema, type SignInFormValues } from "@/lib/validation/auth";
 import { messageForAuthError, messageForNextStep } from "@/lib/auth/errorMessages";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 import type { UserRole } from "@/types/auth";
 
 /**
@@ -166,15 +167,14 @@ export default function LoginForm() {
         >
           Password
         </label>
-        <input
+        <PasswordInput
           id="password"
           name="password"
-          type="password"
           autoComplete="current-password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           aria-invalid={Boolean(fieldErrors.password)}
-          className="min-h-[44px] rounded-brand-control border border-brand-border bg-white px-3 text-sm text-brand-ink placeholder:text-brand-placeholder focus:outline-none focus:ring-2 focus:ring-brand-accent"
+          className="min-h-[44px] w-full rounded-brand-control border border-brand-border bg-white px-3 text-sm text-brand-ink placeholder:text-brand-placeholder focus:outline-none focus:ring-2 focus:ring-brand-accent"
           placeholder="********"
         />
         {fieldErrors.password && (
