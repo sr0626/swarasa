@@ -9,7 +9,30 @@
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
 
-/** Thrown by apiFetch on any non-2xx response. */
+/**
+ * Bound on how long any single backend call is allowed to hang before
+ * `apiFetch` gives up and surfaces a normal, catchable `ApiError` instead.
+ *
+ * Added 2026-09-17 (see PR description): without this, a backend call that
+ * never resolves (connection accepted but no response — not a fast
+ * connection-refused, which `fetch` already rejects quickly) hangs the
+ * `await` forever. In a Server Component like
+ * `app/portal/dashboard/page.tsx`, that hangs the entire SSR render until
+ * the platform's own Lambda/edge-function timeout kills it — which surfaces
+ * to the browser as a bare 504 with no body, bypassing every try/catch the
+ * page already has around its `apiFetch` calls (`ApiError` is only ever
+ * thrown for a *settled* fetch; a fetch that never settles doesn't throw at
+ * all, it just doesn't return). That, in turn, is what left
+ * `components/auth/LoginForm.tsx` stuck showing "Signing in…" forever after
+ * a fully successful sign-in: `router.push()`'s soft navigation to the
+ * landing page never got a response to navigate to. This timeout makes a
+ * hung backend fail the same way a down backend already does — fast, and
+ * through the existing `ApiError` → page-level error-message path — rather
+ * than a special, unhandled failure mode.
+ */
+const API_FETCH_TIMEOUT_MS = 10_000;
+
+/** Thrown by apiFetch on any non-2xx response, or when a request times out. */
 export class ApiError extends Error {
   readonly status: number;
 
@@ -95,14 +118,37 @@ export async function apiFetch<TResponse>(
     headers.set("Authorization", `Bearer ${options.accessToken}`);
   }
 
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    headers,
-    next:
-      options.revalidateSeconds !== undefined
-        ? { revalidate: options.revalidateSeconds }
-        : undefined,
-  });
+  const timeoutController = new AbortController();
+  const timeoutId = setTimeout(
+    () => timeoutController.abort(),
+    API_FETCH_TIMEOUT_MS
+  );
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, {
+      ...init,
+      headers,
+      signal: timeoutController.signal,
+      next:
+        options.revalidateSeconds !== undefined
+          ? { revalidate: options.revalidateSeconds }
+          : undefined,
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new ApiError(
+        504,
+        "The restaurant service is taking too long to respond. Please try again."
+      );
+    }
+    throw new ApiError(
+      502,
+      "Could not reach the restaurant service. Please try again."
+    );
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!res.ok) {
     throw new ApiError(res.status, await extractErrorMessage(res));
