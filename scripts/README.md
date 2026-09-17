@@ -1,0 +1,44 @@
+# Dev/ops scripts
+
+Human-run utility scripts. Nothing in this repo invokes anything here
+automatically — no CI job, no application code path. These exist so a
+person can run a repeatable, documented command instead of ad-hoc `aws`
+calls, following the same "hand over the exact command, the human runs it"
+convention as the rest of this project (root `CLAUDE.md` "NEVER run any
+AWS CLI or SDK command ... without explicit permission").
+
+Distinct from `backend/app/scripts/` — those are management commands that
+run *inside* the deployed Lambda (the only thing that can reach Aurora, a
+VPC-only database with no NAT/bastion/RDS Data API). Several scripts here
+are thin wrappers that invoke one of those commands from your own machine.
+
+## Prerequisites
+
+- AWS CLI configured with the `swarasa-dev` profile (or pass `--profile`).
+  If your SSO session has expired: `aws sso login --profile swarasa-dev`.
+- For anything that invokes a backend management command, that command
+  must already be deployed (its PR merged, backend redeployed) — a script
+  will fail clearly, not silently, if the Lambda doesn't recognize it yet.
+
+## Scripts
+
+### `delete_test_user.py`
+Fully removes one user by email — local DB rows (via the
+`delete_user_data` management command) plus the Cognito user itself — so
+the same email can be reused for another manual sign-up test. See its own
+module docstring for exactly what it does and does not touch (never
+destroys a claimed brand's restaurant data, only unclaims it).
+
+```bash
+python3 scripts/delete_test_user.py --email someone@example.com
+```
+
+### `list_users.py`
+Lists every email currently in the Cognito user pool, with status and pool
+group membership — useful for checking what's already registered before
+deciding what to clean up, or for spotting a self-signed-up user stuck
+with no group (the pre-PR-#84 symptom).
+
+```bash
+python3 scripts/list_users.py
+```

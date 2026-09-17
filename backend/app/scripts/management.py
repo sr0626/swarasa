@@ -161,6 +161,26 @@ def _run_alembic_upgrade(event: dict) -> dict:
     return {"ok": True, "command": "alembic_upgrade", **result}
 
 
+@_command("delete_user_data")
+def _run_delete_user_data(event: dict) -> dict:
+    """Dev/test-only -- see app/scripts/delete_user_data.py's module
+    docstring for what this does and does NOT do (not the CCPA flow).
+
+    Event payload shape:
+        {"_management_command": "delete_user_data", "email": "test@example.com"}
+        # OR: {"_management_command": "delete_user_data", "cognito_sub": "..."}
+    """
+    from app.scripts.delete_user_data import DeleteUserDataError, delete_user_data
+
+    email = event.get("email")
+    cognito_sub = event.get("cognito_sub")
+    try:
+        result = asyncio.run(delete_user_data(email=email, cognito_sub=cognito_sub))
+    except DeleteUserDataError as exc:
+        return {"ok": False, "command": "delete_user_data", "error": str(exc)}
+    return {"command": "delete_user_data", **result}
+
+
 def run_management_command(event: dict, context: Any) -> dict:
     """Entry point called from `app.main.handler`. Never raises -- every
     outcome (including an unknown command or an unhandled exception from
