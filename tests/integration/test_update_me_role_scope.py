@@ -31,7 +31,9 @@ test_admin_location_parity.py / test_managed_locations.py.
 from __future__ import annotations
 
 import pytest
+from sqlalchemy import select
 
+from app.models.audit_log import AuditLog
 from factories import create_owner
 
 
@@ -51,6 +53,36 @@ async def test_owner_can_update_their_own_profile(client, db_session, as_user):
     await db_session.refresh(owner)
     assert owner.full_name == "Priya Rao"
     assert owner.phone == "+14695559876"
+
+
+@pytest.mark.asyncio
+async def test_owner_update_writes_audit_log(client, db_session, as_user):
+    """Regression for a gap found during this fix's self-review: root
+    CLAUDE.md / docs/DECISIONS.md "Audit log on all core entity writes"
+    requires an audit_log entry on every owner_account write, but
+    update_me previously wrote none at all.
+    """
+    owner = await create_owner(db_session, full_name="Old Name", phone=None)
+    await db_session.commit()
+
+    as_user("owner", sub=owner.cognito_sub, email=owner.email)
+    response = await client.patch(
+        "/auth/me", json={"full_name": "Priya Rao", "phone": "+14695559876"}
+    )
+    assert response.status_code == 200, response.text
+
+    audit_row = (
+        await db_session.execute(
+            select(AuditLog).where(
+                AuditLog.table_name == "owner_account", AuditLog.record_id == owner.id
+            )
+        )
+    ).scalar_one()
+    assert audit_row.action == "update"
+    assert audit_row.actor_id == owner.cognito_sub
+    assert audit_row.actor_role == "owner"
+    assert audit_row.old_val == {"full_name": "Old Name", "phone": None}
+    assert audit_row.new_val == {"full_name": "Priya Rao", "phone": "+14695559876"}
 
 
 @pytest.mark.asyncio

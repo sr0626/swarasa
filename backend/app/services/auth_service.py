@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import AppError
 from app.models.owner_account import OwnerAccount
 from app.schemas.auth import MeResponse, MeUpdateRequest, OwnerAccountOut
+from app.services import audit_service
 
 
 async def get_owner_account_by_sub(db: AsyncSession, cognito_sub: str) -> OwnerAccount | None:
@@ -107,9 +108,31 @@ async def update_me(db: AsyncSession, current_user, body: MeUpdateRequest) -> Ow
         )
 
     owner = await get_or_create_owner_account(db, current_user.cognito_sub, current_user.email)
+    old_val = {"full_name": owner.full_name, "phone": owner.phone}
+
     if body.full_name is not None:
         owner.full_name = body.full_name
     if body.phone is not None:
         owner.phone = body.phone
+
+    new_val = {"full_name": owner.full_name, "phone": owner.phone}
+
+    # ALWAYS write audit_log for owner_account writes (root CLAUDE.md
+    # "ALWAYS — Quality"; docs/DECISIONS.md "Audit log on all core entity
+    # writes" explicitly lists owner_account) — pre-existing gap on this
+    # endpoint found during self-review while broadening it, fixed here
+    # rather than left in place, same as backend/CLAUDE.md's audit_service
+    # pattern used everywhere else in this codebase.
+    await audit_service.log(
+        db,
+        table_name="owner_account",
+        record_id=owner.id,
+        action="update",
+        actor_id=current_user.cognito_sub,
+        actor_role=current_user.role,
+        old_val=old_val,
+        new_val=new_val,
+    )
+
     await db.commit()
     return _owner_out(owner)
