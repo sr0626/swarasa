@@ -3,6 +3,8 @@ docs/API_CONTRACTS.md "Restaurants (restaurant_brand)".
 """
 from __future__ import annotations
 
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 from app.schemas.cuisine import CuisineTagOut
@@ -41,6 +43,16 @@ class LocationSummaryOut(BaseModel):
     phone: str | None
     is_verified: bool
     is_paid: bool
+    # Added: real restaurant_location columns that were previously not
+    # serialized here at all (docs/PROJECT_PLAN.csv "Serialize
+    # paid_until/is_active on location endpoints..."). `paid_until` is
+    # `None` on the free tier. `is_active` will always be `true` for an
+    # anonymous/public caller (this endpoint still filters those out by
+    # default — see location_service.list_locations_for_brand) but can be
+    # `false` for the owning owner or an admin caller, who additionally
+    # see their own deactivated locations.
+    paid_until: datetime | None
+    is_active: bool
     is_open_now: bool | None
 
 

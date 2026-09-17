@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies.auth import (
     CurrentUser,
+    get_current_user_optional,
     require_admin,
     require_brand_write_access,
     require_owner,
@@ -63,8 +64,21 @@ async def list_restaurant_locations(
     brand_id: int,
     pagination: Pagination = Depends(pagination_params),
     db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser | None = Depends(get_current_user_optional),
 ) -> LocationListResponse:
-    return await location_service.list_locations_for_brand(db, brand_id, pagination)
+    """Public by default — active locations only (backend/CLAUDE.md
+    "Public Routes"; docs/API_CONTRACTS.md "GET /restaurants/{id}/locations").
+    An authenticated caller who owns this brand, or an admin, additionally
+    sees their own deactivated locations here (docs/PROJECT_PLAN.csv
+    "Serialize paid_until/is_active on location endpoints + let owner see
+    own deactivated locations") — every other caller (anonymous, a
+    manager, a registered_user, or an owner who does not own this brand)
+    is unaffected. See `location_service.list_locations_for_brand` /
+    `_caller_may_see_inactive_locations` for the exact rule.
+    """
+    return await location_service.list_locations_for_brand(
+        db, brand_id, pagination, current_user
+    )
 
 
 @router.post("", response_model=RestaurantOut, status_code=status.HTTP_201_CREATED)

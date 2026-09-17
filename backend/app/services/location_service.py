@@ -68,6 +68,8 @@ async def _location_to_out(db: AsyncSession, location: RestaurantLocation) -> Lo
         longitude=float(location.longitude) if location.longitude is not None else None,
         is_verified=location.is_verified,
         is_paid=location.is_paid,
+        paid_until=location.paid_until,
+        is_active=location.is_active,
         is_open_now=is_open_now,
         hours=[
             HoursOut(
@@ -243,22 +245,38 @@ async def delete_location(db: AsyncSession, location_id: int, current_user) -> N
 
 
 async def list_locations_for_brand(
-    db: AsyncSession, brand_id: int, pagination
+    db: AsyncSession, brand_id: int, pagination, current_user=None
 ) -> LocationListResponse:
+    """`GET /restaurants/{id}/locations` — public by default (active-only,
+    unchanged), but additionally surfaces a brand's own deactivated
+    locations to the owning owner or an admin caller when `current_user`
+    is passed (docs/PROJECT_PLAN.csv "Serialize paid_until/is_active on
+    location endpoints + let owner see own deactivated locations"; see
+    `_caller_may_see_inactive_locations` below). This is the SAME code
+    path the public listing uses — deliberately, per that row's own
+    framing ("if you find the two share a code path, add an explicit
+    include_inactive-for-owner branch") — there is no separate
+    owner-scoped locations-list endpoint today, so the filter branches
+    inside this one function rather than forking into two.
+    """
     brand = await db.get(RestaurantBrand, brand_id)
     if brand is None:
         raise AppError(404, "Restaurant not found", "not_found")
 
-    base_filter = (RestaurantLocation.brand_id == brand_id, RestaurantLocation.is_active == True)  # noqa: E712
+    include_inactive = await _caller_may_see_inactive_locations(db, brand, current_user)
+
+    filters = [RestaurantLocation.brand_id == brand_id]
+    if not include_inactive:
+        filters.append(RestaurantLocation.is_active == True)  # noqa: E712
 
     total = (
-        await db.execute(select(func.count()).select_from(RestaurantLocation).where(*base_filter))
+        await db.execute(select(func.count()).select_from(RestaurantLocation).where(*filters))
     ).scalar_one()
 
     rows = (
         await db.execute(
             select(RestaurantLocation)
-            .where(*base_filter)
+            .where(*filters)
             .order_by(RestaurantLocation.id)
             .offset(pagination.offset)
             .limit(pagination.page_size)
@@ -279,6 +297,8 @@ async def list_locations_for_brand(
                 phone=row.phone,
                 is_verified=row.is_verified,
                 is_paid=row.is_paid,
+                paid_until=row.paid_until,
+                is_active=row.is_active,
                 is_open_now=is_open_now,
             )
         )
@@ -286,6 +306,33 @@ async def list_locations_for_brand(
     return LocationListResponse(
         results=results, page=pagination.page, page_size=pagination.page_size, total=total
     )
+
+
+async def _caller_may_see_inactive_locations(db: AsyncSession, brand, current_user) -> bool:
+    """`current_user` is `None` for an anonymous caller (the common case —
+    always active-only). For an authenticated caller: an admin always
+    passes (root CLAUDE.md Permission model, "Admin: full platform
+    access" — same admin-parity posture as
+    `require_location_write_access`/`require_location_owner_or_admin` in
+    `app/dependencies/auth.py`; not explicitly called for by the
+    PROJECT_PLAN.csv row that tracks this gap, but consistent with this
+    codebase's established pattern elsewhere and flagged here as a
+    judgment call for review). An owner passes only if they own THIS
+    brand — never trust the JWT role claim alone, re-resolve the local
+    `owner_account` row and compare `owner_account.id` to
+    `restaurant_brand.owner_id`, same pattern as
+    `require_brand_write_access`. Every other role (manager,
+    registered_user) still only sees active locations — no use case for
+    a manager/registered_user to see a deactivated location here.
+    """
+    if current_user is None:
+        return False
+    if current_user.role == "admin":
+        return True
+    if current_user.role != "owner":
+        return False
+    owner = await auth_service.get_owner_account_by_sub(db, current_user.cognito_sub)
+    return owner is not None and owner.id == brand.owner_id
 
 
 # ---------------------------------------------------------------------------

@@ -3,7 +3,7 @@ docs/API_CONTRACTS.md "Locations (restaurant_location)".
 """
 from __future__ import annotations
 
-from datetime import time
+from datetime import datetime, time
 
 from pydantic import BaseModel, Field
 
@@ -41,6 +41,17 @@ class LocationOut(BaseModel):
     longitude: float | None
     is_verified: bool
     is_paid: bool
+    # Added alongside is_active below (docs/PROJECT_PLAN.csv "Serialize
+    # paid_until/is_active on location endpoints..."). `None` when free
+    # tier (root CLAUDE.md "Tier model (is_paid)").
+    paid_until: datetime | None
+    # Soft-hide flag (restaurant_location.is_active) — was a real stored
+    # column that this response never serialized before. `GET
+    # /locations/{id}` itself is unchanged otherwise: it still returns a
+    # deactivated location's detail to ANY caller (no filtering here, same
+    # as before this change) — only `GET /restaurants/{id}/locations`
+    # (list) gained owner/admin-aware filtering, see location_service.py.
+    is_active: bool
     is_open_now: bool | None
     hours: list[HoursOut]
     cover_photo_url: str | None
