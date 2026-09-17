@@ -28,10 +28,11 @@ fully satisfied and asked to stop iterating for now, with an explicit intent
 to revisit later, not a final sign-off.
 
 ## Open PRs
-- #78 (draft, Architect self-review pending) — `GET /auth/me/managed-locations`
-  (manager location-discovery endpoint), manager reactivation verified (no
-  bug found), and platform admin full-access parity on `PATCH
-  /locations/{id}` / `PUT /locations/{id}/hours` / `/locations/{id}/photos*`
+- #84 (draft, Architect self-review pending) — Cognito post-confirmation
+  Lambda (`infra/modules/cognito` + `backend/app/lambda_handlers/
+  cognito_post_confirmation.py`): assigns a newly-confirmed sign-up to its
+  `custom:role` pool group, closing the gap left by PR #79's sign-up flow.
+  Not yet applied to real AWS.
 
 ## Architect (schema + contracts)
 - [x] 13 entities modeled, 2 migrations written (never run)
@@ -166,6 +167,15 @@ to revisit later, not a final sign-off.
   `raw/` prefix to it, and an `expire-stale-raw-uploads` S3 lifecycle
   rule as a cost backstop. See the PR's post-merge checklist for the
   exact human steps (apply, bootstrap image push, GitHub secret)
+- Cognito post-confirmation Lambda written (PR #84), not yet applied:
+  `infra/modules/cognito` extended with a small zip-packaged Lambda
+  (`cognito-idp:AdminAddUserToGroup` on this one pool's ARN only, its own
+  IAM role, never shared with the API Lambda's role) wired via
+  `lambda_config { post_confirmation = ... }` — assigns a newly-confirmed
+  sign-up to its `custom:role` pool group. No ECR/container image needed
+  (stdlib + boto3 only); `data.archive_file` zips the handler straight
+  from `backend/app/lambda_handlers/cognito_post_confirmation.py`, so
+  Terraform itself is the deploy mechanism, no DevOps pipeline involved
 
 ## DevOps (CI/CD)
 - [x] `deploy-backend.yml` reviewed and fixed (PR #39) — the image-scan
