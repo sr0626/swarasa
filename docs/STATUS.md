@@ -33,6 +33,11 @@ to revisit later, not a final sign-off.
   cognito_post_confirmation.py`): assigns a newly-confirmed sign-up to its
   `custom:role` pool group, closing the gap left by PR #79's sign-up flow.
   Not yet applied to real AWS.
+- #88 (draft, Architect self-review pending) — signed-in account dropdown
+  in the site header (Hello, {name}; Profile/Security/Logout), new
+  `DELETE /api/auth/session` (logout) and `/account/security`
+  (change-password) — closes the `docs/PROJECT_PLAN.csv` gap tracked
+  2026-09-17.
 
 ## Architect (schema + contracts)
 - [x] 13 entities modeled, 2 migrations written (never run)
@@ -127,6 +132,18 @@ to revisit later, not a final sign-off.
       dev error screen instead of a graceful, branded state
 - [x] Marketing copy reworded off repetitive "Indian" phrasing — new
       headline "Discover your taste," tagline "Discover Your Taste"
+- [ ] PR #88 (draft, not yet merged): signed-in account dropdown in the
+      shared `TopBar` (Hello, {name}, falling back to email; Profile →
+      `/account`, Security → new `/account/security` change-password page,
+      Logout). `TopBar` is now an async Server Component
+      (`getServerSession()` + `GET /auth/me`); signed-out rendering is
+      unchanged. Logout: new `DELETE /api/auth/session` route +
+      `stopSessionKeepAlive()` + best-effort Amplify `signOut()`. Also
+      fixed two real bugs this surfaced: `app/error.tsx` (a required
+      Client Component) broke once `TopBar` pulled in `next/headers`
+      (fixed via a new `TopBarShell.tsx` presentational split), and a
+      375px mobile header overflow (fixed by hiding the "Add Your
+      Restaurant" CTA below `sm:` only when signed in).
 - [x] **`next build`/`next lint` fixed** — `next.config.ts` needed Next 15;
       converted to `next.config.mjs` (plain JS, works on the pinned Next
       14.2.18 — no version bump, per root `CLAUDE.md`'s settled Next 14

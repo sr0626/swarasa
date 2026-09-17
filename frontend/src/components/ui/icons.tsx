@@ -167,6 +167,15 @@ export function DownloadIcon(props: IconProps) {
   );
 }
 
+/** Added for the header account dropdown's trigger (open/closed affordance). */
+export function ChevronDownIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} {...props}>
+      <path d="M6 9.5l6 6 6-6" />
+    </svg>
+  );
+}
+
 /** Added for the owner portal dashboard's brand cards. */
 export function StoreIcon(props: IconProps) {
   return (

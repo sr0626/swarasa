@@ -9,7 +9,7 @@
 // (see PopularNearYou.tsx / InfoPanel.tsx) — inconsistent with
 // frontend/CLAUDE.md's "ALWAYS handle API errors gracefully" guardrail.
 import { useEffect } from "react";
-import TopBar from "@/components/home/TopBar";
+import TopBarShell from "@/components/home/TopBarShell";
 import InfoPanel from "@/components/ui/InfoPanel";
 
 export default function GlobalError({
@@ -26,7 +26,12 @@ export default function GlobalError({
 
   return (
     <main className="min-h-screen bg-brand-bg">
-      <TopBar />
+      {/* Signed-out-style header only (docs/PROJECT_PLAN.csv "Signed-in
+          account dropdown in site header" — see TopBar.tsx/TopBarShell.tsx
+          header comments): this boundary is a required Client Component and
+          can't safely re-derive the session mid-error anyway, so it never
+          renders the account menu here even for a signed-in visitor. */}
+      <TopBarShell greetingName={null} />
       <div className="mx-auto max-w-2xl px-4 py-16 sm:px-6">
         <InfoPanel
           title="Something went wrong"
