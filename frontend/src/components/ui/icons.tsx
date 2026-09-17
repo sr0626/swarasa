@@ -178,3 +178,31 @@ export function StoreIcon(props: IconProps) {
     </svg>
   );
 }
+
+/**
+ * Added for the show/hide password reveal toggle (docs/PROJECT_PLAN.csv
+ * "Show/hide password toggle (eye icon) on all password fields") — used by
+ * PasswordInput.tsx. Decorative only (aria-hidden via baseProps); the
+ * toggle button itself carries the accessible "Show password"/"Hide
+ * password" label.
+ */
+export function EyeIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} {...props}>
+      <path d="M2.5 12S6 5 12 5s9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+/** Eye-with-slash counterpart to EyeIcon, shown when the password is visible. */
+export function EyeOffIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} {...props}>
+      <path d="M6.6 6.6C4 8.4 2.5 12 2.5 12s3.5 7 9.5 7c1.4 0 2.7-.3 3.9-.9" />
+      <path d="M10.6 5.2A10.6 10.6 0 0 1 12 5c6 0 9.5 7 9.5 7a13.5 13.5 0 0 1-3.1 4.1" />
+      <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+      <path d="M3.5 3.5l17 17" />
+    </svg>
+  );
+}

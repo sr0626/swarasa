@@ -50,6 +50,41 @@ test.describe("sign-up page", () => {
     await expect(page.getByText("Passwords do not match")).toBeVisible();
   });
 
+  test("show/hide password toggle reveals text independently per field and never submits the form", async ({
+    page,
+  }) => {
+    // docs/PROJECT_PLAN.csv "Show/hide password toggle (eye icon) on all
+    // password fields" — PasswordInput.tsx is shared across all 5 password
+    // fields in the app; this is the one place we exercise it end-to-end
+    // (LoginForm/ResetPasswordForm reuse the identical component, so this
+    // coverage generalizes rather than needing to be repeated per form).
+    await page.goto("/signup");
+    const password = page.getByLabel("Password", { exact: true });
+    const confirmPassword = page.getByLabel("Confirm password");
+    const showPassword = page.getByRole("button", { name: "Show password" });
+
+    await password.fill("Password1");
+    await confirmPassword.fill("Password2");
+    await expect(password).toHaveAttribute("type", "password");
+    await expect(confirmPassword).toHaveAttribute("type", "password");
+
+    // Toggling Password's reveal does not affect Confirm password.
+    await showPassword.first().click();
+    await expect(password).toHaveAttribute("type", "text");
+    await expect(confirmPassword).toHaveAttribute("type", "password");
+    await expect(password).toHaveValue("Password1");
+
+    // A button click, not a submit — still on /signup, values untouched.
+    await expect(page).toHaveURL(/\/signup$/);
+    await expect(
+      page.getByRole("button", { name: "Hide password" }).first()
+    ).toBeVisible();
+
+    // Toggle back off.
+    await page.getByRole("button", { name: "Hide password" }).first().click();
+    await expect(password).toHaveAttribute("type", "password");
+  });
+
   test("links to sign in for an existing account", async ({ page }) => {
     await page.goto("/signup");
     // Scoped to the form: TopBar also has a "Sign In" nav link at desktop

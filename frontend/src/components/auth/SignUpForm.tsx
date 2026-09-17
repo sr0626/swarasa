@@ -46,6 +46,7 @@ import { signUp } from "@aws-amplify/auth";
 import { ensureAmplifyConfigured } from "@/lib/auth/amplifyClient";
 import { signUpSchema, type SignUpFormValues } from "@/lib/validation/auth";
 import { messageForAuthError } from "@/lib/auth/errorMessages";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 
 type Role = SignUpFormValues["role"];
 type FieldErrors = Partial<Record<keyof SignUpFormValues, string>>;
@@ -212,16 +213,15 @@ export default function SignUpForm() {
         >
           Password
         </label>
-        <input
+        <PasswordInput
           id="password"
           name="password"
-          type="password"
           autoComplete="new-password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           aria-invalid={Boolean(fieldErrors.password)}
           aria-describedby="password-hint"
-          className="min-h-[44px] rounded-brand-control border border-brand-border bg-white px-3 text-sm text-brand-ink placeholder:text-brand-placeholder focus:outline-none focus:ring-2 focus:ring-brand-accent"
+          className="min-h-[44px] w-full rounded-brand-control border border-brand-border bg-white px-3 text-sm text-brand-ink placeholder:text-brand-placeholder focus:outline-none focus:ring-2 focus:ring-brand-accent"
           placeholder="********"
         />
         <p id="password-hint" className="text-sm text-brand-ink-subtle">
@@ -239,15 +239,14 @@ export default function SignUpForm() {
         >
           Confirm password
         </label>
-        <input
+        <PasswordInput
           id="confirmPassword"
           name="confirmPassword"
-          type="password"
           autoComplete="new-password"
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
           aria-invalid={Boolean(fieldErrors.confirmPassword)}
-          className="min-h-[44px] rounded-brand-control border border-brand-border bg-white px-3 text-sm text-brand-ink placeholder:text-brand-placeholder focus:outline-none focus:ring-2 focus:ring-brand-accent"
+          className="min-h-[44px] w-full rounded-brand-control border border-brand-border bg-white px-3 text-sm text-brand-ink placeholder:text-brand-placeholder focus:outline-none focus:ring-2 focus:ring-brand-accent"
           placeholder="********"
         />
         {fieldErrors.confirmPassword && (
