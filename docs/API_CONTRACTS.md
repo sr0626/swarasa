@@ -1047,3 +1047,159 @@ the body, it's always the authenticated caller (root CLAUDE.md
 write that should be self-scoped).
 
 Response: `200`, `owner_account` shape from `GET /auth/me`.
+
+---
+
+## Privacy (CCPA data export / deletion)
+
+Closes the tracked Phase 1 gap in `docs/PROJECT_PLAN.csv` ("CCPA data
+export / deletion flow") — BRD v3.6 sections 7/12 require "CCPA
+compliant. Users can request data export and deletion," with no further
+detail. See `docs/DECISIONS.md` "CCPA data export/deletion" for the full
+reasoning behind every choice below (scope, sync vs. async, review queue
+vs. instant execution, what's redacted vs. retained vs. hard-deleted) —
+summarized here only as much as the contract itself needs.
+
+Scope: this app's own database only. Cognito's own account (login email,
+password, MFA, the account itself) is a separate system and explicitly
+out of scope — see DECISIONS.md for why. "Your data" means every row
+across the schema keyed to your Cognito `sub`, not just the table(s)
+matching your current role.
+
+### GET /auth/me/data-export
+
+Auth: any authenticated user (own data only — there is no `user_id`
+parameter; the caller is always resolved from their own JWT, same
+posture as `PATCH /auth/me`)
+
+Synchronous — returns the full export directly as JSON, `200`. No async
+job, no email delivery (see DECISIONS.md for why this is the right call
+for Phase 1). Read-only: unlike `GET /auth/me`, this never lazily
+provisions an `owner_account` row as a side effect of the request.
+
+Response: `200`
+```json
+{
+  "cognito_sub": "us-east-1:abc-123",
+  "role": "owner",
+  "email": "owner@example.com",
+  "generated_at": "2026-09-16T10:00:00Z",
+  "owner_account": {
+    "id": 55,
+    "cognito_sub": "us-east-1:abc-123",
+    "email": "owner@example.com",
+    "full_name": "Priya Rao",
+    "phone": "+14695551234",
+    "stripe_customer_id": null,
+    "created_at": "2026-09-01T10:00:00Z",
+    "personal_data_deleted_at": null
+  },
+  "location_manager_assignments": [
+    { "location_id": 42, "is_active": true, "assigned_at": "2026-09-01T10:00:00Z", "revoked_at": null }
+  ],
+  "follows": [
+    { "brand_id": 123, "followed_at": "2026-09-05T10:00:00Z" }
+  ],
+  "claim_requests": [
+    { "claim_id": 789, "brand_id": 123, "status": "approved", "proof_method": "google_business_profile", "submitted_at": "2026-09-01T10:00:00Z", "reviewed_at": "2026-09-02T10:00:00Z" }
+  ],
+  "audit_log_entries": [
+    { "table_name": "restaurant_brand", "record_id": 123, "action": "update", "actor_role": "owner", "created_at": "2026-09-10T10:00:00Z" }
+  ],
+  "notice": "This export covers personal data held directly by this app ... audit_log_entries are retained even after a data-deletion request, for legitimate business and legal record-keeping purposes."
+}
+```
+`owner_account` is `null` if the caller has no local business record
+(same condition as `GET /auth/me`). `audit_log_entries` covers actions
+the caller themselves performed (`actor_id` match) — included for
+transparency, but per `notice` and DECISIONS.md, these are NOT touched
+by a data-deletion request.
+
+### POST /auth/me/data-deletion
+
+Auth: any authenticated user (own data only)
+
+Body: `{ "reason": "no longer using the app" }` — `reason` is optional,
+never required.
+
+Creates a **request**, not an immediate deletion — see DECISIONS.md for
+why Phase 1 uses an admin-reviewed queue (modeled on the existing
+`/claim` flow) rather than instant self-service execution. At most one
+`pending_review` request per identity at a time (partial unique index,
+same pattern as `claim_request`) — a second `POST` while one is already
+pending returns `409 deletion_already_pending`.
+
+Response: `201`
+```json
+{
+  "request_id": 12,
+  "status": "pending_review",
+  "requester_role": "registered_user",
+  "reason": "no longer using the app",
+  "data_scope": { "owner_account": 0, "location_manager_assignments": 0, "follows": 3, "claim_requests": 0, "claim_requests_pending": 0, "audit_log_entries": 0 },
+  "submitted_at": "2026-09-16T10:00:00Z",
+  "reviewed_at": null,
+  "reviewer_notes": null,
+  "completed_at": null
+}
+```
+`data_scope` is a row-count snapshot at submission time, for the admin
+reviewer's visibility — not re-read at approval time (approval
+recomputes live counts).
+
+### GET /auth/me/data-deletion
+
+Auth: any authenticated user (own requests only)
+
+Query params: `page`, `page_size` (default 20, max 100 — backend/
+CLAUDE.md "ALWAYS include pagination on list endpoints").
+
+Response: `200`, same paginated shape as `GET /auth/me/follows`:
+```json
+{ "results": [ { "request_id": 12, "status": "pending_review", "...": "..." } ], "page": 1, "page_size": 20, "total": 1 }
+```
+
+### GET /data-deletion/{id}
+
+Auth: the requester (own request only) or admin (any request) — same
+permission shape as `GET /claim/{id}`.
+
+Response: same shape as `POST /auth/me/data-deletion`'s response.
+
+Errors: `404 not_found` (unknown id), `403 forbidden` (not the requester
+and not admin).
+
+### POST /data-deletion/{id}/approve
+
+Auth: admin
+
+Body: `{}`, or optionally `{ "reviewer_notes": "verified, executing" }`.
+
+Effect: executes the actual redaction/deletion in one transaction (see
+`docs/DATA_MODEL.md` "data_deletion_request" for exactly what happens to
+each table), then sets `status: "completed"`, `reviewed_by`,
+`reviewed_at`, `completed_at`. Writes `audit_log` entries for the
+`location_manager`/`owner_account` rows it changes (both on root
+CLAUDE.md's audit-required table list) — not for `user_follow` (hard-
+deleted) or `claim_request` (redacted only), neither of which is on that
+list.
+
+Response: `200`, updated request shape (`status: "completed"`).
+
+Errors:
+| Status | Code | When |
+|---|---|---|
+| 404 | `not_found` | unknown id |
+| 409 | `request_not_pending` | request is not `pending_review` (already completed/rejected) |
+| 409 | `pending_claim_blocks_deletion` | this identity has a `pending_review` `claim_request` — resolve it via `/claim/{id}/approve` or `/claim/{id}/reject` first |
+
+### POST /data-deletion/{id}/reject
+
+Auth: admin
+
+Body: `{ "reviewer_notes": "Active fraud investigation — legal hold." }`
+— `reviewer_notes` required (same posture as `POST /claim/{id}/reject`).
+
+Effect: `status: "rejected"`. No data is touched.
+
+Response: `200`, updated request shape (`status: "rejected"`).

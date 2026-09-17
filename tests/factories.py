@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.claim_request import ClaimRequest
 from app.models.cuisine_tag import CuisineTag
+from app.models.data_deletion_request import DataDeletionRequest
 from app.models.location_manager import LocationManager
 from app.models.owner_account import OwnerAccount
 from app.models.restaurant_brand import RestaurantBrand
@@ -138,6 +139,21 @@ class ClaimRequestFactory(factory.Factory):
     reviewer_notes = None
 
 
+class DataDeletionRequestFactory(factory.Factory):
+    class Meta:
+        model = DataDeletionRequest
+
+    requester_user_id = factory.LazyFunction(_cognito_sub)
+    requester_role = "registered_user"
+    status = "pending_review"
+    reason = None
+    data_scope = None
+    reviewed_by = None
+    reviewed_at = None
+    reviewer_notes = None
+    completed_at = None
+
+
 class CuisineTagFactory(factory.Factory):
     """Admin-seeded taxonomy row (app/models/cuisine_tag.py) — `name` is
     unique, so always sequence/uuid-suffixed, never hardcoded (tests/CLAUDE.md
@@ -219,6 +235,13 @@ async def create_photo(db: AsyncSession, **overrides) -> RestaurantPhoto:
     db.add(photo)
     await db.flush()
     return photo
+
+
+async def create_deletion_request(db: AsyncSession, **overrides) -> DataDeletionRequest:
+    request = DataDeletionRequestFactory(**overrides)
+    db.add(request)
+    await db.flush()
+    return request
 
 
 async def create_cuisine_tag(db: AsyncSession, **overrides) -> CuisineTag:

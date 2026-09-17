@@ -49,6 +49,17 @@ to revisit later, not a final sign-off.
       `/auth/me/follows` (paginated) — PR #66, closes the tracked
       `docs/PROJECT_PLAN.csv` gap (`user_follow` table existed, no
       endpoint did)
+- [x] CCPA data export/deletion (PR #70) — `GET /auth/me/data-export`
+      (synchronous JSON, no async job/SES), `POST`/`GET /auth/me/data-deletion` +
+      admin `/data-deletion/{id}/approve|reject` (review queue modeled on
+      `/claim`). New `data_deletion_request` table + nullable
+      `owner_account.personal_data_deleted_at` column (migration
+      `20260916_0004`). `user_follow` hard-deleted on approval;
+      `location_manager`/`claim_request` redacted in place;
+      `owner_account` anonymized in place (never hard-deleted);
+      `audit_log` retained untouched. See DECISIONS.md "CCPA data
+      export/deletion" for the full reasoning — closes the tracked
+      `docs/PROJECT_PLAN.csv` gap
 - [ ] Menu, deals, Stripe — Phase 2, not started (correctly)
 - [x] Dev/test seed script (`backend/app/scripts/seed_dev_data.py`, PR #46)
       — small, idempotent owner/brand/location/manager/claim rows across 3

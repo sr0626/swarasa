@@ -760,6 +760,152 @@ Infra to revisit if this pattern gets used often enough to want it).*
 
 ## Database & Data Model
 
+**CCPA data export/deletion: scoped to this app's own DB (not Cognito), synchronous export, admin-reviewed deletion queue modeled on `claim_request`, audit_log retained not redacted**
+2026-09-16 | Backend Dev decision (root CLAUDE.md "Decision-Making
+Autonomy"), closing the tracked Phase 1 gap in `docs/PROJECT_PLAN.csv`
+("CCPA data export / deletion flow"). The BRD itself only says "CCPA
+compliant. Users can request data export and deletion" (BRD v3.6 sections
+7 and 12) — no further detail — so the shape below is an engineering
+judgment call, not a re-reading of a more detailed spec. Several
+sub-decisions, each with real alternatives considered:
+
+- **Scope is this app's own database only — Cognito's own account record
+  (login email, password, MFA, the account itself) is explicitly OUT of
+  scope.** Deleting a Cognito user needs `cognito-idp:AdminDeleteUser`,
+  a permission this Lambda does not have and, per root CLAUDE.md "AWS
+  Best Practices" (least privilege — ask for exactly what's needed, never
+  a broader grant "to be safe"), shouldn't be requested just to build this
+  without a clear need. It's also a materially bigger, harder-to-reverse
+  action than redacting app-DB fields (it ends the person's ability to
+  log in at all) that deserves its own deliberate decision, not a
+  side-effect of this task. If real usage later shows people expect
+  "delete my data" to also kill their login, that's a follow-up requiring
+  an explicit Infra grant — flagged here, not built speculatively.
+- **What "this identity's data" means, given `docs/DATA_MODEL.md`'s
+  already-flagged judgment call that there is no local `registered_user`
+  or `manager` table:** every table that stores a caller's Cognito `sub`
+  directly — `owner_account.cognito_sub`, `location_manager.user_id`,
+  `user_follow.user_id`, `claim_request.claimant_user_id`, and
+  `audit_log.actor_id` (actions the identity performed). Queried by the
+  caller's own `sub` across ALL of these, not gated to only the table(s)
+  matching their *current* role claim — the same person can have rows in
+  more than one regardless of their present pool group (e.g. `docs/
+  API_CONTRACTS.md` "Claim flow" allows any authenticated user to submit
+  a claim, so a `registered_user` can have `claim_request` history too).
+  A role-gated query would silently under-export/under-delete for anyone
+  whose Cognito history doesn't match their current group.
+- **Export is synchronous JSON (`GET /auth/me/data-export`), not an async
+  job + emailed download link.** CCPA doesn't require instant response,
+  and many real implementations do queue + email — but root CLAUDE.md is
+  explicit that SES is deferred to Phase 2+ and this Lambda has no SES
+  grant yet, and the actual per-user data volume here is a handful of
+  rows across five tables, not a bulk export needing async handling. A
+  synchronous response is well within a Lambda request's timeout and adds
+  zero new infrastructure (no job table, no delivery mechanism, no SES
+  permission request). GET, not POST: this creates nothing and has no
+  side effect — same semantics as the existing `GET /auth/me`. Revisit
+  if/when SES exists and volumes grow.
+- **Deletion is a reviewed request (`data_deletion_request`, modeled
+  directly on the existing `claim_request` table/flow: submit ->
+  `pending_review` -> admin `approve`/`reject`), not executed
+  synchronously at submission.** CCPA gives businesses up to 45 days
+  (extendable) to respond to a verified request — no instant-execution
+  requirement. An irreversible, whole-identity data purge triggered
+  by a single self-service click, with zero human check, is a real risk
+  on a first implementation (a leaked/stolen JWT could be used to nuke
+  someone's manager assignments or claim history with no recourse; a
+  pending fraud investigation or dispute might need the data to stay put
+  a little longer). `claim_request` already established exactly this
+  "submit now, admin resolves later" shape in this codebase for another
+  irreversible-ish action (granting brand ownership) — reusing it is the
+  lowest-risk, lowest-new-complexity option, not a new pattern. Identity
+  verification itself is already handled by the Cognito JWT (the caller
+  can only ever request/view their own request — service-layer check,
+  same posture as every other self-scoped write in this app) — admin
+  review here is about legitimacy/scope/legal-hold judgment, not
+  re-verifying who the requester is.
+- **`audit_log` rows are retained, never edited or removed by a deletion
+  request — even the ones where the caller is the recorded actor.** Root
+  CLAUDE.md already makes `audit_log` append-only ("NEVER delete or
+  truncate any DB table") for data-governance reasons, and CCPA's
+  deletion right itself has a standard legitimate-business-purpose/legal-
+  compliance carve-out (Cal. Civ. Code §1798.105(d)) that an audit trail
+  of who-changed-what on business records fits squarely into — deleting
+  or anonymizing it would also break its whole purpose (investigating a
+  disputed change requires knowing who made it). These entries ARE
+  included in the export response for transparency, with an explicit
+  `notice` field explaining they're retained.
+- **`user_follow` rows are hard-deleted** on approval — pure personal
+  preference data, not on the audit-required table list, no legitimate
+  reason to keep a redacted tombstone.
+- **`location_manager` and `claim_request` rows are kept but have their
+  identifying column (`user_id` / `claimant_user_id`) redacted to a
+  shared literal marker (`"deleted-user"`), not deleted outright** —
+  `location_manager` is on root CLAUDE.md's audit-required table list and
+  documents real access-control history (who could manage a location and
+  when); `claim_request` is a business record of ownership-claim attempts
+  useful for anti-fraud/dispute history (e.g. a rejected claimant
+  re-attempting). Deleting the rows would also just orphan any
+  `audit_log.record_id` pointing at them for no benefit. A currently
+  *active* `location_manager` row is also deactivated (`is_active=false`,
+  `revoked_at=now()`) — same effect as the existing owner-initiated
+  removal path, since the person can no longer legitimately hold that
+  access once their identity is redacted.
+- **A PENDING `claim_request` under the identity being deleted blocks
+  approval (`409 pending_claim_blocks_deletion`)** rather than silently
+  redacting it — an admin mid-review of a claim needs to know who they're
+  evaluating; redacting the claimant out from under a live review would
+  break that review, not just tidy up data. Admin resolves the claim via
+  the normal `/claim/{id}/approve`/`reject` flow first, then retries the
+  deletion approval.
+- **`owner_account` is anonymized in place (`full_name`/`phone` nulled,
+  `email` replaced with a synthetic unique placeholder, new
+  `personal_data_deleted_at` timestamp set), never hard-deleted — and the
+  brands/locations they own are NOT touched.** Hard-deleting the row would
+  cascade `restaurant_brand.owner_id` to `NULL` (existing `ON DELETE SET
+  NULL`), silently turning a claimed, live restaurant listing back into
+  "unclaimed" as a side effect of one person's personal-data request —
+  surprising and disproportionate. More fundamentally: the restaurant
+  business record (name, address, menu, photos) is this platform's own
+  business-directory content about a business, submitted by the owner on
+  its behalf — it is not "the owner's personal information" in the CCPA
+  sense, only the identifying fields describing the owner *as an
+  individual* (name, phone, email) are. `cognito_sub` is deliberately
+  left unredacted — it remains the live join key for login (Cognito
+  account deletion is out of scope, see above) and for this very
+  request's own idempotency check, and it's an opaque identifier with no
+  directly-identifying content by itself, the same treatment already
+  given to it everywhere else in this schema (`location_manager.user_id`,
+  etc.). New nullable `owner_account.personal_data_deleted_at` column
+  (migration `20260916_0004_data_deletion_request.py`) — a small,
+  additive schema change alongside the new table; flagged explicitly
+  since schema changes are normally Architect's territory (backend/
+  CLAUDE.md: Backend Dev may write migrations for non-design changes,
+  should flag if a change crosses into real schema design) — this one
+  column follows the exact existing pattern of a nullable timestamp
+  marker (no new judgment about relationships/cascades/naming beyond what
+  this decision already covers), so implemented directly rather than
+  escalated, but called out here for a human sanity-check regardless.
+- **Not handled here, flagged as a Phase 2 follow-up:** once Stripe
+  billing exists, deleting an owner with an active paid subscription will
+  also need to cancel/handle that subscription — not a concern yet since
+  no Stripe integration is live in Phase 1 (`is_paid` never becomes true
+  today).
+*Rejected: also deleting the Cognito account (broader IAM grant than
+justified, bigger irreversible action deserving its own decision), an
+async export job + SES email delivery (real new infrastructure — job
+table, delivery mechanism, SES permission — not justified by Phase 1's
+tiny per-user data volume or SES's Phase 2+ deferral), immediate
+synchronous deletion execution with no review step (real self-service
+data-loss risk with no undo, on a compliance-critical irreversible
+action, for a first implementation with no verification step beyond the
+JWT itself), hard-deleting `owner_account` (cascades unclaimed status
+onto live restaurant listings as a side effect, conflates the platform's
+own business-directory content with the owner's personal information),
+hard-deleting/anonymizing `audit_log` (breaks its data-governance
+purpose and root CLAUDE.md's existing append-only guarantee, and CCPA
+itself carves out this exact legitimate-business-purpose case).
+
 **Owner-scoped restaurant list: bare `GET /restaurants`, not `/restaurants/mine` or a `/search` variant**
 2026-09-13 | Architect decision, made while writing the contract to unblock
 the owner portal dashboard (there was no way for an authenticated owner to
