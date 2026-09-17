@@ -34,6 +34,15 @@ module.exports = {
       // only happen once).
       numberOfRuns: 3,
       settings: {
+        // GitHub Actions' ubuntu-latest runner blocks Chrome's own
+        // sandbox (unprivileged user namespaces are locked down —
+        // Chrome crashes with "No usable sandbox!" / SIGABRT otherwise,
+        // confirmed by this exact failure in this workflow's first real
+        // CI run). --no-sandbox is the standard, widely-documented
+        // workaround for headless Chrome in a container like this one;
+        // --disable-dev-shm-usage avoids a second, separate failure mode
+        // from /dev/shm being too small in the same environment.
+        chromeFlags: ["--no-sandbox", "--disable-dev-shm-usage"],
         // Explicit mobile emulation — frontend/CLAUDE.md's target is a
         // MOBILE score, not desktop. This mirrors Lighthouse's own
         // built-in "mobile" defaults (Moto G-class CPU/network profile,
