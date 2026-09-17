@@ -1021,6 +1021,48 @@ actor_id, actor_role, before/after values.
 
 ## Authentication & Permissions
 
+**Platform admin full-access parity on `/locations` write routes — manager assignment stays owner-only**
+2026-09-17 | Backend Dev decision (root CLAUDE.md "Decision-Making
+Autonomy"), closing `docs/PROJECT_PLAN.csv` "Platform admin full-access
+parity." Root CLAUDE.md's Permission model already states "Admin: full
+platform access" and `backend/app/routers/restaurants.py` already
+implements it via `require_owner_or_admin`, but
+`backend/app/routers/locations.py`'s `PATCH /locations/{id}`, `PUT
+/locations/{id}/hours`, and all four `/locations/{id}/photos*` routes
+were gated by `require_location_write_access`, which had no admin
+branch at all — an admin genuinely could not edit a location's basic
+info/hours/photos on an owner's behalf for support. Fixed by adding an
+admin short-circuit directly to `require_location_write_access` itself
+(`backend/app/dependencies/auth.py`) rather than a parallel dependency,
+since every one of its current callers is exactly an "edit existing
+listing info/hours/photos" action the task asked to open to admin. `GET
+/locations/{id}/managers` and `DELETE
+/locations/{id}/managers/{manager_id}` already had admin parity before
+this change.
+**Judgment call — two routes deliberately kept owner-only, not given
+admin parity:** `POST /locations` (new location) and `POST
+/locations/{id}/managers` (assign a manager). Both are an owner
+declaring/vouching for something new under their own brand — a brand
+new location, or a specific named person as a location's manager — not
+administering something that already exists, unlike every route above.
+`POST /locations` already matched `POST /restaurants` (also owner-only,
+no admin path, pre-existing and unchanged). `POST
+/locations/{id}/managers` already had its own explicit owner-only
+reasoning in `docs/API_CONTRACTS.md` ("assigning a manager is
+exclusively an owner action," tied to root CLAUDE.md's "a manager can
+manage multiple locations, assigned by owner") — support access to an
+already-assigned manager is still covered, via the admin-parity `DELETE`
+above.
+*Rejected: a blanket `require_owner_or_admin`-style swap on every
+owner-gated `/locations` route including the two POSTs (would let admin
+silently create brand-new resources "as" an owner, which is a materially
+different action from editing/removing an existing one and wasn't asked
+for), a brand-new parallel dependency instead of extending
+`require_location_write_access` in place (unnecessary — every existing
+caller of that dependency needed the same admin branch, so extending it
+in place is less code and one fewer thing to keep in sync than a
+second near-duplicate dependency)*
+
 **Location manager removal is owner/admin-only, no self-removal by the manager**
 2026-09-13 | Architect decision (root CLAUDE.md "Decision-Making
 Autonomy") — not previously settled. Root CLAUDE.md and this log fix that

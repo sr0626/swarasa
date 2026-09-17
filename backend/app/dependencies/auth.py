@@ -265,16 +265,32 @@ async def require_location_write_access(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> CurrentUser:
-    """Auth: owner (owns parent brand) or manager with an active
-    `location_manager` row for this location — backend/CLAUDE.md
+    """Auth: owner (owns parent brand), manager with an active
+    `location_manager` row for this location, or admin — backend/CLAUDE.md
     "Manager permission check" pattern, implemented exactly (owner branch
     via brand ownership, else a fresh `location_manager` query with
     `is_active=True`; JWT role claim alone is never sufficient for the
     manager branch).
+
+    Admin branch added 2026-09-17 (`docs/PROJECT_PLAN.csv` "Platform admin
+    full-access parity", `docs/DECISIONS.md` "Authentication &
+    Permissions") so admin can edit a location's basic info/hours/photos
+    on an owner's behalf for support, matching root CLAUDE.md's
+    Permission model ("Admin: full platform access") and the pattern
+    `require_location_owner_or_admin` / `require_location_read_access`
+    already used elsewhere. This now gates every route that previously
+    excluded admin: `PATCH /locations/{id}`, `PUT /locations/{id}/hours`,
+    and all four `/locations/{id}/photos*` routes (`docs/API_CONTRACTS.md`).
+    `POST /locations/{id}/managers` (assigning a manager) deliberately
+    does NOT use this dependency and stays owner-only — see
+    `require_location_owner_only` below.
     """
     location = await db.get(RestaurantLocation, location_id)
     if location is None:
         raise AppError(404, "Location not found", "not_found")
+
+    if current_user.role == "admin":
+        return current_user
 
     if current_user.role == "owner":
         owner = await auth_service.get_owner_account_by_sub(db, current_user.cognito_sub)
@@ -367,23 +383,17 @@ async def require_location_read_access(
     `location_manager` row — `GET /locations/{id}/managers`
     (`docs/API_CONTRACTS.md` "Location Managers").
 
-    JUDGMENT CALL (flagged for review): the contract describes this as
-    "the general read-permission pattern already used for owner/manager-
-    shared access (`require_location_write_access`'s check, applied here
-    for a read instead of a write)" — but `require_location_write_access`
-    has no admin branch (correctly: `PATCH /locations/{id}` and
-    `PUT /locations/{id}/hours` explicitly exclude admin per
-    `docs/API_CONTRACTS.md`), while this route's own auth line explicitly
-    includes admin. Reusing `require_location_write_access` unmodified
-    would 403 an admin caller; widening it in place would incorrectly
-    also open those other two write routes to admin. Splitting out a
-    dedicated admin short-circuit here — delegating everything else to
-    `require_location_write_access` — satisfies this route's actual auth
-    list without touching the other two.
+    RESOLVED 2026-09-17 (was a JUDGMENT CALL, flagged for review): this
+    used to need its own dedicated admin short-circuit because
+    `require_location_write_access` had no admin branch at all — reusing
+    it unmodified for this route would have 403'd an admin caller, and
+    widening it in place would have incorrectly also opened `PATCH
+    /locations/{id}` / `PUT /locations/{id}/hours` to admin too (those
+    explicitly excluded admin at the time). That asymmetry is gone: the
+    admin-parity work in `docs/PROJECT_PLAN.csv` "Platform admin
+    full-access parity" deliberately opened those routes (and the photos
+    routes) to admin too, by adding the admin branch directly to
+    `require_location_write_access` — so this is now a plain delegation,
+    no separate admin handling needed here.
     """
-    if current_user.role == "admin":
-        location = await db.get(RestaurantLocation, location_id)
-        if location is None:
-            raise AppError(404, "Location not found", "not_found")
-        return current_user
     return await require_location_write_access(location_id, db, current_user)
