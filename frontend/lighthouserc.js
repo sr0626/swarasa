@@ -57,7 +57,12 @@ module.exports = {
         // workflow's second CI run still crashed with "No usable sandbox!"
         // even after adding the flags, and the crash log's own
         // "switch-26" showed exactly that comma-joined single string.
-        chromeFlags: "--no-sandbox --disable-dev-shm-usage --disable-gpu",
+        // --disable-setuid-sandbox included explicitly too, even though
+        // chrome-launcher already adds it by default on its own (visible
+        // in the crash logs above) — belt-and-suspenders now that the
+        // flag string is finally being parsed correctly.
+        chromeFlags:
+          "--no-sandbox --disable-setuid-sandbox --disable-dev-shm-usage --disable-gpu",
         // Explicit mobile emulation — frontend/CLAUDE.md's target is a
         // MOBILE score, not desktop. This mirrors Lighthouse's own
         // built-in "mobile" defaults (Moto G-class CPU/network profile,
