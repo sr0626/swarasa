@@ -60,6 +60,18 @@ resource "aws_cognito_user_pool" "main" {
     }
   }
 
+  # Post-confirmation trigger (added 2026-09-17 — see
+  # docs/PROJECT_PLAN.csv row "Cognito post-confirmation Lambda -- assign
+  # sign-up role to pool group" and the aws_lambda_function.post_confirmation
+  # block below): reads the `custom:role` attribute this schema defines and
+  # calls AdminAddUserToGroup for the matching one of the 4 groups below.
+  # Closes the gap the schema comment above has always anticipated ("set by
+  # post-confirmation Lambda or admin") but that, until now, had no Lambda
+  # half — a self-signed-up user landed in no group at all.
+  lambda_config {
+    post_confirmation = aws_lambda_function.post_confirmation.arn
+  }
+
   tags = local.common_tags
 }
 
@@ -116,4 +128,137 @@ resource "aws_cognito_user_pool_client" "web" {
   }
 
   prevent_user_existence_errors = "ENABLED"
+}
+
+# -------------------------------------------------------------------
+# Post-confirmation Lambda trigger — assigns a newly-confirmed user to the
+# pool group matching their `custom:role` attribute (see PROJECT_PLAN.csv
+# row referenced above; application code lives at
+# backend/app/lambda_handlers/cognito_post_confirmation.py, owned by
+# Backend Dev per backend/CLAUDE.md's "Lambda handlers" scope — this module
+# only packages and wires it).
+#
+# Packaging: plain zip, NOT the API/resize Lambdas' container-image
+# convention (docs/DECISIONS.md "Containerization" /
+# "Resize Lambda packaging"). That convention exists to solve two problems
+# neither of which apply here:
+#   1. Compiled/binary dependencies (Pillow for the resize Lambda) needing a
+#      Lambda-matched build environment — this handler imports only stdlib +
+#      boto3, and boto3 already ships in every AWS-managed Python 3.12
+#      Lambda runtime, so there is nothing to bundle at all.
+#   2. A CI/CD image-promotion pipeline (ECR push + `aws lambda
+#      update-function-code` on every merge) — appropriate for code that
+#      changes often; this is a ~100-line, single-purpose trigger expected
+#      to change rarely. `data.archive_file` below zips the handler
+#      straight from its source path on every `terraform plan`/`apply`, so
+#      Terraform IS the deploy mechanism for this one function — no ECR
+#      repo, no DevOps pipeline, no bootstrap-tag chicken-and-egg step
+#      (unlike modules/lambda and modules/lambda_resize) needed to stand
+#      this up. If this Lambda's code ever grows into something that
+#      changes frequently enough to want a real CI/CD pipeline, that is a
+#      natural follow-up, not something to over-build now.
+# No VPC attachment: this Lambda only ever calls cognito-idp, reachable over
+# its public regional endpoint from outside a VPC, and never touches Aurora
+# — same reasoning as modules/lambda_resize.
+# -------------------------------------------------------------------
+data "archive_file" "post_confirmation" {
+  type        = "zip"
+  output_path = "/tmp/${var.project}-cognito-post-confirmation-${var.env}.zip"
+
+  source {
+    content  = file("${path.module}/../../../backend/app/lambda_handlers/cognito_post_confirmation.py")
+    filename = "cognito_post_confirmation.py"
+  }
+}
+
+resource "aws_cloudwatch_log_group" "post_confirmation" {
+  name              = "/aws/lambda/${var.project}-cognito-post-confirmation-${var.env}"
+  retention_in_days = 30
+
+  tags = local.common_tags
+}
+
+# -------------------------------------------------------------------
+# IAM role — least privilege per infra/CLAUDE.md "IAM Least-Privilege
+# Rules": the ONLY permission this Lambda's execution role grants beyond
+# its own CloudWatch log stream is cognito-idp:AdminAddUserToGroup, scoped
+# to this one user pool's ARN. Deliberately its own role, never shared with
+# the API Lambda's role (module.iam's api_lambda role in
+# infra/modules/iam/main.tf) — that role intentionally carries only
+# cognito-idp:ListUsers (read-only, manager-email lookup) and explicitly
+# excludes AdminAddUserToGroup (see docs/PROJECT_PLAN.csv row for this
+# task, and infra/CLAUDE.md "IAM Least-Privilege Rules"). Keeping this
+# grant on a separate, narrowly-scoped role means a compromised API Lambda
+# still cannot add itself (or anyone) to any Cognito group.
+# -------------------------------------------------------------------
+data "aws_iam_policy_document" "post_confirmation_lambda_trust" {
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["lambda.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "post_confirmation_lambda" {
+  name               = "${var.project}-cognito-post-confirmation-lambda-${var.env}"
+  assume_role_policy = data.aws_iam_policy_document.post_confirmation_lambda_trust.json
+
+  tags = local.common_tags
+}
+
+resource "aws_iam_role_policy" "post_confirmation_lambda" {
+  name = "${var.project}-cognito-post-confirmation-lambda-policy-${var.env}"
+  role = aws_iam_role.post_confirmation_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "AdminAddUserToGroupOnThisPoolOnly"
+        Effect   = "Allow"
+        Action   = ["cognito-idp:AdminAddUserToGroup"]
+        Resource = aws_cognito_user_pool.main.arn
+      },
+      {
+        Sid    = "CloudWatchLogs"
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "${aws_cloudwatch_log_group.post_confirmation.arn}:*"
+      }
+    ]
+  })
+}
+
+resource "aws_lambda_function" "post_confirmation" {
+  function_name    = "${var.project}-cognito-post-confirmation-${var.env}"
+  runtime          = "python3.12"
+  handler          = "cognito_post_confirmation.handler"
+  role             = aws_iam_role.post_confirmation_lambda.arn
+  filename         = data.archive_file.post_confirmation.output_path
+  source_code_hash = data.archive_file.post_confirmation.output_base64sha256
+  timeout          = 10
+  memory_size      = 128
+
+  tags = local.common_tags
+
+  depends_on = [aws_cloudwatch_log_group.post_confirmation]
+}
+
+# Allows Cognito to invoke this function as the pool's post-confirmation
+# trigger — scoped to this one user pool's ARN via source_arn, never a
+# wildcard. Required alongside `lambda_config.post_confirmation` above;
+# Cognito will not invoke a trigger Lambda without this resource-based
+# permission.
+resource "aws_lambda_permission" "cognito_invoke_post_confirmation" {
+  statement_id  = "AllowCognitoInvokePostConfirmation"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.post_confirmation.function_name
+  principal     = "cognito-idp.amazonaws.com"
+  source_arn    = aws_cognito_user_pool.main.arn
 }
