@@ -18,11 +18,23 @@
 // which verifies it and sets the real httpOnly session cookie
 // getServerSession()/requireSession() read; only then do we navigate to a
 // role-based landing page.
+//
+// "Keep me signed in" (docs/PROJECT_PLAN.csv row 63): the checkbox below
+// tells POST /api/auth/session to mint a longer-lived cookie (see that
+// route and lib/auth/sessionConstants.ts's REMEMBER_ME_MAX_AGE_SECONDS) AND
+// starts lib/auth/sessionKeepAlive.ts's silent-refresh loop — read that
+// file's header for exactly what it does and its documented gap (a longer
+// cookie alone does not keep anyone signed in for 14 days, since the access
+// token inside it still expires in 1 hour; the keep-alive loop is what
+// actually refreshes it, for as long as this tab stays open).
 import { useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signIn, fetchAuthSession } from "@aws-amplify/auth";
 import { ensureAmplifyConfigured } from "@/lib/auth/amplifyClient";
+import { startSessionKeepAlive } from "@/lib/auth/sessionKeepAlive";
 import { signInSchema, type SignInFormValues } from "@/lib/validation/auth";
+import { messageForAuthError, messageForNextStep } from "@/lib/auth/errorMessages";
 import type { UserRole } from "@/types/auth";
 
 /**
@@ -44,6 +56,7 @@ export default function LoginForm() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -91,7 +104,7 @@ export default function LoginForm() {
       const res = await fetch("/api/auth/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accessToken }),
+        body: JSON.stringify({ accessToken, rememberMe }),
       });
 
       if (!res.ok) {
@@ -101,6 +114,9 @@ export default function LoginForm() {
       }
 
       const { role } = (await res.json()) as { role: UserRole };
+      if (rememberMe) {
+        startSessionKeepAlive();
+      }
       router.push(ROLE_LANDING[role] ?? "/");
       router.refresh();
     } catch (err) {
@@ -166,6 +182,24 @@ export default function LoginForm() {
         )}
       </div>
 
+      <div className="flex items-center justify-between gap-3">
+        <label className="flex min-h-[44px] items-center gap-2 text-sm text-brand-ink-muted">
+          <input
+            type="checkbox"
+            checked={rememberMe}
+            onChange={(e) => setRememberMe(e.target.checked)}
+            className="h-4 w-4 accent-brand-accent"
+          />
+          Keep me signed in
+        </label>
+        <Link
+          href="/forgot-password"
+          className="text-sm font-medium text-brand-accent transition hover:text-brand-accent-hover"
+        >
+          Forgot your password?
+        </Link>
+      </div>
+
       <button
         type="submit"
         disabled={submitting}
@@ -173,36 +207,16 @@ export default function LoginForm() {
       >
         {submitting ? "Signing in…" : "Sign In"}
       </button>
+
+      <p className="text-center text-sm text-brand-ink-muted">
+        New here?{" "}
+        <Link
+          href="/signup"
+          className="font-medium text-brand-accent transition hover:text-brand-accent-hover"
+        >
+          Create an account
+        </Link>
+      </p>
     </form>
   );
-}
-
-/** Non-DONE sign-in steps we can explain without building a full challenge UI (out of Phase 1 scope). */
-function messageForNextStep(step: string): string {
-  switch (step) {
-    case "CONFIRM_SIGN_UP":
-      return "Please confirm your email before signing in.";
-    case "RESET_PASSWORD":
-    case "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED":
-      return "Your password needs to be reset before you can sign in. Contact support for help.";
-    default:
-      return "Additional verification is required to finish signing in.";
-  }
-}
-
-/** Maps known Cognito error names to friendly copy — never surface raw SDK messages (root CLAUDE.md "NEVER expose internal stack details"). */
-function messageForAuthError(err: unknown): string {
-  const name = err instanceof Error ? err.name : "";
-  switch (name) {
-    case "UserNotFoundException":
-    case "NotAuthorizedException":
-      return "Incorrect email or password.";
-    case "UserNotConfirmedException":
-      return "Please confirm your email before signing in.";
-    case "TooManyRequestsException":
-    case "LimitExceededException":
-      return "Too many attempts. Please wait a moment and try again.";
-    default:
-      return "Something went wrong signing in. Please try again.";
-  }
 }

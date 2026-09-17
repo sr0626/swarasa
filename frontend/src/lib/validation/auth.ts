@@ -8,26 +8,93 @@ export const updateAuthMeSchema = z.object({
 
 export type UpdateAuthMeFormValues = z.infer<typeof updateAuthMeSchema>;
 
+const emailSchema = z
+  .string()
+  .trim()
+  .min(1, "Email is required")
+  .email("Enter a valid email address");
+
 /**
- * Sign-in form validation (frontend/src/components/auth/LoginForm.tsx).
- * The password rule mirrors the Cognito user pool's actual password policy
+ * Mirrors the Cognito user pool's actual password policy
  * (infra/modules/cognito/main.tf `password_policy`: minimum_length = 8,
  * require_uppercase = true, require_numbers = true, require_symbols =
  * false) so an obviously-invalid attempt is caught before round-tripping to
- * Cognito. Cognito remains the source of truth for whether credentials are
- * actually correct — this is a client-side pre-check only.
+ * Cognito. Cognito remains the source of truth for whether a password is
+ * actually accepted — this is a client-side pre-check only. Shared by
+ * sign-in, sign-up, and reset-password so the rule can't drift between them.
  */
+const passwordSchema = z
+  .string()
+  .min(8, "Password must be at least 8 characters")
+  .regex(/[A-Z]/, "Password must include an uppercase letter")
+  .regex(/[0-9]/, "Password must include a number");
+
+/** Sign-in form validation (frontend/src/components/auth/LoginForm.tsx). */
 export const signInSchema = z.object({
-  email: z
-    .string()
-    .trim()
-    .min(1, "Email is required")
-    .email("Enter a valid email address"),
-  password: z
-    .string()
-    .min(8, "Password must be at least 8 characters")
-    .regex(/[A-Z]/, "Password must include an uppercase letter")
-    .regex(/[0-9]/, "Password must include a number"),
+  email: emailSchema,
+  password: passwordSchema,
 });
 
 export type SignInFormValues = z.infer<typeof signInSchema>;
+
+/**
+ * Self-service sign-up (frontend/src/components/auth/SignUpForm.tsx).
+ * `role` is restricted to the two self-service-eligible roles — manager and
+ * admin are provisioned differently, never through this form (see
+ * docs/PROJECT_PLAN.csv row 61 and SignUpForm.tsx's own header comment).
+ */
+export const signUpSchema = z
+  .object({
+    email: emailSchema,
+    password: passwordSchema,
+    confirmPassword: z.string().min(1, "Please confirm your password"),
+    role: z.enum(["owner", "registered_user"], {
+      errorMap: () => ({ message: "Choose an account type" }),
+    }),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });
+
+export type SignUpFormValues = z.infer<typeof signUpSchema>;
+
+/** Email-verification code entry after sign-up (app/signup/confirm). */
+export const confirmSignUpSchema = z.object({
+  email: emailSchema,
+  code: z
+    .string()
+    .trim()
+    .min(1, "Enter the code from your email")
+    .regex(/^\d+$/, "The code is numbers only"),
+});
+
+export type ConfirmSignUpFormValues = z.infer<typeof confirmSignUpSchema>;
+
+/** Step 1 of forgot-password: request a reset code by email. */
+export const forgotPasswordRequestSchema = z.object({
+  email: emailSchema,
+});
+
+export type ForgotPasswordRequestValues = z.infer<
+  typeof forgotPasswordRequestSchema
+>;
+
+/** Step 2 of forgot-password: code + new password (app/forgot-password/confirm). */
+export const resetPasswordSchema = z
+  .object({
+    email: emailSchema,
+    code: z
+      .string()
+      .trim()
+      .min(1, "Enter the code from your email")
+      .regex(/^\d+$/, "The code is numbers only"),
+    newPassword: passwordSchema,
+    confirmNewPassword: z.string().min(1, "Please confirm your new password"),
+  })
+  .refine((data) => data.newPassword === data.confirmNewPassword, {
+    message: "Passwords do not match",
+    path: ["confirmNewPassword"],
+  });
+
+export type ResetPasswordFormValues = z.infer<typeof resetPasswordSchema>;
