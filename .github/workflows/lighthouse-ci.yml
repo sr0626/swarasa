@@ -1,0 +1,94 @@
+# ============================================================================
+# Authored by the Frontend Dev agent, 2026-09-16, closing the Lighthouse half
+# of docs/PROJECT_PLAN.csv row 54 ("Mobile viewport (375px) / Lighthouse
+# score validation") — the viewport half was already covered by
+# tests/e2e/test_mobile_viewport.spec.ts (PR #33). This workflow is the
+# other half: an automated check for frontend/CLAUDE.md's Phase 1 go/no-go
+# criterion, "Lighthouse mobile score target: > 85".
+#
+# Pure frontend build+test job — no AWS, no OIDC, no docker. Unlike
+# deploy-backend.yml / deploy-resize.yml this doesn't deploy anything and
+# doesn't need a human review-before-first-run gate for that reason; it
+# only builds the Next.js app and serves it locally on the runner.
+#
+# Scope: only the homepage ("/") and search results page ("/search") are
+# checked — see frontend/lighthouserc.js's header comment for why the
+# restaurant detail page is excluded (no backend/seeded data means every
+# slug hits the generic error boundary, not a representative page).
+#
+# Tool choice: @lhci/cli (Lighthouse CI), not a hand-rolled script driving
+# the `lighthouse` package directly. frontend/package.json had no existing
+# Lighthouse tooling to extend (confirmed via repo-wide grep before
+# building this). @lhci/cli's `autorun` already does the three things this
+# check needs — start the server, run Lighthouse N times per URL and take
+# the median (reduces flakiness on a shared CI runner vs. a single run),
+# and assert a numeric threshold with a real pass/fail exit code — without
+# custom puppeteer/chrome-launcher orchestration code to maintain here.
+#
+# Known gap (see this task's final report): @lhci/cli was added to
+# frontend/package.json's devDependencies, but package-lock.json could not
+# be regenerated in the sandbox this was authored in (no npm registry
+# network access there). This job runs `npm install` rather than `npm ci`
+# for that reason — npm ci would fail on the lockfile/package.json
+# mismatch until someone with network access runs `npm install` and commits
+# the refreshed lockfile. Switch this back to `npm ci` once that's done.
+# ============================================================================
+
+name: Lighthouse CI
+
+on:
+  pull_request:
+    paths:
+      - "frontend/**"
+
+permissions:
+  contents: read
+
+jobs:
+  lighthouse:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # See header comment: npm ci is blocked until package-lock.json is
+      # regenerated with @lhci/cli's entry by someone with registry access.
+      - name: Install dependencies
+        run: npm install
+
+      # Ensures a real Chrome binary is present and its path is known,
+      # rather than relying on whatever version ubuntu-latest happens to
+      # ship preinstalled (that image's bundled Chrome version isn't
+      # pinned/guaranteed by GitHub across runner updates).
+      - name: Set up Chrome
+        uses: browser-actions/setup-chrome@v1
+        id: setup-chrome
+
+      - name: Build production app
+        run: npm run build
+
+      # No backend, no database, no seeded data (root CLAUDE.md Phase 1
+      # scope / this workflow's own header comment) — the homepage and
+      # search page both render their real layout with a graceful empty
+      # state when the backend is unreachable, so `npm run start` alone is
+      # enough to serve a representative page for Lighthouse to score.
+      - name: Run Lighthouse CI (mobile emulation, see lighthouserc.js)
+        run: npm run lighthouse
+        env:
+          CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
+
+      - name: Upload Lighthouse reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-reports
+          path: frontend/.lighthouseci
+          retention-days: 14
