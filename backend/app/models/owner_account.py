@@ -6,13 +6,28 @@ Identity itself lives in Cognito (see root CLAUDE.md "Auth: AWS
 Cognito"); this table is the local business record for an owner —
 Stripe linkage, contact info, and the FK target for brands/locations/
 free offers. `cognito_sub` is the join key back to the Cognito user.
+
+`personal_data_deleted_at` (added for CCPA support, see
+`app/models/data_deletion_request.py` and DECISIONS.md "CCPA data
+export/deletion"): set by `privacy_service.execute_deletion` when a
+`data_deletion_request` for this owner's Cognito `sub` is approved.
+Marks that `full_name`/`phone`/`email` have been redacted — the row
+itself is kept (never hard-deleted), because `restaurant_brand.owner_id`
+and other FKs depend on it and, more fundamentally, the business records
+an owner manages (brand/location name, address, menu) are this
+platform's own business-directory content, not the owner's personal
+information — only the identifying fields on THIS row are in CCPA
+deletion scope. `cognito_sub` itself is intentionally left unredacted
+(still the live join key for login and for the deletion-request queue's
+own idempotency; it is an opaque identifier with no directly-identifying
+content on its own, same treatment as everywhere else in this schema).
 """
 from __future__ import annotations
 
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, String
+from sqlalchemy import BigInteger, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
@@ -45,6 +60,11 @@ class OwnerAccount(TimestampMixin, Base):
     )
     stripe_sub_id: Mapped[str | None] = mapped_column(
         String(255), unique=True, nullable=True
+    )
+
+    # See docstring above. NULL = never had a CCPA deletion executed.
+    personal_data_deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
 
     brands: Mapped[list["RestaurantBrand"]] = relationship(

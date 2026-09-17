@@ -11,6 +11,15 @@ Dev's typed API client. Backed by:
     — follow-up adding `restaurant_photo` and `claim_request` (see
     those sections below and "Open items" at the bottom, which this
     migration closes)
+  - `backend/migrations/versions/20260916_0004_data_deletion_request.py`
+    — CCPA follow-up: new `data_deletion_request` table (see below) plus
+    a nullable `owner_account.personal_data_deleted_at` column (see the
+    `owner_account` section below). Backend Dev-authored per
+    docs/DECISIONS.md "CCPA data export/deletion" — flagged there since
+    schema changes are normally Architect's territory, judged as a
+    non-design addition (one small tracking table following the existing
+    `claim_request` shape, one nullable timestamp column) rather than
+    escalated.
 
 Ownership hierarchy (root `CLAUDE.md`):
 ```
@@ -46,6 +55,7 @@ is a judgment call, not something decided in root `CLAUDE.md` /
 | phone | varchar(20) nullable | |
 | stripe_customer_id | varchar(255) unique, nullable | |
 | stripe_sub_id | varchar(255) unique, nullable | One Stripe Subscription per owner (root CLAUDE.md "Billing model") |
+| personal_data_deleted_at | timestamptz nullable | Added `20260916_0004_data_deletion_request.py`. Set by `privacy_service.execute_deletion` when a CCPA `data_deletion_request` for this owner is approved — `full_name`/`phone` are nulled and `email` replaced with a synthetic placeholder at that point, but the row itself is kept (never hard-deleted); see `data_deletion_request` below and DECISIONS.md "CCPA data export/deletion" |
 | created_at | timestamptz, not null | |
 | updated_at | timestamptz, not null | |
 
@@ -299,6 +309,47 @@ picking one. `location_id` records which location's public phone was
 (or will be) used. `docs/API_CONTRACTS.md`'s `/claim` section is
 updated alongside this to add it as an optional request field. Confirm
 this before Backend Dev implements the `phone_verification` path.
+
+---
+
+## data_deletion_request
+
+Added `20260916_0004_data_deletion_request.py`, closing the tracked
+Phase 1 gap in `docs/PROJECT_PLAN.csv` ("CCPA data export / deletion
+flow"). See DECISIONS.md "CCPA data export/deletion" for the full
+reasoning; short version: a CCPA "right to delete" request against a
+caller's own personal data in this app's database, modeled directly on
+`claim_request`'s shape (submit -> `pending_review` -> admin
+`approve`/`reject`) — same single-admin-review-queue pattern, reused
+rather than inventing a new one.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | bigint PK | |
+| requester_user_id | varchar(36), not null | Cognito `sub` of the requester — same "no local identity table" pattern as `location_manager.user_id` / `user_follow.user_id` / `claim_request.claimant_user_id` |
+| requester_role | varchar(16), not null | Role claim at submission time — informational only; the actual deletion in `privacy_service.execute_deletion` is keyed off the Cognito `sub` across every table that stores it, not this field (see DECISIONS.md) |
+| status | varchar(16), not null, default `pending_review` | `pending_review` \| `completed` \| `rejected` |
+| reason | text, nullable | Optional caller-supplied reason, never required |
+| data_scope | jsonb, nullable | Row-count snapshot per affected table, computed at submission time — for the admin reviewer's visibility only; NOT re-read at approval time (`approve_deletion_request` recomputes live counts, since the snapshot can go stale between submission and review) |
+| submitted_at | timestamptz, not null | |
+| reviewed_by | varchar(64), nullable | Admin Cognito sub who resolved the request |
+| reviewed_at | timestamptz, nullable | |
+| reviewer_notes | text, nullable | |
+| completed_at | timestamptz, nullable | Set only once the redaction/deletion has actually executed — distinct from `reviewed_at` so "reviewed" and "executed" stay separately inspectable even though `approve_deletion_request` currently always sets both together |
+| created_at | timestamptz, not null | |
+| updated_at | timestamptz, not null | |
+
+Indexes:
+- `ix_data_deletion_request_requester_user_id` on `requester_user_id`
+- `ix_data_deletion_request_status_submitted` on (`status`, `submitted_at`) — cheap ordered scan for the single admin review queue, same reasoning as `claim_request`'s equivalent index
+- `uq_data_deletion_request_pending_user`: **partial unique index** on `requester_user_id` `WHERE status = 'pending_review'` — at most one pending deletion request per identity at a time
+
+**What "approve" actually does** (`app/services/privacy_service.py::approve_deletion_request`, see DECISIONS.md for the full reasoning behind each):
+- `user_follow` rows for this identity: hard-deleted.
+- `location_manager` rows: `user_id` redacted to a shared literal marker (`"deleted-user"`); any still-`is_active` row is also deactivated (`is_active=false`, `revoked_at=now()`). On root CLAUDE.md's audit-required table list, so each changed row gets an `audit_log` entry.
+- `claim_request` rows: `claimant_user_id` redacted to the same marker. Not audit-required (same treatment `claim_request`'s own status transitions already get). **Blocked** (`409 pending_claim_blocks_deletion`) if any row is still `status = pending_review` — admin must resolve it via `/claim/{id}/approve`/`reject` first.
+- `owner_account` row (if any): `full_name`/`phone` nulled, `email` replaced with a synthetic unique placeholder, `personal_data_deleted_at` set — never hard-deleted. Audit-required, gets an `audit_log` entry. `restaurant_brand`/`restaurant_location` rows this owner owns are untouched (see DECISIONS.md — business-directory content, not the owner's personal information).
+- `audit_log` rows where this identity is the *actor*: untouched — retained for legitimate business/legal record-keeping (DECISIONS.md).
 
 ---
 
