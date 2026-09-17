@@ -30,8 +30,43 @@ export interface LocationSummary {
   phone: string;
   is_verified: boolean;
   is_paid: boolean;
+  /**
+   * FLAGGED CONTRACT GAP (found 2026-09-17 building the owner dashboard's
+   * tier/status columns — docs/PROJECT_PLAN.csv "Owner dashboard: richer
+   * restaurant table"): `paid_until` is a stored `restaurant_location`
+   * column (docs/DATA_MODEL.md, root CLAUDE.md "Tier model") but is not
+   * yet serialized by `GET /restaurants/{id}/locations` or
+   * `GET /locations/{id}` — `LocationSummaryOut`/`LocationOut`
+   * (backend/app/schemas/restaurant.py, backend/app/schemas/location.py)
+   * both omit it. Declared here as optional so the dashboard renders it
+   * the moment Backend adds it, with no further frontend change —
+   * `undefined` in every real response today.
+   */
+  paid_until?: string | null;
+  /**
+   * Same contract gap as `paid_until` above — also a stored column, also
+   * not yet serialized by either location response schema. Additionally,
+   * `list_locations_for_brand` (backend/app/services/location_service.py)
+   * filters to `is_active == True` only, so a deactivated location is
+   * excluded from this list entirely today, not just missing this field.
+   * `undefined`/always-true in practice until Backend closes both gaps.
+   */
+  is_active?: boolean;
   /** true / false / null (hours unknown) — a display lookup, never a filter. */
   is_open_now: boolean | null;
+}
+
+/**
+ * Presentation-only pairing used by the owner dashboard: a location plus
+ * its actively assigned managers. Not an API response shape itself —
+ * managers are fetched separately per location via
+ * `GET /locations/{id}/managers` (the location list endpoints don't
+ * inline manager rows).
+ */
+export interface LocationWithManagers {
+  location: LocationSummary;
+  managers: LocationManager[];
+  managersError: string | null;
 }
 
 /** Full detail shape from GET /locations/{id}. */
