@@ -16,9 +16,11 @@ from app.dependencies.auth import (
     require_brand_write_access,
     require_owner,
     require_owner_or_admin,
+    require_registered_user,
 )
 from app.dependencies.db import get_db
 from app.dependencies.pagination import Pagination, pagination_params
+from app.schemas.follow import FollowOut
 from app.schemas.restaurant import (
     LocationListResponse,
     RestaurantCreate,
@@ -26,7 +28,7 @@ from app.schemas.restaurant import (
     RestaurantOut,
     RestaurantUpdate,
 )
-from app.services import location_service, restaurant_service
+from app.services import follow_service, location_service, restaurant_service
 
 router = APIRouter(prefix="/restaurants", tags=["restaurants"])
 
@@ -91,3 +93,21 @@ async def delete_restaurant(
     current_user: CurrentUser = Depends(require_admin),
 ) -> None:
     await restaurant_service.delete_restaurant(db, brand_id, current_user)
+
+
+@router.post("/{brand_id}/follow", response_model=FollowOut)
+async def follow_restaurant(
+    brand_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_registered_user),
+) -> FollowOut:
+    return await follow_service.follow_brand(db, brand_id, current_user)
+
+
+@router.delete("/{brand_id}/follow", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+async def unfollow_restaurant(
+    brand_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_registered_user),
+) -> None:
+    await follow_service.unfollow_brand(db, brand_id, current_user)
