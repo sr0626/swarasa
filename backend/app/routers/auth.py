@@ -16,13 +16,14 @@ from app.dependencies.db import get_db
 from app.dependencies.pagination import Pagination, pagination_params
 from app.schemas.auth import MeResponse, MeUpdateRequest, OwnerAccountOut
 from app.schemas.follow import FollowListResponse
+from app.schemas.location_manager import ManagedLocationListResponse
 from app.schemas.privacy import (
     DataDeletionListResponse,
     DataDeletionRequestCreate,
     DataDeletionRequestOut,
     DataExportOut,
 )
-from app.services import auth_service, follow_service, privacy_service
+from app.services import auth_service, follow_service, location_manager_service, privacy_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -42,6 +43,19 @@ async def update_me(
     current_user: CurrentUser = Depends(require_owner),
 ) -> OwnerAccountOut:
     return await auth_service.update_me(db, current_user, body)
+
+
+@router.get("/me/managed-locations", response_model=ManagedLocationListResponse)
+async def get_my_managed_locations(
+    pagination: Pagination = Depends(pagination_params),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> ManagedLocationListResponse:
+    """Any authenticated role — no role restriction, it's inherently
+    scoped to the caller's own active `location_manager` rows (see
+    `location_manager_service.list_managed_locations`'s docstring).
+    """
+    return await location_manager_service.list_managed_locations(db, current_user, pagination)
 
 
 @router.get("/me/follows", response_model=FollowListResponse)

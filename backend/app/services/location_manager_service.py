@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import AppError
 from app.models.location_manager import LocationManager
 from app.models.restaurant_location import RestaurantLocation
-from app.services import audit_service, cognito_service
+from app.services import audit_service, cognito_service, hours_service
 
 MAX_ACTIVE_MANAGERS_PER_LOCATION_PAID = 2
 
@@ -139,6 +139,79 @@ async def list_managers(db: AsyncSession, location_id: int, active_only: bool):
     stmt = stmt.order_by(LocationManager.id)
     rows = (await db.execute(stmt)).scalars().all()
     return [_to_out(row) for row in rows]
+
+
+async def list_managed_locations(db: AsyncSession, current_user, pagination):
+    """GET /auth/me/managed-locations — see docs/API_CONTRACTS.md
+    "GET /auth/me/managed-locations".
+
+    Any authenticated caller can call this (no role check in the router
+    dependency) — it is inherently scoped to "my own" active assignments
+    via `LocationManager.user_id == current_user.cognito_sub`, so an
+    owner/admin/registered_user with no `location_manager` rows just gets
+    an empty page rather than a 403. This is the discovery endpoint a
+    manager needs before they can call `GET /locations/{id}/managers`,
+    which requires a location id up front (docs/PROJECT_PLAN.csv "User
+    profile / account details page" backlog note).
+
+    Only `is_active=true` assignment rows on `is_active=true` (not
+    soft-deleted) locations are returned — a manager's own removal/
+    relisting history isn't relevant here, unlike the owner/admin-facing
+    `GET /locations/{id}/managers?active_only=false`.
+    """
+    from app.schemas.location_manager import ManagedLocationListResponse, ManagedLocationOut
+
+    base_filter = (
+        LocationManager.user_id == current_user.cognito_sub,
+        LocationManager.is_active == True,  # noqa: E712
+        RestaurantLocation.is_active == True,  # noqa: E712
+    )
+
+    total = (
+        await db.execute(
+            select(func.count())
+            .select_from(RestaurantLocation)
+            .join(LocationManager, LocationManager.location_id == RestaurantLocation.id)
+            .where(*base_filter)
+        )
+    ).scalar_one()
+
+    rows = (
+        (
+            await db.execute(
+                select(RestaurantLocation)
+                .join(LocationManager, LocationManager.location_id == RestaurantLocation.id)
+                .where(*base_filter)
+                .order_by(RestaurantLocation.id)
+                .offset(pagination.offset)
+                .limit(pagination.page_size)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    results = []
+    for row in rows:
+        is_open_now = await hours_service.is_open_now_for_location(db, row.id, row.timezone)
+        results.append(
+            ManagedLocationOut(
+                id=row.id,
+                location_name=row.location_name,
+                address_line1=row.address_line1,
+                city=row.city,
+                state=row.state,
+                postal_code=row.postal_code,
+                phone=row.phone,
+                is_verified=row.is_verified,
+                is_paid=row.is_paid,
+                is_open_now=is_open_now,
+            )
+        )
+
+    return ManagedLocationListResponse(
+        results=results, page=pagination.page, page_size=pagination.page_size, total=total
+    )
 
 
 async def deactivate_manager(

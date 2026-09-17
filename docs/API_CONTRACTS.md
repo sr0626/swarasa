@@ -435,7 +435,7 @@ Audit: `audit_log` row (`table_name="restaurant_location"`, `action="create"`).
 
 ### PATCH /locations/{id}
 
-Auth: owner (owns parent brand) or manager with an active `location_manager` row for this location (root CLAUDE.md "Permission model" — checked server-side on every write, never from the JWT alone)
+Auth: owner (owns parent brand), manager with an active `location_manager` row for this location, or admin (root CLAUDE.md "Permission model" — checked server-side on every write, never from the JWT alone). Admin added 2026-09-17 — see "Platform admin full-access parity" below.
 
 Body: any subset of the address/contact/timezone fields from `POST
 /locations`. Does **not** accept `is_paid`, `paid_until`, or
@@ -449,7 +449,7 @@ Audit: `audit_log` row (`action="update"`).
 
 ### PUT /locations/{id}/hours
 
-Auth: owner (owns parent brand) or manager with active assignment for this location
+Auth: owner (owns parent brand), manager with active assignment for this location, or admin (added 2026-09-17 — see "Platform admin full-access parity" below)
 
 Body: full week replacement (`backend/CLAUDE.md` "Hours captured via
 CRUD" — modeled as a sub-resource of `/locations`, not a separate
@@ -501,9 +501,10 @@ writeup). BRD 5.3's 6-step flow, end to end:
    `processed/`/`thumbnails/` keys immediately — it does not wait for
    steps 3-5 to finish (see that endpoint's own note below).
 
-Auth for all four routes below: owner (owns parent brand) or manager
-with an active `location_manager` row for this location — same as
-`PATCH /locations/{id}` and `PUT /locations/{id}/hours`.
+Auth for all four routes below: owner (owns parent brand), manager
+with an active `location_manager` row for this location, or admin
+(added 2026-09-17 — see "Platform admin full-access parity" below) —
+same as `PATCH /locations/{id}` and `PUT /locations/{id}/hours`.
 
 #### POST /locations/{id}/photos/upload-url
 
@@ -646,6 +647,33 @@ Response: `204 No Content`. Audit: `audit_log` row (`action="update"`,
 noting the `is_active` transition — not `action="delete"`, since
 nothing is actually deleted).
 
+**Platform admin full-access parity (2026-09-17, `docs/PROJECT_PLAN.csv`
+"Platform admin full-access parity", `docs/DECISIONS.md` "Authentication
+& Permissions"):** root CLAUDE.md's Permission model already states
+"Admin: full platform access" as a principle, and this note above ("A
+relisted location is `PATCH`-reactivated by an admin") already assumed
+`PATCH /locations/{id}` was admin-reachable — but it wasn't: `PATCH
+/locations/{id}`, `PUT /locations/{id}/hours`, and all four
+`/locations/{id}/photos*` routes previously excluded admin entirely
+(`require_location_write_access` had no admin branch). Closed by adding
+an admin short-circuit directly to `require_location_write_access`
+(`backend/app/dependencies/auth.py`), so admin can now edit a location's
+basic info/hours/photos on an owner's behalf for support — same
+audit-logged write path, `audit_log.actor_id`/`actor_role` correctly
+attributing the write to the admin's own identity, never mislabeled as
+the owner. `GET /locations/{id}/managers` and `DELETE
+/locations/{id}/managers/{manager_id}` already had admin parity before
+this change (unchanged here).
+
+**Deliberately left owner-only:** `POST /locations` and `POST
+/locations/{id}/managers` — see those endpoints' own Auth lines. Both are
+an owner declaring/vouching for something new under their own brand
+(a new location; a specific named person as a location's manager), not
+administering an existing resource — the same reasoning `POST
+/restaurants` (also owner-only, no admin path) already follows. Support
+access to an *existing* problematic manager assignment is already
+covered by the admin-parity `DELETE` above.
+
 ---
 
 ## Location Managers (`location_manager`)
@@ -734,6 +762,21 @@ Errors:
 
 Audit: `audit_log` row (`table_name="location_manager"`, `action="create"`) — `location_manager` is in root CLAUDE.md's audit-required table list.
 
+**Re-assigning a previously-removed manager to the same location**
+(verified 2026-09-17, `docs/PROJECT_PLAN.csv` "Manager reassignment /
+reactivation across restaurants"): this endpoint always inserts a **new**
+`location_manager` row rather than flipping an existing inactive one back
+to active — history-preserving, and it already works correctly for this
+case with no fix needed. `uq_location_manager_active_user` is a *partial*
+unique index (`postgresql_where="is_active = true"`,
+`docs/DATA_MODEL.md`), so a prior soft-removed row for the same
+`(location_id, user_id)` — `is_active=false` — never participates in the
+uniqueness check at all; only active rows are constrained. A location can
+therefore have any number of historical inactive rows for the same
+manager plus exactly one current active one, and re-assigning after a
+soft-removal (`DELETE /locations/{id}/managers/{manager_id}`) hits the
+plain "no existing active row" path, not `already_active_manager`.
+
 ### GET /locations/{id}/managers
 
 Auth: owner (owns parent brand), admin, or a manager with an active
@@ -795,6 +838,56 @@ Audit: `audit_log` row (`table_name="location_manager"`, `action="update"`,
 noting the `is_active` transition — not `action="delete"`, same phrasing
 convention as `DELETE /locations/{id}` above, since nothing is actually
 deleted).
+
+### GET /auth/me/managed-locations
+
+**Added 2026-09-17** — closes the gap flagged in the "Owner portal
+dashboard" and "User profile / account details page" rows of
+`docs/PROJECT_PLAN.csv`: no endpoint let a manager discover which
+locations they're assigned to. `GET /locations/{id}/managers` needs a
+location id up front, which is exactly the missing piece — this is that
+discovery endpoint, modeled as a sub-resource of `/auth/me` (same family
+as `GET /auth/me/follows`) rather than of `/locations`, since it's scoped
+to the caller, not to a specific location.
+
+Auth: any authenticated user — no role restriction beyond being logged
+in. Inherently scoped to "my own" assignments (`location_manager.user_id
+== caller's cognito_sub`), so an owner/admin/registered_user caller with
+no manager assignments just gets an empty page, not a `403`.
+
+Query params: standard pagination (`page`, default `1`; `page_size`,
+default `20`, max `100` — `backend/CLAUDE.md` pagination convention).
+
+Response: `200`
+```json
+{
+  "results": [
+    {
+      "id": 456,
+      "location_name": null,
+      "address_line1": "123 Main St",
+      "city": "Plano",
+      "state": "TX",
+      "postal_code": "75024",
+      "phone": "+14695551234",
+      "is_verified": true,
+      "is_paid": true,
+      "is_open_now": true
+    }
+  ],
+  "page": 1,
+  "page_size": 20,
+  "total": 1
+}
+```
+Same per-row shape as `GET /restaurants/{id}/locations`'s
+`LocationSummaryOut` (deliberately duplicated as its own
+`ManagedLocationOut` schema, not imported — see
+`backend/app/schemas/location_manager.py`). Only `is_active=true`
+assignment rows on `is_active=true` locations are included — a
+soft-removed assignment or a soft-deleted location doesn't appear here
+(unlike the owner/admin-facing `GET /locations/{id}/managers`, which
+shows full history by default).
 
 ---
 

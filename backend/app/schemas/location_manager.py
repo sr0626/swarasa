@@ -35,3 +35,34 @@ class LocationManagerOut(BaseModel):
 
 class LocationManagerListResponse(BaseModel):
     results: list[LocationManagerOut]
+
+
+class ManagedLocationOut(BaseModel):
+    """One row of `GET /auth/me/managed-locations` — see
+    docs/API_CONTRACTS.md "GET /auth/me/managed-locations". Same field
+    shape as `schemas/restaurant.py`'s `LocationSummaryOut` (the
+    brand-scoped `GET /restaurants/{id}/locations` listing) — deliberately
+    duplicated rather than imported from there: this is a different
+    sub-resource (a manager's own assignments, not a brand's locations)
+    and the two lists are free to diverge later without one file reaching
+    into the other's schema module (same reasoning `LocationManagerOut`
+    above gives for living in its own file rather than `schemas/location.py`).
+    """
+
+    id: int
+    location_name: str | None
+    address_line1: str
+    city: str
+    state: str
+    postal_code: str
+    phone: str | None
+    is_verified: bool
+    is_paid: bool
+    is_open_now: bool | None
+
+
+class ManagedLocationListResponse(BaseModel):
+    results: list[ManagedLocationOut]
+    page: int
+    page_size: int
+    total: int
