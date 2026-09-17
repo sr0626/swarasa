@@ -45,6 +45,10 @@ to revisit later, not a final sign-off.
 - [x] `/locations/{id}/managers` (assign/list/remove)
 - [x] `/claim` (submit/approve/reject), `/auth/me`
 - [x] `/cuisine-tags` (public read list)
+- [x] `/restaurants/{id}/follow` (follow/unfollow, both idempotent) +
+      `/auth/me/follows` (paginated) — PR #66, closes the tracked
+      `docs/PROJECT_PLAN.csv` gap (`user_follow` table existed, no
+      endpoint did)
 - [ ] Menu, deals, Stripe — Phase 2, not started (correctly)
 - [x] Dev/test seed script (`backend/app/scripts/seed_dev_data.py`, PR #46)
       — small, idempotent owner/brand/location/manager/claim rows across 3
