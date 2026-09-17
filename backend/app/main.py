@@ -12,6 +12,7 @@ from mangum import Mangum
 
 from app.core.errors import register_exception_handlers
 from app.routers import (
+    admin,
     auth,
     claim,
     cuisine,
@@ -34,6 +35,7 @@ app.include_router(claim.router)
 app.include_router(auth.router)
 app.include_router(cuisine.router)
 app.include_router(data_deletion.router)
+app.include_router(admin.router)
 
 # package_type = "Image" Lambda functions have no separate "handler" config
 # — the Dockerfile's CMD *is* the handler, in "<module>.<callable>" form
