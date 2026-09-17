@@ -151,3 +151,24 @@ export interface AssignLocationManagerInput {
 export interface LocationManagersResponse {
   results: LocationManager[];
 }
+
+/**
+ * One row of `GET /auth/me/managed-locations` (docs/API_CONTRACTS.md,
+ * added alongside PR #78). Same field shape as `LocationSummary` above —
+ * deliberately duplicated, not reused, matching the backend's own
+ * `ManagedLocationOut` (`backend/app/schemas/location_manager.py`): this is
+ * a different sub-resource (a manager's own assignments, self-scoped off
+ * `/auth/me`) and the two lists are free to diverge later.
+ */
+export interface ManagedLocation {
+  id: number;
+  location_name: string | null;
+  address_line1: string;
+  city: string;
+  state: string;
+  postal_code: string;
+  phone: string;
+  is_verified: boolean;
+  is_paid: boolean;
+  is_open_now: boolean | null;
+}

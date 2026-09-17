@@ -156,6 +156,17 @@ export function UsersIcon(props: IconProps) {
   );
 }
 
+/** Added for the account page's "Download my data" CCPA export action. */
+export function DownloadIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} {...props}>
+      <path d="M12 4v11" />
+      <path d="M8 11l4 4 4-4" />
+      <path d="M4.5 16v2a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-2" />
+    </svg>
+  );
+}
+
 /** Added for the owner portal dashboard's brand cards. */
 export function StoreIcon(props: IconProps) {
   return (
