@@ -46,7 +46,18 @@ module.exports = {
         // commonly-needed third flag for headless Chrome in the same kind
         // of constrained CI container, even though this run's crash was
         // specifically the sandbox, not GPU init.
-        chromeFlags: ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+        //
+        // MUST be a single space-separated STRING, not an array — LHCI's
+        // `chromeFlags` setting maps straight onto the `lighthouse` CLI's
+        // own `--chrome-flags="..."` option, which takes one string.
+        // An array here gets coerced via Array.prototype.toString() (i.e.
+        // comma-joined) into ONE bogus Chrome argument
+        // ("--no-sandbox,--disable-dev-shm-usage,--disable-gpu") that
+        // Chrome doesn't recognize as three flags — confirmed live: this
+        // workflow's second CI run still crashed with "No usable sandbox!"
+        // even after adding the flags, and the crash log's own
+        // "switch-26" showed exactly that comma-joined single string.
+        chromeFlags: "--no-sandbox --disable-dev-shm-usage --disable-gpu",
         // Explicit mobile emulation — frontend/CLAUDE.md's target is a
         // MOBILE score, not desktop. This mirrors Lighthouse's own
         // built-in "mobile" defaults (Moto G-class CPU/network profile,
