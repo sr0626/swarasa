@@ -9,8 +9,14 @@ from app.schemas.cuisine import CuisineTagOut
 class NearestLocationOut(BaseModel):
     location_id: int
     distance_mi: float
+    # Added: search result cards need the full street address for display
+    # and a "get directions"-style link — city/state alone wasn't enough
+    # (docs/PROJECT_PLAN.csv "Search result card: full address + Google
+    # Maps link").
+    address_line1: str
     city: str
     state: str
+    postal_code: str
     is_verified: bool
     is_paid: bool
     is_open_now: bool | None
