@@ -11,11 +11,12 @@ import TopBar from "@/components/home/TopBar";
 import Hero from "@/components/home/Hero";
 import PopularNearYou from "@/components/home/PopularNearYou";
 import PopularNearYouSkeleton from "@/components/home/PopularNearYouSkeleton";
+import { DEFAULT_CITY_LABEL } from "@/lib/constants/city";
 
 export const metadata: Metadata = {
-  title: "Discover Your Taste — Dallas-Fort Worth",
+  title: `Discover Your Taste — ${DEFAULT_CITY_LABEL}`,
   description:
-    "Discover your taste across Dallas-Fort Worth — verified restaurants, filtered by regional cuisine and dietary needs.",
+    `Discover your taste across ${DEFAULT_CITY_LABEL} — verified restaurants, filtered by regional cuisine and dietary needs.`,
 };
 
 export default function HomePage() {
@@ -29,7 +30,7 @@ export default function HomePage() {
           Popular near you
         </h2>
         <p className="mt-1 text-sm text-brand-ink-muted">
-          Verified restaurants around Dallas-Fort Worth.
+          Verified restaurants around {DEFAULT_CITY_LABEL}.
         </p>
 
         <div className="mt-6">

@@ -16,6 +16,7 @@ import SearchFilterBar from "@/components/search/SearchFilterBar";
 import SearchResults from "@/components/search/SearchResults";
 import SearchResultsSkeleton from "@/components/search/SearchResultsSkeleton";
 import { CUISINE_FILTER_CHIPS } from "@/lib/constants/cuisineFilters";
+import { DEFAULT_CITY_LABEL } from "@/lib/constants/city";
 
 interface SearchPageProps {
   searchParams: { [key: string]: string | string[] | undefined };
@@ -41,17 +42,24 @@ function parseFilters(searchParams: SearchPageProps["searchParams"]) {
 }
 
 export function generateMetadata({ searchParams }: SearchPageProps): Metadata {
-  const { cuisine } = parseFilters(searchParams);
+  const { location, cuisine } = parseFilters(searchParams);
   const chip = cuisine ? CUISINE_FILTER_CHIPS.find((c) => c.name === cuisine) : null;
+  // `location` is the one real "city the visitor chose" signal that
+  // exists today (what they typed into the Hero/SearchFilterBar location
+  // field) — falls back to the launch-city default when they searched
+  // without one (frontend/CLAUDE.md-adjacent: no geocoding endpoint
+  // exists in Phase 1 to resolve this any more precisely).
+  const cityLabel = location || DEFAULT_CITY_LABEL;
   return {
     title: chip ? `${chip.display_name} Restaurants — Search Results` : "Search Results",
     description:
-      "Browse verified restaurants across Dallas-Fort Worth, filtered by regional cuisine and dietary needs.",
+      `Browse verified restaurants across ${cityLabel}, filtered by regional cuisine and dietary needs.`,
   };
 }
 
 export default function SearchPage({ searchParams }: SearchPageProps) {
   const { location, query, cuisine, page } = parseFilters(searchParams);
+  const cityLabel = location || DEFAULT_CITY_LABEL;
 
   return (
     <main className="min-h-screen bg-brand-bg">
@@ -62,7 +70,7 @@ export default function SearchPage({ searchParams }: SearchPageProps) {
           Search results
         </h1>
         <p className="mt-1 text-sm text-brand-ink-muted">
-          Verified restaurants around Dallas-Fort Worth.
+          Verified restaurants around {cityLabel}.
         </p>
 
         <div className="mt-6">

@@ -51,7 +51,9 @@ export default function RestaurantHero({ restaurant, location }: RestaurantHeroP
           </div>
         )}
 
-        <p className="max-w-2xl text-sm text-brand-ink-muted">{restaurant.description}</p>
+        {restaurant.description && (
+          <p className="max-w-2xl text-sm text-brand-ink-muted">{restaurant.description}</p>
+        )}
 
         {location && (
           <div className="flex flex-col gap-1.5 text-sm text-brand-ink-subtle sm:flex-row sm:items-center sm:gap-4">
@@ -61,10 +63,12 @@ export default function RestaurantHero({ restaurant, location }: RestaurantHeroP
               {location.address_line2 ? `, ${location.address_line2}` : ""}, {location.city}, {location.state}{" "}
               {location.postal_code}
             </span>
-            <span className="flex items-center gap-1.5">
-              <PhoneIcon className="h-4 w-4 shrink-0" />
-              {location.phone}
-            </span>
+            {location.phone && (
+              <a href={`tel:${location.phone}`} className="flex items-center gap-1.5 hover:text-brand-ink hover:underline">
+                <PhoneIcon className="h-4 w-4 shrink-0" />
+                {location.phone}
+              </a>
+            )}
           </div>
         )}
       </div>

@@ -84,8 +84,12 @@ export async function generateMetadata({ params }: RestaurantPageProps): Promise
     title: `${restaurant.name} — Indian Restaurant${cityState}`,
     // "first 150 chars of restaurant `about` field" — description here is
     // the closest documented equivalent (no separate `about` field on
-    // RestaurantBrand per docs/API_CONTRACTS.md).
-    description: restaurant.description.slice(0, 150),
+    // RestaurantBrand per docs/API_CONTRACTS.md). Nullable in practice
+    // (found live 2026-09-18: every CSV-imported restaurant has none) --
+    // falls back to a generic line rather than crashing.
+    description: restaurant.description
+      ? restaurant.description.slice(0, 150)
+      : `${restaurant.name} — Indian Restaurant${cityState} on Swarasa.`,
     alternates: {
       canonical: `/restaurant/${restaurant.slug}`,
     },

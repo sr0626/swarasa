@@ -39,7 +39,7 @@ function toFormState(location: LocationDetail): FormState {
     state: location.state,
     postal_code: location.postal_code,
     country: location.country,
-    phone: location.phone,
+    phone: location.phone ?? "",
     timezone: location.timezone,
     latitude: String(location.latitude),
     longitude: String(location.longitude),

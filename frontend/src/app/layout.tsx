@@ -10,6 +10,7 @@
 import type { Metadata } from "next";
 import { Manrope, Space_Grotesk } from "next/font/google";
 import { SITE_URL } from "@/lib/site";
+import { DEFAULT_CITY_LABEL } from "@/lib/constants/city";
 import Footer from "@/components/layout/Footer";
 import "./globals.css";
 
@@ -33,11 +34,11 @@ export const metadata: Metadata = {
   // real absolute URLs (frontend/CLAUDE.md "Canonical URLs on all pages").
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "Swarasa — Discover Your Taste, Dallas-Fort Worth",
+    default: `Swarasa — Discover Your Taste, ${DEFAULT_CITY_LABEL}`,
     template: "%s | Swarasa",
   },
   description:
-    "Discover your taste across Dallas-Fort Worth — verified restaurants, filtered by regional cuisine and dietary needs, with deals from registered restaurants.",
+    `Discover your taste across ${DEFAULT_CITY_LABEL} — verified restaurants, filtered by regional cuisine and dietary needs, with deals from registered restaurants.`,
 };
 
 export default function RootLayout({
