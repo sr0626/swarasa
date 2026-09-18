@@ -70,7 +70,10 @@ async function scheduleFromCurrentSession(): Promise<void> {
   if (!running) return;
   try {
     const session = await fetchAuthSession();
-    const exp = session.tokens?.accessToken?.payload?.exp;
+    // ID token's own exp, not the access token's -- the session cookie
+    // this loop keeps alive now holds the ID token (see the "accessToken"
+    // field comment in refreshAndReschedule below for why).
+    const exp = session.tokens?.idToken?.payload?.exp;
     if (!exp) {
       stopSessionKeepAlive();
       return;
@@ -87,7 +90,12 @@ async function refreshAndReschedule(): Promise<void> {
   if (!running) return;
   try {
     const refreshed = await fetchAuthSession({ forceRefresh: true });
-    const accessToken = refreshed.tokens?.accessToken?.toString();
+    // Deliberately the ID token -- fixed 2026-09-18 alongside LoginForm.tsx,
+    // see that file's comment for the full reasoning (Cognito access
+    // tokens carry no `email` claim; the backend's lazy owner_account
+    // provisioning needs one). Field is still named "accessToken" in the
+    // request body/cookie -- a broader rename is a follow-up.
+    const accessToken = refreshed.tokens?.idToken?.toString();
     if (!accessToken) {
       stopSessionKeepAlive();
       return;

@@ -1104,6 +1104,43 @@ actor_id, actor_role, before/after values.
 
 ## Authentication & Permissions
 
+**Frontend used the wrong Cognito token type for the session cookie — blocked every real owner from ever getting provisioned**
+2026-09-18 | Real, severe production bug, found live while testing the
+first real bulk-import against the deployed dev environment: `owner1` and
+`owner2` (real Cognito users, confirmed via `scripts/list_users.py`) both
+hit `/account` and `/portal/dashboard` with either a bare "Internal server
+error" or the specific `AppError` "An email claim is required to provision
+an owner account" (`backend/app/services/auth_service.py`) — meaning NO
+real owner could ever get their `owner_account` row lazily provisioned,
+platform-wide, since this Lambda was first deployed.
+
+Root cause: `LoginForm.tsx` and `sessionKeepAlive.ts` captured Cognito's
+*access* token (`authSession.tokens.accessToken`) as the session
+credential, and `frontend/src/lib/auth/session.ts`'s `CognitoJwtVerifier`
+was hardcoded `tokenUse: "access"` to match. A Cognito access token does
+not carry an `email` claim by default (it's an authorization token for
+calling a resource server, not an identity token) — only the ID token
+does. `session.ts` itself already had a comment acknowledging this gap
+("callers can follow up with GET /auth/me") but that assumption was wrong:
+`GET /auth/me` receives the exact same cookie/token as its own Bearer
+credential, so it hit the identical missing-email gap, every time, with no
+token anywhere in the flow that actually carried an email claim.
+
+Fix: `LoginForm.tsx`/`sessionKeepAlive.ts` now capture `authSession.tokens
+.idToken` instead (same call site, one property swapped), and
+`session.ts`'s verifier now matches (`tokenUse: "id"`). The ID token
+already carries the same `cognito:groups` claim this app already reads for
+role extraction, plus `sub` and `email` — no Cognito pool/app-client
+reconfiguration needed. Backend's `_decode_token`
+(`backend/app/dependencies/auth.py`) already accepted either `token_use`
+value, so no backend change was required. The cookie name
+(`rp_access_token`), the JSON field name (`accessToken`), and the
+`Session.accessToken` TypeScript field are all left as-is for this urgent
+fix — they now hold an ID token's value under an access-token-shaped name,
+which is confusing; a follow-up rename is tracked separately, not bundled
+into this fix given how many call sites it touches for something purely
+cosmetic.
+
 **Platform admin full-access parity on `/locations` write routes — manager assignment stays owner-only**
 2026-09-17 | Backend Dev decision (root CLAUDE.md "Decision-Making
 Autonomy"), closing `docs/PROJECT_PLAN.csv` "Platform admin full-access

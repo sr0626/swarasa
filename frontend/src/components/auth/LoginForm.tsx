@@ -93,7 +93,20 @@ export default function LoginForm() {
       }
 
       const authSession = await fetchAuthSession();
-      const accessToken = authSession.tokens?.accessToken?.toString();
+      // Deliberately the ID token, not the access token (fixed 2026-09-18 —
+      // was accessToken, a real production bug): a Cognito access token
+      // does not carry an `email` claim by default (it's an authorization
+      // token, not an identity token), but auth_service's lazy
+      // owner_account provisioning (backend/app/services/auth_service.py)
+      // requires one -- every real owner hit "An email claim is required
+      // to provision an owner account" on first login. The ID token
+      // carries the same cognito:groups claim this backend already reads
+      // for role extraction, plus email, sub, everything needed -- no
+      // Cognito-side reconfiguration required. This field/cookie/prop is
+      // still named "accessToken" throughout the codebase (route.ts,
+      // sessionKeepAlive.ts, ApiFetchOptions) -- a broader rename is a
+      // follow-up, not bundled into this urgent fix.
+      const accessToken = authSession.tokens?.idToken?.toString();
       if (!accessToken) {
         setFormError(
           "Sign-in succeeded but no session token was returned. Please try again."
