@@ -44,6 +44,11 @@ async def _sync_geom(db: AsyncSession, location_id: int, lat: float, lng: float)
 
 
 async def _location_to_out(db: AsyncSession, location: RestaurantLocation) -> LocationOut:
+    # brand_name: the FK is ON DELETE RESTRICT while any location exists
+    # (docs/API_CONTRACTS.md "Restaurants CRUD"), so the parent brand row
+    # is always present here -- no None-guard needed.
+    brand = await db.get(RestaurantBrand, location.brand_id)
+
     hours_rows = await hours_service.get_hours_for_location(db, location.id)
     hours_by_day = {row.day_of_week: row for row in hours_rows}
     today = hours_service.today_weekday(location.timezone)
@@ -55,6 +60,7 @@ async def _location_to_out(db: AsyncSession, location: RestaurantLocation) -> Lo
     return LocationOut(
         id=location.id,
         brand_id=location.brand_id,
+        brand_name=brand.name,
         location_name=location.location_name,
         address_line1=location.address_line1,
         address_line2=location.address_line2,

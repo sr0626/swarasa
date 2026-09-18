@@ -89,7 +89,8 @@ export default async function PortalLocationPage({ params }: LocationPageProps) 
           Back to dashboard
         </Link>
         <h1 className="mt-2 font-display text-2xl font-bold text-brand-ink sm:text-3xl">
-          {location.location_name ?? `${location.address_line1}, ${location.city}`}
+          {location.brand_name}
+          {location.location_name ? ` — ${location.location_name}` : ""}
         </h1>
         <p className="mt-1 text-sm text-brand-ink-muted">
           {location.address_line1}, {location.city}, {location.state} {location.postal_code}

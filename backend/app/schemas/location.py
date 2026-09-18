@@ -28,6 +28,13 @@ class GalleryPhotoOut(BaseModel):
 class LocationOut(BaseModel):
     id: int
     brand_id: int
+    # Added: the location editor page had no way to show the actual
+    # restaurant name at all when `location_name` (an optional per-location
+    # label, e.g. "Downtown") is unset -- it fell back to the raw street
+    # address instead, which is the case for every location that doesn't
+    # set a distinct label (every CSV-imported restaurant, found live
+    # 2026-09-18 on /portal/locations/{id}).
+    brand_name: str
     location_name: str | None
     address_line1: str
     address_line2: str | None
