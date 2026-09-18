@@ -26,6 +26,7 @@
 // zero locations yet renders schema without an address rather than
 // failing.
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ApiError } from "@/lib/api/client";
 import { getRestaurantBySlug, getRestaurantLocations } from "@/lib/api/restaurants";
@@ -158,6 +159,18 @@ export default async function RestaurantPage({ params }: RestaurantPageProps) {
             {location && location.hours.length > 0 && <RestaurantHours hours={location.hours} />}
 
             {location && <RestaurantGallery photos={location.gallery_photos} />}
+
+            <div className="flex flex-col items-start gap-3 rounded-brand-card border border-brand-border bg-white p-5 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-brand-ink-muted">
+                See something wrong or out of date on this listing?
+              </p>
+              <Link
+                href={`/restaurant/${restaurant.slug}/report`}
+                className="flex min-h-[44px] shrink-0 items-center whitespace-nowrap rounded-brand-pill border border-brand-ink px-5 text-sm font-semibold text-brand-ink transition hover:bg-brand-chip"
+              >
+                Report a problem
+              </Link>
+            </div>
           </div>
         </div>
       </main>
