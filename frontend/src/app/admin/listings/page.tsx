@@ -14,6 +14,7 @@ import Link from "next/link";
 import { requireSession } from "@/lib/auth/guards";
 import TopBar from "@/components/home/TopBar";
 import { ApiError } from "@/lib/api/client";
+import { mapWithConcurrency } from "@/lib/concurrency";
 import { getMyRestaurants, getRestaurantLocations } from "@/lib/api/restaurants";
 import AdminListingsPanel, {
   type BrandWithLocations,
@@ -25,6 +26,10 @@ export const metadata: Metadata = {
 };
 
 const PAGE_SIZE = 20;
+
+// See portal/dashboard/page.tsx's DASHBOARD_FETCH_CONCURRENCY — same DB
+// connection-pool storm fix (PR #101), same reasoning.
+const LISTINGS_FETCH_CONCURRENCY = 5;
 
 interface AdminListingsPageProps {
   searchParams: { page?: string; owner_id?: string };
@@ -86,7 +91,7 @@ export default async function AdminListingsPage({ searchParams }: AdminListingsP
 
   const brandsWithLocations: BrandWithLocations[] = loadError
     ? []
-    : await Promise.all(brands.map(loadLocationsForBrand));
+    : await mapWithConcurrency(brands, LISTINGS_FETCH_CONCURRENCY, loadLocationsForBrand);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
