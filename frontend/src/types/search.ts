@@ -25,6 +25,8 @@ export interface SearchNearestLocation {
   city: string;
   state: string;
   postal_code: string;
+  /** Nullable: restaurant_location.phone itself is nullable. */
+  phone: string | null;
   is_verified: boolean;
   is_paid: boolean;
   is_open_now: boolean | null;

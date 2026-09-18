@@ -53,6 +53,7 @@ class _CandidateRow:
     city: str
     state: str
     postal_code: str
+    phone: str | None
     is_verified: bool
     is_paid: bool
     timezone: str
@@ -80,6 +81,7 @@ async def _fetch_candidates(
             RestaurantLocation.city,
             RestaurantLocation.state,
             RestaurantLocation.postal_code,
+            RestaurantLocation.phone,
             RestaurantLocation.is_verified,
             RestaurantLocation.is_paid,
             RestaurantLocation.timezone,
@@ -187,6 +189,7 @@ async def search(
                     city=nearest.city,
                     state=nearest.state,
                     postal_code=nearest.postal_code,
+                    phone=nearest.phone,
                     is_verified=nearest.is_verified,
                     is_paid=nearest.is_paid,
                     is_open_now=is_open_now,

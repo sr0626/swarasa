@@ -10,7 +10,7 @@
 // icon requirement is met without inventing a number.
 import Link from "next/link";
 import type { SearchResultItem } from "@/types/search";
-import { LocationPinIcon, StarIcon } from "@/components/ui/icons";
+import { LocationPinIcon, PhoneIcon, StarIcon } from "@/components/ui/icons";
 import OpenStatusBadge from "@/components/ui/OpenStatusBadge";
 
 export default function RestaurantCard({ item }: { item: SearchResultItem }) {
@@ -85,6 +85,16 @@ export default function RestaurantCard({ item }: { item: SearchResultItem }) {
             {fullAddress} · {nearest_location.distance_mi.toFixed(1)} mi
           </span>
         </a>
+
+        {nearest_location.phone && (
+          <a
+            href={`tel:${nearest_location.phone}`}
+            className="flex items-center gap-1 text-sm text-brand-ink-subtle hover:text-brand-ink hover:underline"
+          >
+            <PhoneIcon className="h-4 w-4 shrink-0" />
+            <span>{nearest_location.phone}</span>
+          </a>
+        )}
 
         <div className="mt-auto flex items-center justify-between pt-2">
           <OpenStatusBadge isOpenNow={nearest_location.is_open_now} />

@@ -51,6 +51,7 @@ def _row(**overrides) -> "search_service._CandidateRow":
         city="Plano",
         state="TX",
         postal_code="75024",
+        phone="+14695551234",
         is_verified=False,
         is_paid=False,
         timezone="America/Chicago",
@@ -128,6 +129,7 @@ async def test_multiple_locations_same_brand_roll_up_with_nearest_and_count(
     # full address (only city/state) or link out to Google Maps.
     assert results[0].nearest_location.address_line1 == "4900 W Park Blvd"
     assert results[0].nearest_location.postal_code == "75024"
+    assert results[0].nearest_location.phone == "+14695551234"
 
 
 @pytest.mark.asyncio

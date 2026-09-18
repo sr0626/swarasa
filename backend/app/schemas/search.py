@@ -17,6 +17,11 @@ class NearestLocationOut(BaseModel):
     city: str
     state: str
     postal_code: str
+    # Added alongside address_line1/postal_code — the search card shows a
+    # clickable phone number too (docs/PROJECT_PLAN.csv "Search result
+    # card: cover photo + full address..."). Nullable: restaurant_location.phone
+    # itself is nullable.
+    phone: str | None
     is_verified: bool
     is_paid: bool
     is_open_now: bool | None

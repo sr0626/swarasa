@@ -81,6 +81,7 @@ Response:
         "city": "Plano",
         "state": "TX",
         "postal_code": "75093",
+        "phone": "+14695551234",
         "is_verified": true,
         "is_paid": true,
         "is_open_now": true
