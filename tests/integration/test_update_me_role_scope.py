@@ -56,6 +56,21 @@ async def test_owner_can_update_their_own_profile(client, db_session, as_user):
 
 
 @pytest.mark.asyncio
+async def test_get_me_returns_phone(client, db_session, as_user):
+    """Regression for a real gap: `PATCH /auth/me` accepted `phone` from
+    the start, but `GET /auth/me`'s `OwnerAccountOut` never returned it
+    back — the account page's edit form could never pre-fill a phone the
+    owner had already set, only silently overwrite it blind."""
+    owner = await create_owner(db_session, full_name="Priya Rao", phone="+14695559876")
+    await db_session.commit()
+
+    as_user("owner", sub=owner.cognito_sub, email=owner.email)
+    response = await client.get("/auth/me")
+    assert response.status_code == 200, response.text
+    assert response.json()["owner_account"]["phone"] == "+14695559876"
+
+
+@pytest.mark.asyncio
 async def test_owner_update_writes_audit_log(client, db_session, as_user):
     """Regression for a gap found during this fix's self-review: root
     CLAUDE.md / docs/DECISIONS.md "Audit log on all core entity writes"

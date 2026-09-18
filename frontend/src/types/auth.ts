@@ -9,6 +9,7 @@ export type UserRole = "owner" | "manager" | "admin" | "registered_user";
 export interface OwnerAccount {
   id: number;
   full_name: string | null;
+  phone: string | null;
   stripe_customer_id: string | null;
 }
 

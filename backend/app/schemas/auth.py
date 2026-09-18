@@ -7,6 +7,7 @@ from pydantic import BaseModel
 class OwnerAccountOut(BaseModel):
     id: int
     full_name: str | None
+    phone: str | None
     stripe_customer_id: str | None
 
 
