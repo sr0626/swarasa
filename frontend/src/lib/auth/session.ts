@@ -45,9 +45,21 @@ let verifier: CognitoAccessVerifier | null = null;
 function getVerifier(): CognitoAccessVerifier {
   if (!verifier) {
     const { userPoolId, clientId } = assertCognitoConfig();
+    // tokenUse: "id", not "access" (fixed 2026-09-18 — a real production
+    // bug: every real owner hit "An email claim is required to provision
+    // an owner account" on first login). This file's own comment below
+    // already knew access tokens carry no email claim and assumed callers
+    // would "follow up with GET /auth/me" -- but that endpoint receives
+    // this exact same cookie/token as its Bearer credential, so it hit the
+    // identical gap; there was no token anywhere in the flow that actually
+    // carried email. The ID token carries the same cognito:groups claim
+    // this file already reads for role extraction, plus sub and email --
+    // switching what's verified here (LoginForm.tsx/sessionKeepAlive.ts
+    // now send the ID token, not the access token) closes the gap with no
+    // Cognito-side reconfiguration.
     verifier = CognitoJwtVerifier.create({
       userPoolId,
-      tokenUse: "access",
+      tokenUse: "id",
       clientId,
     });
   }
@@ -79,9 +91,9 @@ export async function resolveSession(token: string): Promise<Session | null> {
 
     return {
       cognitoSub: payload.sub,
-      // Cognito *access* tokens don't carry an email claim by default (ID
-      // tokens do) — until a page needs it beyond what's already in the
-      // JWT, callers can follow up with GET /auth/me.
+      // Reliably present now that this verifies an ID token (see
+      // getVerifier() above) -- was previously often empty when this
+      // verified an access token instead.
       email: typeof payload.email === "string" ? payload.email : "",
       role,
       accessToken: token,
