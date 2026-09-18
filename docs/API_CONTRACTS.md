@@ -72,7 +72,7 @@ Response:
       "slug": "spice-route",
       "is_claimed": true,
       "cuisine_tags": [
-        { "name": "hyderabadi", "display_name": "Hyderabadi", "category": "regional" }
+        { "id": 7, "name": "hyderabadi", "display_name": "Hyderabadi", "category": "regional" }
       ],
       "nearest_location": {
         "location_id": 456,
@@ -144,7 +144,7 @@ Response:
 ```json
 {
   "results": [
-    { "name": "hyderabadi", "display_name": "Hyderabadi", "category": "regional" }
+    { "id": 7, "name": "hyderabadi", "display_name": "Hyderabadi", "category": "regional" }
   ]
 }
 ```
@@ -206,7 +206,7 @@ Response:
       "is_claimed": true,
       "owner_id": 55,
       "cuisine_tags": [
-        { "name": "hyderabadi", "display_name": "Hyderabadi", "category": "regional" }
+        { "id": 7, "name": "hyderabadi", "display_name": "Hyderabadi", "category": "regional" }
       ],
       "location_count": 3
     }
@@ -255,7 +255,7 @@ Response:
   "is_claimed": true,
   "owner_id": 55,
   "cuisine_tags": [
-    { "name": "hyderabadi", "display_name": "Hyderabadi", "category": "regional" }
+    { "id": 7, "name": "hyderabadi", "display_name": "Hyderabadi", "category": "regional" }
   ],
   "location_count": 3
 }

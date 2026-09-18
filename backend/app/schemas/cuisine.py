@@ -13,6 +13,12 @@ CuisineCategory = Literal["regional", "dietary", "type", "signature", "dining_ti
 class CuisineTagOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
+    # Added so `POST`/`PATCH /restaurants`'s `cuisine_tag_ids` picker (the
+    # documented consumer of this endpoint, docs/API_CONTRACTS.md
+    # "GET /cuisine-tags") has an id to submit — the response previously
+    # had no id at all, so no caller could actually build a valid
+    # `cuisine_tag_ids` array from this list.
+    id: int
     name: str
     display_name: str
     category: str

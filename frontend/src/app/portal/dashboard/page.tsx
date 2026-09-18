@@ -29,6 +29,7 @@
 // or a manager-scoped branch of `GET /restaurants`) — flagged for
 // Architect/Backend Dev, not built here.
 import type { Metadata } from "next";
+import Link from "next/link";
 import { requireSession } from "@/lib/auth/guards";
 import TopBar from "@/components/home/TopBar";
 import { ApiError } from "@/lib/api/client";
@@ -165,10 +166,18 @@ export default async function DashboardPage() {
           {loadError && <InfoPanel title="Couldn't load your restaurants" body={loadError} />}
 
           {!loadError && brands.length === 0 && (
-            <InfoPanel
-              title="No restaurants found"
-              body="You don't have any restaurant brands yet. Claim an existing unclaimed listing from its public page, or create a new brand, to get started."
-            />
+            <div className="flex flex-col items-center gap-4">
+              <InfoPanel
+                title="No restaurants found"
+                body="You don't have any restaurant brands yet. Claim an existing unclaimed listing from its public page, or create a new brand, to get started."
+              />
+              <Link
+                href="/portal/brands/new"
+                className="flex min-h-[44px] items-center justify-center rounded-brand-control bg-brand-accent px-6 text-sm font-semibold text-white transition hover:bg-brand-accent-hover"
+              >
+                Add your restaurant
+              </Link>
+            </div>
           )}
 
           {!loadError && brandsWithLocations.length > 0 && (
