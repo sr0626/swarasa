@@ -157,12 +157,31 @@ resource "aws_vpc_endpoint" "logs" {
 # normally -- see docs/DECISIONS.md "Missing Cognito VPC endpoint" for the
 # full diagnostic trail. ~$7.30/mo per AZ, same order as the
 # secretsmanager/logs endpoints above.
+#
+# Subnet selection is filtered to only the AZs cognito-idp's endpoint
+# service actually supports (found 2026-09-18 on the first real apply
+# attempt: it rejected one of this VPC's two private subnets outright --
+# "does not support the availability zone of the subnet" -- unlike
+# secretsmanager/logs above, which happen to support both this VPC's AZs.
+# Not every AWS service's VPC endpoint is available in every AZ in a
+# region, and that set isn't stable enough to hardcode; this data source
+# is the standard Terraform pattern for it. If that leaves only one AZ,
+# this endpoint is intentionally single-AZ -- an availability tradeoff
+# already accepted by definition for a private-subnet-only path with no
+# NAT Gateway.
 # -------------------------------------------------------------------
+data "aws_vpc_endpoint_service" "cognito_idp" {
+  service = "cognito-idp"
+}
+
 resource "aws_vpc_endpoint" "cognito_idp" {
-  vpc_id              = aws_vpc.main.id
-  service_name        = "com.amazonaws.${var.aws_region}.cognito-idp"
-  vpc_endpoint_type   = "Interface"
-  subnet_ids          = aws_subnet.private[*].id
+  vpc_id            = aws_vpc.main.id
+  service_name      = data.aws_vpc_endpoint_service.cognito_idp.service_name
+  vpc_endpoint_type = "Interface"
+  subnet_ids = [
+    for s in aws_subnet.private : s.id
+    if contains(data.aws_vpc_endpoint_service.cognito_idp.availability_zones, s.availability_zone)
+  ]
   security_group_ids  = [aws_security_group.vpc_endpoints.id]
   private_dns_enabled = true
 
