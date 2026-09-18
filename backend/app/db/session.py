@@ -91,11 +91,37 @@ def get_engine() -> AsyncEngine:
             _get_database_url(),
             echo=False,
             pool_pre_ping=True,
-            # Aurora Serverless v2 scales to zero (min_capacity=0) — keep
-            # the pool small so we don't hold connections open against a
-            # scaled-down instance (see root CLAUDE.md cost guardrails).
-            pool_size=5,
-            max_overflow=5,
+            # Real bug, found live 2026-09-18: the owner dashboard fetches
+            # each brand's locations in parallel (Promise.all across every
+            # restaurant, one `GET /restaurants/{id}/locations` call each —
+            # see portal/dashboard/page.tsx's loadLocationsForBrand). A
+            # burst of ~25 concurrent requests means ~25 concurrent Lambda
+            # execution environments, each with its OWN engine/pool
+            # (module-level globals are per-container, not shared) — at
+            # pool_size=5/max_overflow=5 that's up to 250 simultaneous
+            # asyncpg connections against Aurora at once, well past what a
+            # just-resumed/low-ACU Serverless v2 instance allows. Whichever
+            # requests lost that race got a bare 503 with no app-level
+            # error (the connection attempt failed before FastAPI ever ran)
+            # — reproduced live as a different restaurant failing on every
+            # reload of the same page, not a fixed one.
+            #
+            # Every request in this codebase uses exactly one DB session,
+            # sequentially, for its whole lifetime (confirmed: no
+            # asyncio.gather/TaskGroup anywhere in app/ that would need a
+            # second connection concurrently within one request) — a large
+            # per-container pool was never buying anything here, only
+            # multiplying the worst-case connection count by however many
+            # containers a burst spins up. Shrunk to the minimum that still
+            # has slack for pool_pre_ping's own connection: pool_size=1,
+            # max_overflow=2 caps this container at 3 connections instead
+            # of 10, cutting the same 25-container burst's worst case from
+            # ~250 to ~75. Aurora Serverless v2 scales to zero
+            # (min_capacity=0, root CLAUDE.md) — still true here, this
+            # isn't a capacity change, just no longer requesting far more
+            # per-container connections than any single request ever uses.
+            pool_size=1,
+            max_overflow=2,
         )
     return _engine
 

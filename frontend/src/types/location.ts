@@ -73,6 +73,11 @@ export interface LocationWithManagers {
 export interface LocationDetail {
   id: number;
   brand_id: number;
+  // Added: the location editor had no way to show the restaurant's actual
+  // name when location_name (an optional per-location label) is unset --
+  // it fell back to the raw street address instead. See
+  // backend/app/schemas/location.py LocationOut.brand_name.
+  brand_name: string;
   location_name: string | null;
   address_line1: string;
   address_line2: string | null;
