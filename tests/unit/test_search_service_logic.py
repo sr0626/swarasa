@@ -10,15 +10,17 @@ not available in this sandbox) for the actual "within 15 miles" / "excludes
 beyond radius" behavior. What IS proven here, against the real
 `search_service.search()` code, is everything downstream of that SQL query:
 brand-level grouping (DECISIONS.md "Brand-level search results"), default
-sort (verified desc, distance asc, name asc), and pagination slicing.
+sort (paid desc, verified desc, distance asc, name asc), and pagination slicing.
 """
 from __future__ import annotations
+
+from datetime import time
 
 import pytest
 
 from app.dependencies.pagination import Pagination
 from app.models.restaurant_brand import RestaurantBrand
-from app.services import search_service
+from app.services import hours_service, search_service
 
 
 class _FakeResult:
@@ -70,7 +72,7 @@ async def _no_tags(db, brand_ids):
 
 
 async def _not_open(db, location_id, tz):
-    return None
+    return hours_service.TodayStatus(None, None, None, None)
 
 
 async def _no_cover(db, location_id):
@@ -80,7 +82,7 @@ async def _no_cover(db, location_id):
 @pytest.fixture(autouse=True)
 def _stub_side_lookups(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(search_service.cuisine_service, "get_brand_cuisine_tags_bulk", _no_tags)
-    monkeypatch.setattr(search_service.hours_service, "is_open_now_for_location", _not_open)
+    monkeypatch.setattr(search_service.hours_service, "today_status_for_location", _not_open)
     monkeypatch.setattr(search_service.photo_service, "get_cover_photo", _no_cover)
 
 
@@ -162,6 +164,82 @@ async def test_default_sort_verified_then_distance_then_name(monkeypatch: pytest
     # Verified brands (Andhra Spice @5mi, Biryani House @10mi) before the
     # unverified-but-nearer Zaika @2mi.
     assert ordered_names == ["Andhra Spice", "Biryani House", "Zaika"]
+
+
+@pytest.mark.asyncio
+async def test_paid_takes_precedence_over_verified_and_distance(monkeypatch: pytest.MonkeyPatch):
+    # Brand 1: verified, unpaid, 1 mi — nearest and verified, but unpaid.
+    # Brand 2: paid, unverified, 12 mi — must still lead (paid precedence).
+    # Brand 3: paid + verified, 14 mi — leads brand 2 (verified tie-break).
+    # Brand 4: paid + verified, 14 mi, name "Aroma" — beats brand 3 on name.
+    rows = [
+        _row(location_id=1, brand_id=1, distance_mi=1.0, is_verified=True, is_paid=False),
+        _row(location_id=2, brand_id=2, distance_mi=12.0, is_verified=False, is_paid=True),
+        _row(location_id=3, brand_id=3, distance_mi=14.0, is_verified=True, is_paid=True),
+        _row(location_id=4, brand_id=4, distance_mi=14.0, is_verified=True, is_paid=True),
+    ]
+
+    async def _fake_fetch(*args, **kwargs):
+        return rows
+
+    monkeypatch.setattr(search_service, "_fetch_candidates", _fake_fetch)
+    db = _FakeSession(
+        brands=[_brand(1, "Near"), _brand(2, "Paid Only"), _brand(3, "Zest"), _brand(4, "Aroma")]
+    )
+
+    results, _ = await search_service.search(
+        db, 32.8, -96.9, 15, None, None, None, Pagination(page=1, page_size=20)
+    )
+    assert [r.name for r in results] == ["Aroma", "Zest", "Paid Only", "Near"]
+
+
+@pytest.mark.asyncio
+async def test_today_hours_are_passed_through_to_nearest_location(monkeypatch: pytest.MonkeyPatch):
+    async def _open_today(db, location_id, tz):
+        return hours_service.TodayStatus(True, time(11, 0), time(21, 30), False)
+
+    monkeypatch.setattr(search_service.hours_service, "today_status_for_location", _open_today)
+
+    async def _fake_fetch(*args, **kwargs):
+        return [_row(location_id=1, brand_id=1)]
+
+    monkeypatch.setattr(search_service, "_fetch_candidates", _fake_fetch)
+    db = _FakeSession(brands=[_brand(1, "Spice Route")])
+
+    results, _ = await search_service.search(
+        db, 32.8, -96.9, 15, None, None, None, Pagination(page=1, page_size=20)
+    )
+    loc = results[0].nearest_location
+    assert loc.is_open_now is True
+    assert loc.open_time == time(11, 0)
+    assert loc.close_time == time(21, 30)
+    assert loc.is_closed is False
+
+
+def test_compute_today_status_variants():
+    from app.models.restaurant_hours import RestaurantHours
+
+    tz = "America/Chicago"
+    unknown = hours_service.compute_today_status(None, tz)
+    assert (unknown.open_time, unknown.close_time, unknown.is_closed) == (None, None, None)
+
+    closed = hours_service.compute_today_status(
+        RestaurantHours(location_id=1, day_of_week=0, is_closed=True), tz
+    )
+    assert closed.is_closed is True and closed.open_time is None and closed.is_open_now is False
+
+    partial = hours_service.compute_today_status(
+        RestaurantHours(location_id=1, day_of_week=0, is_closed=False, open_time=time(9, 0)), tz
+    )
+    assert partial.open_time is None and partial.is_closed is False
+
+    full = hours_service.compute_today_status(
+        RestaurantHours(
+            location_id=1, day_of_week=0, is_closed=False, open_time=time(9, 0), close_time=time(17, 0)
+        ),
+        tz,
+    )
+    assert (full.open_time, full.close_time, full.is_closed) == (time(9, 0), time(17, 0), False)
 
 
 @pytest.mark.asyncio

@@ -10,6 +10,7 @@ confirmed and used as-is.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime as dt
 from datetime import time
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -90,6 +91,46 @@ async def is_open_now_for_location(db: AsyncSession, location_id: int, tz_name: 
         )
     )
     return compute_is_open_now(result.scalar_one_or_none(), tz_name)
+
+
+@dataclass(frozen=True)
+class TodayStatus:
+    """Today's hours in the location's own timezone, for the search card's
+    "Open today 11am-9pm" / "Closed today" label. All-None = unknown.
+    """
+
+    is_open_now: bool | None
+    open_time: time | None
+    close_time: time | None
+    is_closed: bool | None
+
+
+def compute_today_status(today_hours: RestaurantHours | None, tz_name: str) -> TodayStatus:
+    is_open_now = compute_is_open_now(today_hours, tz_name)
+    if today_hours is None or today_hours.is_closed is None:
+        return TodayStatus(is_open_now, None, None, None)
+    if today_hours.is_closed:
+        return TodayStatus(is_open_now, None, None, True)
+    # Open day: only expose the times when both are present (never guess).
+    if today_hours.open_time is None or today_hours.close_time is None:
+        return TodayStatus(is_open_now, None, None, False)
+    return TodayStatus(is_open_now, today_hours.open_time, today_hours.close_time, False)
+
+
+async def today_status_for_location(
+    db: AsyncSession, location_id: int, tz_name: str
+) -> TodayStatus:
+    """Like `is_open_now_for_location`, but also returns today's hours —
+    used by /search, whose cards show today's open/close times.
+    """
+    day = today_weekday(tz_name)
+    result = await db.execute(
+        select(RestaurantHours).where(
+            RestaurantHours.location_id == location_id,
+            RestaurantHours.day_of_week == day,
+        )
+    )
+    return compute_today_status(result.scalar_one_or_none(), tz_name)
 
 
 async def replace_hours(db: AsyncSession, location_id: int, entries: list[HourEntryIn]) -> None:

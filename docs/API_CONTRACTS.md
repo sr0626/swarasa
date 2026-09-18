@@ -84,7 +84,10 @@ Response:
         "phone": "+14695551234",
         "is_verified": true,
         "is_paid": true,
-        "is_open_now": true
+        "is_open_now": true,
+        "open_time": "11:00:00",
+        "close_time": "21:00:00",
+        "is_closed": false
       },
       "location_count_nearby": 3,
       "cover_photo_url": null,
@@ -105,8 +108,16 @@ Notes:
   unknown) — a per-row display lookup against `restaurant_hours` +
   `restaurant_location.timezone`, not a filter (root/DECISIONS.md
   "Restaurant hours").
-- Default sort: `is_verified` desc, then `distance_mi` asc, then `name`
-  asc (DECISIONS.md "Search default sort").
+- `nearest_location.open_time` / `close_time` / `is_closed` (added
+  2026-09-18) are today's hours in the location's own timezone, for the
+  card's "Open today 11am–9pm" / "Closed today" label. All `null` =
+  hours unknown for today (the card shows no label). `is_closed: true`
+  => `open_time`/`close_time` are `null`. Times are `HH:MM:SS`.
+- Default sort: `is_paid` desc, then `is_verified` desc, then
+  `distance_mi` asc, then `name` asc (DECISIONS.md "Search default sort").
+  Paid results carry `nearest_location.is_paid: true`, which the client
+  MUST label (the card's "Featured" badge) — promoted placement has to be
+  clearly labeled.
 - `cover_photo_url` — see the photo note at the top of this doc.
   `cover_photo_thumbnail_url` (added 2026-09-16, S3 image resize
   pipeline — `docs/DECISIONS.md` "Resize Lambda: thumbnail variant") is
