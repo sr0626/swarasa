@@ -28,11 +28,10 @@ const labelClass = "text-sm font-semibold text-brand-ink";
 export default function ProfileEditForm({ ownerAccount }: { ownerAccount: OwnerAccount }) {
   const [form, setForm] = useState<FormState>({
     full_name: ownerAccount.full_name ?? "",
-    // MeUpdateRequest accepts phone but GET /auth/me's OwnerAccountOut
-    // doesn't return it back (no `phone` field on OwnerAccount, see
-    // types/auth.ts) — the field starts blank rather than guessing a
-    // stale value, matching root CLAUDE.md "no fabricated data, ever".
-    phone: "",
+    // Fixed 2026-09-17: GET /auth/me's OwnerAccountOut now returns phone
+    // (it previously didn't, so this field always started blank even for
+    // an owner who'd already set one — see docs/API_CONTRACTS.md).
+    phone: ownerAccount.phone ?? "",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);

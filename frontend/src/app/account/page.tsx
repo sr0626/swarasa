@@ -27,15 +27,18 @@ import {
   getMyFollows,
   getMyManagedLocations,
 } from "@/lib/api/auth";
+import { getMyRestaurants } from "@/lib/api/restaurants";
 import ProfileEditForm from "@/components/account/ProfileEditForm";
 import FollowedRestaurantsList from "@/components/account/FollowedRestaurantsList";
 import ManagedLocationsList from "@/components/account/ManagedLocationsList";
+import OwnerRestaurantsList from "@/components/account/OwnerRestaurantsList";
 import DataPrivacySection from "@/components/account/DataPrivacySection";
 import InfoPanel from "@/components/ui/InfoPanel";
 import type { AuthMe } from "@/types/auth";
 import type { FollowedBrand } from "@/types/follow";
 import type { ManagedLocation } from "@/types/location";
 import type { DataDeletionRequest } from "@/types/privacy";
+import type { RestaurantBrand } from "@/types/restaurant";
 
 export const metadata: Metadata = {
   title: "My Account",
@@ -76,6 +79,20 @@ export default async function AccountPage() {
     }
   }
 
+  let ownedBrands: RestaurantBrand[] = [];
+  let ownedBrandsError: string | null = null;
+  if (me && me.role === "owner") {
+    try {
+      const page = await getMyRestaurants({ page: 1, page_size: 50 }, session.accessToken);
+      ownedBrands = page.results;
+    } catch (error) {
+      ownedBrandsError =
+        error instanceof ApiError
+          ? error.message
+          : "Could not load your restaurants. Please try again.";
+    }
+  }
+
   let managedLocations: ManagedLocation[] = [];
   let managedLocationsError: string | null = null;
   if (me && me.role === "manager") {
@@ -111,7 +128,8 @@ export default async function AccountPage() {
       <section className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
         <h1 className="font-display text-2xl font-bold text-brand-ink sm:text-3xl">My Account</h1>
         <p className="mt-2 text-sm text-brand-ink-muted">
-          Your profile, {me?.role === "registered_user" ? "followed restaurants, " : ""}
+          Your profile, {me?.role === "owner" ? "your restaurants, " : ""}
+          {me?.role === "registered_user" ? "followed restaurants, " : ""}
           {me?.role === "manager" ? "assigned locations, " : ""}
           and data privacy settings.
         </p>
@@ -133,6 +151,10 @@ export default async function AccountPage() {
 
               {me.role === "owner" && me.owner_account && (
                 <ProfileEditForm ownerAccount={me.owner_account} />
+              )}
+
+              {me.role === "owner" && (
+                <OwnerRestaurantsList brands={ownedBrands} loadError={ownedBrandsError} />
               )}
 
               {me.role !== "owner" && (

@@ -1150,10 +1150,14 @@ Response:
   "owner_account": {
     "id": 55,
     "full_name": "Priya Rao",
+    "phone": null,
     "stripe_customer_id": null
   }
 }
 ```
+`phone` added 2026-09-17 (was previously accepted by `PATCH /auth/me` but
+never returned by `GET /auth/me`, so the account page's edit form could
+never pre-fill it — a real, fixed gap, not a deliberate omission).
 `owner_account` is `null` for `manager`/`admin`/`registered_user` roles
 (they have no local business record in this schema — see
 `docs/DATA_MODEL.md`'s identity note). For an `owner`-group user with

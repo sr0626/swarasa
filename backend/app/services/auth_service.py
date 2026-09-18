@@ -62,6 +62,7 @@ def _owner_out(owner: OwnerAccount) -> OwnerAccountOut:
     return OwnerAccountOut(
         id=owner.id,
         full_name=owner.full_name,
+        phone=owner.phone,
         stripe_customer_id=owner.stripe_customer_id,
     )
 

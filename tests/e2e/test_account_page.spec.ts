@@ -67,3 +67,18 @@ test.fixme(
     await page.goto("/account");
   }
 );
+
+test.fixme(
+  "owner sees their restaurant list on /account, with a phone field pre-filled from a prior save",
+  async ({ page }) => {
+    // Needs: a real owner session with (a) at least one owned
+    // restaurant_brand to exercise OwnerRestaurantsList.tsx against real
+    // data instead of its empty state, and (b) a previously-saved phone
+    // number to prove ProfileEditForm.tsx's phone field pre-fills from
+    // GET /auth/me instead of starting blank (a real gap fixed alongside
+    // this — GET /auth/me's OwnerAccountOut didn't return phone at all
+    // before, see docs/API_CONTRACTS.md).
+    await loginAs(page, "owner");
+    await page.goto("/account");
+  }
+);
