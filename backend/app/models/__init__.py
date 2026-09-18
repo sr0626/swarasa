@@ -22,6 +22,7 @@ from app.models.restaurant_cuisine import RestaurantCuisine
 from app.models.location_manager import LocationManager
 from app.models.user_follow import UserFollow
 from app.models.claim_request import ClaimRequest
+from app.models.listing_report import ListingReport
 from app.models.data_deletion_request import DataDeletionRequest
 from app.models.audit_log import AuditLog
 from app.models.platform_pricing import PlatformPricing
@@ -38,6 +39,7 @@ __all__ = [
     "LocationManager",
     "UserFollow",
     "ClaimRequest",
+    "ListingReport",
     "DataDeletionRequest",
     "AuditLog",
     "PlatformPricing",

@@ -18,6 +18,7 @@ from app.routers import (
     cuisine,
     data_deletion,
     health,
+    listing_report,
     locations,
     restaurants,
     search,
@@ -32,6 +33,7 @@ app.include_router(search.router)
 app.include_router(restaurants.router)
 app.include_router(locations.router)
 app.include_router(claim.router)
+app.include_router(listing_report.router)
 app.include_router(auth.router)
 app.include_router(cuisine.router)
 app.include_router(data_deletion.router)

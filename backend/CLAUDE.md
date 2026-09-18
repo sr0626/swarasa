@@ -214,6 +214,9 @@ These routes are explicitly public — all others require auth:
 - `GET /restaurants/{id}/locations`
 - `GET /locations/{id}`
 - `GET /cuisine-tags`
+- `POST /reports` (anonymous "report a problem"; uses `get_current_user_optional`
+  to attribute a signed-in caller — honeypot + length limits are its only
+  anti-abuse controls, see `services/listing_report_service.py`)
 
 ## Environment Variables (never hardcode these)
 ```
