@@ -138,5 +138,36 @@ resource "aws_vpc_endpoint" "logs" {
   tags = merge(local.common_tags, { Name = "${var.project}-vpce-logs-${var.env}" })
 }
 
+# -------------------------------------------------------------------
+# VPC Interface endpoint — Cognito Identity Provider
+#
+# Found 2026-09-18: the Lambda's IAM role has held cognito-idp:ListUsers
+# since PR #10 (manager-assignment-by-email lookup, docs/API_CONTRACTS.md),
+# and every management command that resolves an owner/manager by email
+# (seed_dev_data, bulk_import_restaurants, delete_user_data) calls the same
+# find_sub_by_email(). None of that is reachable from inside this Lambda's
+# private subnets without this endpoint -- there's no NAT Gateway (root
+# CLAUDE.md "NEVER create a NAT Gateway") and no cognito-idp endpoint
+# existed, so every one of those code paths has been hanging on an
+# unreachable connection attempt until the Lambda's own 30s function
+# timeout kills it, in every real deployment since this Lambda was first
+# created. IAM authorization was correct; the network path to use it never
+# existed. Caught live via `delete_test_user.py` timing out 3x in a row
+# while GET /cuisine-tags (no Cognito call in its path) succeeded
+# normally -- see docs/DECISIONS.md "Missing Cognito VPC endpoint" for the
+# full diagnostic trail. ~$7.30/mo per AZ, same order as the
+# secretsmanager/logs endpoints above.
+# -------------------------------------------------------------------
+resource "aws_vpc_endpoint" "cognito_idp" {
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.aws_region}.cognito-idp"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.private[*].id
+  security_group_ids  = [aws_security_group.vpc_endpoints.id]
+  private_dns_enabled = true
+
+  tags = merge(local.common_tags, { Name = "${var.project}-vpce-cognito-idp-${var.env}" })
+}
+
 # SES VPC endpoint deferred — SES not provisioned in Phase 1.
 # Add com.amazonaws.{region}.ses interface endpoint here when SES is activated.

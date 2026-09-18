@@ -252,6 +252,33 @@ same-day fallback if the new version needs correcting)*
 
 ## Infrastructure & Hosting
 
+**Missing Cognito VPC endpoint — every Cognito-email-lookup code path was silently unreachable from the Lambda**
+2026-09-18 | Real production bug, found live while testing `scripts/delete_test_user.py`
+against the deployed dev environment: three consecutive `aws lambda invoke`
+calls each hung for the full 30s Lambda timeout with zero application-level
+log lines, even after confirming Aurora itself was healthy (`GET
+/cuisine-tags`, no Cognito call in its path, succeeded normally at a routine
+~16s cold-start). Root cause: the Lambda's IAM role has held
+`cognito-idp:ListUsers` since PR #10 (manager-assignment-by-email lookup),
+and `find_sub_by_email()` — called by manager assignment, `seed_dev_data`,
+`bulk_import_restaurants`, and `delete_user_data` alike — has no network
+path to Cognito's API at all: no NAT Gateway (root CLAUDE.md guardrail) and
+no `cognito-idp` VPC interface endpoint ever existed (`infra/modules/
+networking/main.tf` only had S3/Secrets Manager/Logs). IAM authorization was
+correct from day one; the network path to use it never existed, so every one
+of those code paths has been hanging on an unreachable connection attempt in
+every real deployment since this Lambda was first created — invisible until
+now because every automated test mocks the Cognito call.
+Fix: added `aws_vpc_endpoint.cognito_idp` (Interface, `private_dns_enabled =
+true`), same pattern/security-group/cost tier as the existing Secrets
+Manager and Logs endpoints (~$7.30/mo per AZ). `terraform validate` passed
+in an isolated scratch copy; a real `plan`/`apply` still needs the human
+(root CLAUDE.md "NEVER run terraform apply").
+*Rejected: a NAT Gateway (explicitly forbidden, and massive overkill for
+reaching one AWS service); polling/retrying around the hang in application
+code (treats a structural unreachability as a transient blip — it isn't,
+every attempt would fail identically forever without the endpoint).*
+
 **S3 image resize pipeline: `raw/`/`processed/`/`thumbnails/` key convention, predictable key instead of read-after-write**
 2026-09-16 | Completed the pipeline BRD 5.3 "S3 Image Upload Pipeline"
 already fully specified but that was only half-built (`docs/PROJECT_PLAN.csv`
