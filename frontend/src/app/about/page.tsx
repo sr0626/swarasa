@@ -11,11 +11,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import TopBar from "@/components/home/TopBar";
+import { DEFAULT_CITY_LABEL } from "@/lib/constants/city";
 
 export const metadata: Metadata = {
   title: "About Us",
   description:
-    "Swarasa is a location-based discovery platform for Indian restaurants across Dallas-Fort Worth, built around regional cuisine filters, verified listings, and owner-managed menus.",
+    `Swarasa is a location-based discovery platform for Indian restaurants across ${DEFAULT_CITY_LABEL}, built around regional cuisine filters, verified listings, and owner-managed menus.`,
   alternates: {
     canonical: "/about",
   },
@@ -37,8 +38,8 @@ export default function AboutPage() {
         <div className="mt-6 flex flex-col gap-6 text-base leading-relaxed text-brand-ink-muted">
           <p>
             Swarasa is a location-based discovery platform built for one
-            purpose: helping people across Dallas-Fort Worth find the Indian
-            food they&apos;re actually craving. Generic search and review
+            purpose: helping people across {DEFAULT_CITY_LABEL} find the
+            Indian food they&apos;re actually craving. Generic search and review
             apps flatten a huge, regionally diverse cuisine into a single
             category. Swarasa doesn&apos;t &mdash; you can filter by regional
             cuisine, dietary needs, and craving, and get to a verified
@@ -56,7 +57,7 @@ export default function AboutPage() {
           </p>
 
           <p>
-            We&apos;re starting right here in Dallas-Fort Worth, with a
+            We&apos;re starting right here in {DEFAULT_CITY_LABEL}, with a
             directory of verified restaurants, geo-based search, and an
             owner portal that makes it easy for a restaurant to claim and
             maintain its own listing. Time-limited deals, richer owner

@@ -7,7 +7,13 @@ export interface RestaurantBrand {
   id: number;
   name: string;
   slug: string;
-  description: string;
+  // Was wrongly typed as non-nullable `string` -- the backend column
+  // (restaurant_brand.description) has always allowed NULL, and every
+  // CSV-imported restaurant has one (no description column in that
+  // import). Found live 2026-09-18: crashed generateMetadata on
+  // /restaurant/[slug] with "Cannot read properties of null (reading
+  // 'slice')" for every such restaurant.
+  description: string | null;
   is_claimed: boolean;
   /** null for unclaimed listings — frontend renders a "Claim this listing" CTA. */
   owner_id: number | null;

@@ -27,7 +27,9 @@ export interface LocationSummary {
   city: string;
   state: string;
   postal_code: string;
-  phone: string;
+  // Genuinely nullable on the backend (restaurant_location.phone) — found
+  // live 2026-09-18 alongside the same bug on RestaurantBrand.description.
+  phone: string | null;
   is_verified: boolean;
   is_paid: boolean;
   /**
@@ -85,7 +87,7 @@ export interface LocationDetail {
   state: string;
   postal_code: string;
   country: string;
-  phone: string;
+  phone: string | null;
   timezone: string;
   latitude: number;
   longitude: number;
@@ -107,7 +109,7 @@ export interface CreateLocationInput {
   state: string;
   postal_code: string;
   country: string;
-  phone: string;
+  phone: string | null;
   timezone: string;
   latitude: number;
   longitude: number;
@@ -207,7 +209,7 @@ export interface ManagedLocation {
   city: string;
   state: string;
   postal_code: string;
-  phone: string;
+  phone: string | null;
   is_verified: boolean;
   is_paid: boolean;
   is_open_now: boolean | null;

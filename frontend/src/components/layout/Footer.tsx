@@ -11,6 +11,7 @@
 // none are fabricated here.
 import Link from "next/link";
 import SwarasaMark from "@/components/icons/SwarasaMark";
+import { DEFAULT_CITY_LABEL } from "@/lib/constants/city";
 
 const FOOTER_LINKS = [
   { href: "/about", label: "About Us" },
@@ -30,7 +31,7 @@ export default function Footer() {
             Swarasa
           </span>
           <span className="mt-1 text-xs text-brand-ink-subtle">
-            Discover Your Taste — Dallas-Fort Worth
+            Discover Your Taste — {DEFAULT_CITY_LABEL}
           </span>
         </div>
 
