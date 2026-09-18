@@ -70,5 +70,5 @@ export default async function TopBar() {
     ? await resolveGreetingName(session.accessToken, session.email)
     : null;
 
-  return <TopBarShell greetingName={greetingName} />;
+  return <TopBarShell greetingName={greetingName} role={session?.role ?? null} />;
 }

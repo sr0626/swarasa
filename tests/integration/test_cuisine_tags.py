@@ -66,13 +66,16 @@ async def test_inactive_cuisine_tags_are_excluded(client, db_session, as_anonymo
 
 @pytest.mark.asyncio
 async def test_each_result_row_has_exactly_the_contract_fields(client, db_session, as_anonymous):
-    await create_cuisine_tag(db_session, name="dining-lunch", display_name="Lunch", category="dining_time")
+    tag = await create_cuisine_tag(db_session, name="dining-lunch", display_name="Lunch", category="dining_time")
     await db_session.commit()
 
     response = await client.get("/cuisine-tags?category=dining_time")
     assert response.status_code == 200, response.text
     row = response.json()["results"][0]
-    assert set(row.keys()) == {"name", "display_name", "category"}
+    assert set(row.keys()) == {"id", "name", "display_name", "category"}
+    # `id` is what POST/PATCH /restaurants' `cuisine_tag_ids` picker submits
+    # back — must be the real row id, not just present.
+    assert row["id"] == tag.id
 
 
 @pytest.mark.asyncio

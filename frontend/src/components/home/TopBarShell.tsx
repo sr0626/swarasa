@@ -20,8 +20,21 @@
 import Link from "next/link";
 import SwarasaMark from "@/components/icons/SwarasaMark";
 import AccountMenu from "./AccountMenu";
+import type { UserRole } from "@/types/auth";
 
-export default function TopBarShell({ greetingName }: { greetingName: string | null }) {
+export default function TopBarShell({
+  greetingName,
+  role = null,
+}: {
+  greetingName: string | null;
+  /**
+   * Omitted by app/error.tsx (a required Client Component that can't
+   * safely re-derive the session mid-error — see its own comment), which
+   * always passes `greetingName={null}` anyway, so the CTA below renders
+   * its signed-out `/login` form regardless of this default.
+   */
+  role?: UserRole | null;
+}) {
   return (
     <header className="border-b border-brand-border bg-brand-bg">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
@@ -50,26 +63,35 @@ export default function TopBarShell({ greetingName }: { greetingName: string | n
           )}
         </nav>
 
-        {/* MOBILE OVERFLOW FIX (flagged in this PR's description): at 375px,
-            wordmark + account menu + this CTA together overflowed the
-            viewport (measured 489px of content in a 375px viewport —
+        {/* MOBILE OVERFLOW FIX (flagged in a prior PR's description): at
+            375px, wordmark + account menu + this CTA together overflowed
+            the viewport (measured 489px of content in a 375px viewport —
             frontend/CLAUDE.md "No horizontal scroll on mobile" / "Design
             for 375px viewport first"). The account menu already gives a
             signed-in visitor their own way into the app, so this
-            acquisition CTA — which still only ever points at `/login`,
-            not obviously useful to someone already signed in — steps
-            aside below `sm:` for that case only. Signed-out mobile layout
-            is byte-for-byte unchanged: this link was never conditionally
-            hidden before this task, and still isn't for a signed-out
-            visitor. */}
-        <Link
-          href="/login"
-          className={`min-h-[44px] items-center whitespace-nowrap rounded-brand-pill bg-brand-ink px-4 text-sm font-semibold text-brand-bg transition hover:bg-brand-ink/90 sm:px-5 ${
-            greetingName ? "hidden sm:flex" : "flex"
-          }`}
-        >
-          Add Your Restaurant
-        </Link>
+            acquisition CTA steps aside below `sm:` for that case only.
+            Signed-out mobile layout is unchanged: shown at all widths.
+
+            ROUTING (bug fix, flagged in this PR's description): this
+            previously always linked to `/login`, including for an
+            already-signed-in visitor — clicking it while signed in bounced
+            them back to the sign-in page. Only an owner can actually
+            create a restaurant (`POST /restaurants` is "Auth: owner",
+            docs/API_CONTRACTS.md), so a signed-in owner now goes straight
+            to the create-brand form and a signed-in manager/admin/
+            registered_user — for whom this CTA doesn't apply — don't see
+            it at all, rather than clicking into a page that would just
+            403. */}
+        {(!greetingName || role === "owner") && (
+          <Link
+            href={greetingName ? "/portal/brands/new" : "/login"}
+            className={`min-h-[44px] items-center whitespace-nowrap rounded-brand-pill bg-brand-ink px-4 text-sm font-semibold text-brand-bg transition hover:bg-brand-ink/90 sm:px-5 ${
+              greetingName ? "hidden sm:flex" : "flex"
+            }`}
+          >
+            Add Your Restaurant
+          </Link>
+        )}
       </div>
     </header>
   );
