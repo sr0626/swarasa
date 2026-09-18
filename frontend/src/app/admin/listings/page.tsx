@@ -12,6 +12,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireSession } from "@/lib/auth/guards";
+import TopBar from "@/components/home/TopBar";
 import { ApiError } from "@/lib/api/client";
 import { getMyRestaurants, getRestaurantLocations } from "@/lib/api/restaurants";
 import AdminListingsPanel, {
@@ -91,6 +92,7 @@ export default async function AdminListingsPage({ searchParams }: AdminListingsP
 
   return (
     <main className="min-h-screen bg-brand-bg">
+      <TopBar />
       <section className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
         <h1 className="font-display text-2xl font-bold text-brand-ink sm:text-3xl">
           Listings

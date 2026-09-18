@@ -20,6 +20,7 @@
 // worse than not having one.
 import type { Metadata } from "next";
 import { requireSession } from "@/lib/auth/guards";
+import TopBar from "@/components/home/TopBar";
 import { ApiError } from "@/lib/api/client";
 import {
   getCurrentUser,
@@ -125,6 +126,7 @@ export default async function AccountPage() {
 
   return (
     <main className="min-h-screen bg-brand-bg">
+      <TopBar />
       <section className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
         <h1 className="font-display text-2xl font-bold text-brand-ink sm:text-3xl">My Account</h1>
         <p className="mt-2 text-sm text-brand-ink-muted">
