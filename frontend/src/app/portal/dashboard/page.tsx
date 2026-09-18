@@ -35,6 +35,7 @@ import TopBar from "@/components/home/TopBar";
 import { ApiError } from "@/lib/api/client";
 import { getMyRestaurants, getRestaurantLocations } from "@/lib/api/restaurants";
 import { getLocationManagers } from "@/lib/api/locations";
+import { mapWithConcurrency } from "@/lib/concurrency";
 import BrandCard from "@/components/portal/BrandCard";
 import InfoPanel from "@/components/ui/InfoPanel";
 import type { LocationSummary, LocationWithManagers } from "@/types/location";
@@ -49,6 +50,13 @@ interface BrandWithLocations {
   locations: LocationWithManagers[];
   locationsError: string | null;
 }
+
+// Caps how many brands' locations are fetched in parallel — see
+// lib/concurrency.ts's header comment for why (DB connection-pool storm,
+// PR #101). 5 keeps a realistic production owner (3-4, up to ~10
+// restaurants per direct user confirmation) essentially fully parallel
+// while bounding the worst case for an outlier account.
+const DASHBOARD_FETCH_CONCURRENCY = 5;
 
 /**
  * Fetches a single location's actively-assigned managers via the existing
@@ -150,7 +158,9 @@ export default async function DashboardPage() {
 
   const brandsWithLocations = loadError
     ? []
-    : await Promise.all(brands.map((brand) => loadLocationsForBrand(brand, session.accessToken)));
+    : await mapWithConcurrency(brands, DASHBOARD_FETCH_CONCURRENCY, (brand) =>
+        loadLocationsForBrand(brand, session.accessToken)
+      );
 
   return (
     <main className="min-h-screen bg-brand-bg">

@@ -35,16 +35,12 @@ export default function Hero() {
     <section className="bg-brand-bg">
       <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
         <div className="mx-auto max-w-3xl text-center">
-          <span className="inline-flex items-center rounded-brand-pill bg-brand-chip px-3 py-1 text-xs font-semibold text-brand-chip-ink">
-            Verified restaurants near you
-          </span>
-
-          <h1 className="mt-5 font-display text-3xl font-bold leading-tight text-brand-ink sm:text-4xl md:text-5xl">
+          <h1 className="font-display text-3xl font-bold leading-tight text-brand-ink sm:text-4xl md:text-5xl">
             Discover your taste.
           </h1>
 
           <p className="mt-4 text-base text-brand-ink-muted sm:text-lg">
-            Satisfy every craving — verified restaurants near you, filtered
+            Satisfy every craving — discover restaurants near you, filtered
             by region, diet, and what&apos;s open right now.
           </p>
         </div>
