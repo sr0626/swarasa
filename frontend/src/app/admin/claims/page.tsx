@@ -10,6 +10,7 @@
 // this needs once it exists.
 import type { Metadata } from "next";
 import { requireSession } from "@/lib/auth/guards";
+import TopBar from "@/components/home/TopBar";
 import ClaimReviewPanel from "@/components/admin/ClaimReviewPanel";
 
 export const metadata: Metadata = {
@@ -21,6 +22,7 @@ export default async function AdminClaimsPage() {
 
   return (
     <main className="min-h-screen bg-brand-bg">
+      <TopBar />
       <section className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
         <h1 className="font-display text-2xl font-bold text-brand-ink sm:text-3xl">
           Claims Review

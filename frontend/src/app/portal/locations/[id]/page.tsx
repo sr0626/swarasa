@@ -13,6 +13,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireSession } from "@/lib/auth/guards";
+import TopBar from "@/components/home/TopBar";
 import { getLocationById, getLocationManagers } from "@/lib/api/locations";
 import LocationInfoForm from "@/components/portal/LocationInfoForm";
 import LocationHoursEditor from "@/components/portal/LocationHoursEditor";
@@ -32,6 +33,7 @@ interface LocationPageProps {
 function NotFoundOrNoAccess() {
   return (
     <main className="min-h-screen bg-brand-bg">
+      <TopBar />
       <section className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
         <InfoPanel
           title="Location not found"
@@ -81,6 +83,7 @@ export default async function PortalLocationPage({ params }: LocationPageProps) 
 
   return (
     <main className="min-h-screen bg-brand-bg">
+      <TopBar />
       <section className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
         <Link href="/portal/dashboard" className="text-sm font-medium text-brand-ink-subtle hover:text-brand-ink">
           Back to dashboard
