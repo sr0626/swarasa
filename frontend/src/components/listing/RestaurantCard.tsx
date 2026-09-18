@@ -10,7 +10,7 @@
 // icon requirement is met without inventing a number.
 import Link from "next/link";
 import type { SearchResultItem } from "@/types/search";
-import { LocationPinIcon, PhoneIcon, StarIcon } from "@/components/ui/icons";
+import { LocationPinIcon, PhoneIcon, StarIcon, StoreIcon } from "@/components/ui/icons";
 import OpenStatusBadge from "@/components/ui/OpenStatusBadge";
 
 export default function RestaurantCard({ item }: { item: SearchResultItem }) {
@@ -29,7 +29,7 @@ export default function RestaurantCard({ item }: { item: SearchResultItem }) {
     <div className="group flex flex-col overflow-hidden rounded-brand-card border border-brand-border bg-white shadow-brand-card transition hover:shadow-brand-card-hover">
       <Link href={`/restaurant/${item.slug}`} className="flex flex-col">
         <div className="relative h-40 w-full shrink-0 overflow-hidden bg-brand-warm-gradient">
-          {coverPhoto && (
+          {coverPhoto ? (
             // eslint-disable-next-line @next/next/no-img-element -- remote
             // CloudFront URL, no next/image domain config for this host yet
             // (same as RestaurantHero.tsx, the detail page's equivalent).
@@ -38,6 +38,13 @@ export default function RestaurantCard({ item }: { item: SearchResultItem }) {
               alt={`${item.name} cover photo`}
               className="absolute inset-0 h-full w-full object-cover"
             />
+          ) : (
+            // Default generic image when no cover photo is set — same
+            // StoreIcon already used for "this is a restaurant" elsewhere
+            // in the app (e.g. portal/BrandCard.tsx), not a new asset.
+            <div className="absolute inset-0 flex items-center justify-center">
+              <StoreIcon className="h-12 w-12 text-brand-bg/70" />
+            </div>
           )}
           {nearest_location.is_paid && (
             <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-brand-pill bg-brand-ink/85 px-2.5 py-1 text-xs font-semibold text-brand-bg">
