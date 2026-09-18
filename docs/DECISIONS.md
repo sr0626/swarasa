@@ -760,6 +760,62 @@ Infra to revisit if this pattern gets used often enough to want it).*
 
 ## Database & Data Model
 
+**CSV bulk restaurant import: `website` is brand-level, geocoding happens on the human's machine (not inside the Lambda), CSV extends the existing `bulk_import_restaurants` command rather than forking a new one**
+2026-09-17 | Combined schema+backend decision (root CLAUDE.md
+"Decision-Making Autonomy"), closing the user request "upload a CSV with
+name/address/url/phone/type, related to an owner email." Three real
+sub-decisions:
+
+- **`website` added to `restaurant_brand`, not `restaurant_location`.**
+  A restaurant's website describes the concept as a whole, not one
+  address — the same rationale `restaurant_cuisine` already uses for
+  staying brand-level (docs/DATA_MODEL.md "restaurant_cuisine" judgment
+  call). `varchar(500)`, matching `claim_request.google_business_profile_url`'s
+  existing sizing convention for a URL column in this schema. See
+  docs/DATA_MODEL.md "restaurant_brand" for the full write-up.
+  *Rejected: `restaurant_location.website` (a chain's locations would
+  each need the same URL re-entered, and nothing else location-specific
+  about a website was asked for)*.
+- **Geocoding happens in the new human-run script
+  (`scripts/bulk_import_restaurants_csv.py`), before the Lambda is ever
+  invoked — NOT inside the `bulk_import_restaurants` management command,
+  despite that being the more obvious place for it.** Confirmed against
+  `infra/modules/networking/main.tf` ("Private subnets — Lambda + Aurora
+  live here; no NAT Gateway") and root CLAUDE.md "NEVER create a NAT
+  Gateway": the deployed Lambda has an in-VPC route to Aurora but **no
+  route to the public internet at all**, so it could not reach
+  Nominatim even if the command tried. This is also the real precedent
+  already in this repo, not a new pattern: `app/scripts/irving_restaurants_seed.json`'s
+  own `_comment` field says its rows were "geocoded via Nominatim" before
+  being committed, not at Lambda runtime. The script geocodes any row
+  missing `latitude`/`longitude` (1 req/sec, descriptive `User-Agent`,
+  per Nominatim's usage policy) and hands the Lambda an already-enriched
+  CSV; the Lambda's only job stays "write to Aurora," consistent with
+  every other management command in this file.
+  *Rejected: geocoding inside the Lambda per a literal reading of "runs
+  inside the Lambda" (would require provisioning a NAT Gateway, an
+  always-on cost explicitly forbidden by root CLAUDE.md "NEVER — Cost",
+  just to reach one third-party HTTP API)*.
+- **CSV is a second input shape (`csv_content`) on the existing
+  `bulk_import_restaurants` management command, not a new command name,
+  and not a new HTTP endpoint.** Reuses the identical brand/location
+  create-or-skip logic (`app/services/restaurant_bulk_import_service.py`)
+  rather than forking it — only owner resolution (per-row `owner_email`
+  vs. one batch-level `owner_id`) and cuisine matching (free-text `type`
+  vs. no cuisine at all) differ. Kept off HTTP because the actual caller
+  is a human running a local script against a local file, not a
+  browser/admin-panel flow, and a large CSV would risk API Gateway's
+  payload-size limits with no benefit over a direct Lambda invoke — same
+  trust boundary (`lambda:InvokeFunction` in the target AWS account) as
+  every other management command. See docs/API_CONTRACTS.md "CSV bulk
+  restaurant import" for the full column list and payload shape.
+  *Rejected: a brand-new `bulk_import_restaurants_csv` command name
+  (would duplicate the owner-lookup/cap/dispatch boilerplate
+  `management.py` already has for zero real benefit), an HTTP endpoint
+  parallel to `POST /admin/restaurants/bulk-import` (no frontend caller
+  exists or was asked for, and CSV body size is a worse fit for API
+  Gateway than a direct Lambda invoke)*.
+
 **CCPA data export/deletion: scoped to this app's own DB (not Cognito), synchronous export, admin-reviewed deletion queue modeled on `claim_request`, audit_log retained not redacted**
 2026-09-16 | Backend Dev decision (root CLAUDE.md "Decision-Making
 Autonomy"), closing the tracked Phase 1 gap in `docs/PROJECT_PLAN.csv`

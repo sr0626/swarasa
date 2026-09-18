@@ -202,6 +202,7 @@ Response:
       "name": "Spice Route",
       "slug": "spice-route",
       "description": "Hyderabadi biryani specialists since 2010.",
+      "website": "https://spiceroute.example.com",
       "is_claimed": true,
       "owner_id": 55,
       "cuisine_tags": [
@@ -250,6 +251,7 @@ Response:
   "name": "Spice Route",
   "slug": "spice-route",
   "description": "Hyderabadi biryani specialists since 2010.",
+  "website": "https://spiceroute.example.com",
   "is_claimed": true,
   "owner_id": 55,
   "cuisine_tags": [
@@ -258,7 +260,9 @@ Response:
   "location_count": 3
 }
 ```
-`owner_id` is `null` for unclaimed listings (still visible, per
+`website` is `null` when not set -- added alongside the CSV bulk-import
+feature (docs/DATA_MODEL.md "restaurant_brand" judgment call: brand-level,
+not location-level). `owner_id` is `null` for unclaimed listings (still visible, per
 DECISIONS.md "Claim flow" — the frontend renders a "Claim this
 listing" CTA when `is_claimed` is `false`).
 
@@ -302,10 +306,11 @@ Body:
 {
   "name": "Spice Route",
   "description": "Hyderabadi biryani specialists since 2010.",
+  "website": "https://spiceroute.example.com",
   "cuisine_tag_ids": [7, 12]
 }
 ```
-Creates a brand owned by the authenticated owner (`is_claimed=true`,
+`website` is optional. Creates a brand owned by the authenticated owner (`is_claimed=true`,
 `owner_id=<self>`, `slug` server-generated from `name`). This is
 distinct from the claim flow, which attaches an *existing*,
 admin-seeded, unclaimed brand to an owner instead of creating a new
@@ -320,7 +325,7 @@ Audit: writes an `audit_log` row (`table_name="restaurant_brand"`,
 
 Auth: owner (must own the brand) or admin
 
-Body: any subset of `{ name, description, cuisine_tag_ids }`.
+Body: any subset of `{ name, description, website, cuisine_tag_ids }`.
 
 Response: `200`, same shape as `GET /restaurants/{id}`.
 
@@ -1389,3 +1394,94 @@ Errors:
 | 404 | `not_found` | `owner_id` does not match any `owner_account` row |
 | 400 | `bulk_import_failed` | batch-level problem (empty `restaurants` list, or over the 500-row cap) — distinct from a per-row `error` entry in a 200 response |
 | 422 | `validation_error` | request body itself fails schema validation (e.g. `restaurants` missing) |
+
+### CSV bulk restaurant import (management command, not HTTP)
+
+Added for the CSV bulk-import feature (docs/PROJECT_PLAN.csv "CSV bulk
+restaurant import", docs/DECISIONS.md same title). Unlike everything else
+in this document, this is **not** a FastAPI/HTTP route — it's a second
+input shape on the existing `bulk_import_restaurants` **management
+command** (`app/scripts/management.py`, invoked directly via `aws lambda
+invoke`, bypassing API Gateway entirely — see that file's own module
+docstring for why this dispatch style exists and its IAM-only trust
+boundary). Human-run via `scripts/bulk_import_restaurants_csv.py`
+(`backend`/`app/scripts` vs. top-level `scripts/` distinction: see
+`scripts/README.md`).
+
+**Why this is a management command, not a new HTTP endpoint:** the JSON
+path already lives at `POST /admin/restaurants/bulk-import`, but the CSV
+path's actual admin-facing tool is a local file plus a human running a
+script — there's no browser/frontend caller for it (unlike the JSON
+path's implied "admin panel" shape), and keeping it off HTTP entirely
+avoids API Gateway payload-size limits for a large CSV. Extends the same
+underlying command/service rather than forking a new one — see
+`app/services/restaurant_bulk_import_service.py`'s "CSV import path"
+docstring section for the full reasoning, including why geocoding does
+NOT happen inside this Lambda (no NAT Gateway -- no route to the public
+internet at all).
+
+Invoke payload:
+```json
+{
+  "_management_command": "bulk_import_restaurants",
+  "csv_content": "name,description,website,address_line1,address_line2,city,state,postal_code,country,phone,type,owner_email,latitude,longitude\nNamaste Grill,,https://example.com,2234 W Walnut Hill Ln,,Irving,TX,75038,US,+12145550100,south indian,owner@example.com,32.8651921,-96.9763165\n"
+}
+```
+`csv_content` on the same `bulk_import_restaurants` command wins over
+`restaurants` if both are present (see `management.py`'s docstring).
+
+**CSV column headers** (human-facing file `scripts/bulk_import_restaurants_csv.py`
+reads, before it geocodes and adds `latitude`/`longitude` itself):
+
+| Column | Required | Notes |
+|---|---|---|
+| name | yes | |
+| address_line1 | yes | |
+| city | yes | |
+| state | yes | 2-letter |
+| postal_code | yes | |
+| owner_email | yes | Resolves an EXISTING `owner_account` — a typo'd email is a per-row error, never auto-provisioned |
+| address_line2 | no | |
+| country | no | Defaults `US` |
+| phone | no | |
+| website | no | See docs/DATA_MODEL.md "restaurant_brand" |
+| description | no | |
+| type | no | Free-text cuisine, e.g. "south indian" — matched case-insensitively against `cuisine_tag.name`/`display_name`; no match is reported per-row, not a failure |
+| latitude / longitude | no | Added by `scripts/bulk_import_restaurants_csv.py` after geocoding via Nominatim — left blank in the file a human authors by hand |
+
+Effect: same idempotent create-or-skip brand/location logic as the JSON
+path (slug natural key for the brand, `(brand_id, address_line1)` for the
+location), but `owner_id` is resolved **per row** from `owner_email`
+instead of once for the whole batch, and a matched `type` links a
+`restaurant_cuisine` row (also idempotent — re-running doesn't duplicate
+the link).
+
+Response (Lambda invoke result payload):
+```json
+{
+  "ok": true,
+  "command": "bulk_import_restaurants",
+  "summary": { "created": 1, "skipped": 0, "errors": 0 },
+  "rows": [
+    {
+      "index": 0,
+      "name": "Namaste Grill",
+      "status": "created",
+      "brand_id": 101,
+      "location_id": 501,
+      "detail": null,
+      "cuisine_type_input": "south indian",
+      "cuisine_match": "south_indian"
+    }
+  ]
+}
+```
+`cuisine_type_input` is the raw `type` cell (`null` if the row didn't
+supply one). `cuisine_match` is the matched `cuisine_tag.name`, or `null`
+if `cuisine_type_input` was supplied but nothing matched — the row still
+imports (`status: "created"`), just without a cuisine tag.
+
+Errors: `{"ok": false, "command": "bulk_import_restaurants", "error": "..."}`
+for a batch-level problem (no header row, a required column entirely
+missing, zero data rows, or over the 500-row cap) — same
+per-row-vs-batch-level split as the JSON path.

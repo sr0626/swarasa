@@ -72,12 +72,24 @@ Referenced by: `restaurant_brand.owner_id`, `location_manager.assigned_by_owner_
 | name | varchar(255), not null | |
 | slug | varchar(255) unique, not null | |
 | description | text, nullable | |
+| website | varchar(500), nullable | Added in `20260917_0005_restaurant_brand_website.py` -- see judgment call below |
 | is_claimed | boolean default false, not null | See DECISIONS.md "Claim flow" |
 | claimed_at | timestamptz, nullable | Set when claim is approved |
 | created_at | timestamptz, not null | |
 | updated_at | timestamptz, not null | |
 
 Indexes: `owner_id`.
+
+**Judgment call:** `website` is on `restaurant_brand`, not
+`restaurant_location`, added alongside the CSV bulk-import feature
+(docs/PROJECT_PLAN.csv "CSV bulk restaurant import"). A restaurant's
+website describes the concept as a whole, not a specific address --
+same brand-vs-location rationale `restaurant_cuisine` already uses (see
+that table's own judgment call below): if a real multi-location brand
+ever needs a distinct URL per location, this would need to move to (or
+add) a location-level column instead. `varchar(500)` matches
+`claim_request.google_business_profile_url`'s existing sizing
+convention for a URL column in this schema.
 
 ---
 

@@ -58,30 +58,56 @@ def _run_bulk_import_restaurants(event: dict) -> dict:
     NAT/bastion/RDS Data API, so a script that writes to Aurora has to run
     inside a Lambda invocation).
 
-    Event payload shape:
+    Two mutually exclusive input shapes on the same command (extends,
+    doesn't fork -- docs/DECISIONS.md "CSV bulk restaurant import"):
+
+    1. JSON list, one shared owner for the whole batch (original shape):
         {
           "_management_command": "bulk_import_restaurants",
           "owner_email": "owner@example.com",       # OR "owner_cognito_sub"
           "restaurants": [ {"name": ..., "address_line1": ..., ...}, ... ]
         }
+       `owner_email`/`owner_cognito_sub` resolves an EXISTING local
+       `owner_account` row -- this command does not create one (unlike
+       `seed_dev_data`'s owner provisioning). The owner must already exist,
+       e.g. from a prior `seed_dev_data` run; if resolution fails, this
+       returns `ok: False` with a clear reason rather than silently
+       provisioning a new owner_account for what might be a typo'd email.
 
-    `owner_email`/`owner_cognito_sub` resolves an EXISTING local
-    `owner_account` row -- this command does not create one (unlike
-    `seed_dev_data`'s owner provisioning). The owner must already exist,
-    e.g. from a prior `seed_dev_data` run; if resolution fails, this
-    returns `ok: False` with a clear reason rather than silently
-    provisioning a new owner_account for what might be a typo'd email.
+    2. CSV text, per-row owner (added for the CSV bulk-import feature --
+       see `app/services/restaurant_bulk_import_service.py`'s "CSV import
+       path" docstring section for the full rationale, including why
+       geocoding does NOT happen in this function):
+        {
+          "_management_command": "bulk_import_restaurants",
+          "csv_content": "name,address_line1,...\\nNamaste Grill,...\\n"
+        }
+       Every row supplies its own `owner_email` column (resolved the same
+       "must already exist" way as (1)) -- normally produced by
+       `scripts/bulk_import_restaurants_csv.py`, which reads a local CSV
+       file, geocodes rows missing lat/lon via Nominatim on the human's
+       own machine (this Lambda has no internet route -- no NAT Gateway,
+       see the service module's docstring), and invokes this command with
+       the enriched CSV text.
+
+    If both `restaurants` and `csv_content` are present, `csv_content`
+    wins (CSV is the newer, per-row-owner path; silently ignoring one of
+    two conflicting inputs would be more surprising than picking one).
     """
     from app.db.session import get_session_factory
     from app.services import auth_service, cognito_service
     from app.services.restaurant_bulk_import_service import BulkImportError, bulk_import_restaurants
+
+    csv_content = event.get("csv_content")
+    if csv_content:
+        return asyncio.run(_run_csv_bulk_import(csv_content))
 
     restaurants = event.get("restaurants")
     if not restaurants:
         return {
             "ok": False,
             "command": "bulk_import_restaurants",
-            "error": "Event payload is missing a non-empty 'restaurants' list.",
+            "error": "Event payload is missing a non-empty 'restaurants' list (or 'csv_content').",
         }
 
     owner_cognito_sub = event.get("owner_cognito_sub")
@@ -150,6 +176,57 @@ def _run_bulk_import_restaurants(event: dict) -> dict:
         }
 
     return asyncio.run(_run())
+
+
+async def _run_csv_bulk_import(csv_content: str) -> dict:
+    """CSV counterpart of `_run_bulk_import_restaurants`'s inner `_run()`
+    above -- kept as its own top-level function (not nested) since it's
+    reached from a different branch of that command, not called alongside
+    it. See `app/services/restaurant_bulk_import_service.py`'s "CSV import
+    path" docstring for why no geocoding happens here.
+    """
+    from app.db.session import get_session_factory
+    from app.services.restaurant_bulk_import_service import (
+        BulkImportError,
+        bulk_import_restaurants_csv,
+        parse_csv_rows,
+    )
+
+    try:
+        rows = parse_csv_rows(csv_content)
+    except BulkImportError as exc:
+        return {"ok": False, "command": "bulk_import_restaurants", "error": str(exc)}
+
+    session_factory = get_session_factory()
+    async with session_factory() as db:
+        try:
+            result = await bulk_import_restaurants_csv(
+                db,
+                rows,
+                actor_id="system:bulk_import_restaurants_csv",
+                actor_role="admin",
+            )
+        except BulkImportError as exc:
+            return {"ok": False, "command": "bulk_import_restaurants", "error": str(exc)}
+
+    return {
+        "ok": True,
+        "command": "bulk_import_restaurants",
+        "summary": {"created": result.created, "skipped": result.skipped, "errors": result.errors},
+        "rows": [
+            {
+                "index": row.index,
+                "name": row.name,
+                "status": row.status.value,
+                "brand_id": row.brand_id,
+                "location_id": row.location_id,
+                "detail": row.detail,
+                "cuisine_type_input": row.cuisine_type_input,
+                "cuisine_match": row.cuisine_match,
+            }
+            for row in result.rows
+        ],
+    }
 
 
 @_command("alembic_upgrade")
