@@ -38,6 +38,11 @@ to revisit later, not a final sign-off.
   `DELETE /api/auth/session` (logout) and `/account/security`
   (change-password) — closes the `docs/PROJECT_PLAN.csv` gap tracked
   2026-09-17.
+- #93 (draft, Architect self-review pending) — CSV bulk restaurant import:
+  new `restaurant_brand.website` column, per-row `owner_email` resolution,
+  free-text cuisine matching, and `scripts/bulk_import_restaurants_csv.py`
+  (geocodes via Nominatim on the human's machine, not inside the Lambda).
+  Not yet applied to real AWS.
 
 ## Architect (schema + contracts)
 - [x] 13 entities modeled, 2 migrations written (never run)
@@ -93,6 +98,14 @@ to revisit later, not a final sign-off.
       (`app/scripts/management.py`) as the way to actually run it once the
       real backend image is deployed (see next bullet down and "Blocking
       next steps" below).
+- CSV bulk restaurant import (PR #93, draft) — extends PR #74's JSON
+  bulk-import with a CSV path on the same `bulk_import_restaurants`
+  management command: per-row `owner_email` resolution, free-text
+  cuisine `type` matching (unmatched reported, not failed), new
+  `restaurant_brand.website` column. New human-run
+  `scripts/bulk_import_restaurants_csv.py` geocodes via Nominatim on the
+  human's own machine (not inside the Lambda — no NAT Gateway, no
+  internet route). Not yet applied to real AWS (migration file only).
 - Container image built (Dockerfile); ECR repo now exists, but only a
   placeholder `:bootstrap` image has been pushed (one-time, to unblock
   Lambda's first create) — the real backend image still needs its first
