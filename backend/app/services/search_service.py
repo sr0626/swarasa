@@ -49,8 +49,11 @@ _DEFAULT_LNG = -96.7970
 class _CandidateRow:
     location_id: int
     brand_id: int
+    address_line1: str
     city: str
     state: str
+    postal_code: str
+    phone: str | None
     is_verified: bool
     is_paid: bool
     timezone: str
@@ -74,8 +77,11 @@ async def _fetch_candidates(
         select(
             RestaurantLocation.id.label("location_id"),
             RestaurantLocation.brand_id,
+            RestaurantLocation.address_line1,
             RestaurantLocation.city,
             RestaurantLocation.state,
+            RestaurantLocation.postal_code,
+            RestaurantLocation.phone,
             RestaurantLocation.is_verified,
             RestaurantLocation.is_paid,
             RestaurantLocation.timezone,
@@ -179,8 +185,11 @@ async def search(
                 nearest_location=NearestLocationOut(
                     location_id=nearest.location_id,
                     distance_mi=round(nearest.distance_mi, 2),
+                    address_line1=nearest.address_line1,
                     city=nearest.city,
                     state=nearest.state,
+                    postal_code=nearest.postal_code,
+                    phone=nearest.phone,
                     is_verified=nearest.is_verified,
                     is_paid=nearest.is_paid,
                     is_open_now=is_open_now,

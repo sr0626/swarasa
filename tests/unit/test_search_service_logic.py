@@ -47,8 +47,11 @@ def _row(**overrides) -> "search_service._CandidateRow":
     defaults = dict(
         location_id=1,
         brand_id=1,
+        address_line1="123 Main St",
         city="Plano",
         state="TX",
+        postal_code="75024",
+        phone="+14695551234",
         is_verified=False,
         is_paid=False,
         timezone="America/Chicago",
@@ -105,7 +108,7 @@ async def test_multiple_locations_same_brand_roll_up_with_nearest_and_count(
 ):
     rows = [
         _row(location_id=1, brand_id=1, distance_mi=8.0),
-        _row(location_id=2, brand_id=1, distance_mi=3.0),  # nearer — should win
+        _row(location_id=2, brand_id=1, distance_mi=3.0, address_line1="4900 W Park Blvd"),  # nearer — should win
         _row(location_id=3, brand_id=1, distance_mi=9.0),
     ]
 
@@ -122,6 +125,11 @@ async def test_multiple_locations_same_brand_roll_up_with_nearest_and_count(
     assert results[0].location_count_nearby == 3
     assert results[0].nearest_location.location_id == 2
     assert results[0].nearest_location.distance_mi == 3.0
+    # Real gap found live 2026-09-18: search cards had no way to show a
+    # full address (only city/state) or link out to Google Maps.
+    assert results[0].nearest_location.address_line1 == "4900 W Park Blvd"
+    assert results[0].nearest_location.postal_code == "75024"
+    assert results[0].nearest_location.phone == "+14695551234"
 
 
 @pytest.mark.asyncio

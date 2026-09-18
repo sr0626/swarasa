@@ -19,8 +19,14 @@ export interface SearchParams {
 export interface SearchNearestLocation {
   location_id: number;
   distance_mi: number;
+  // Added for a clickable full-address / Google Maps link on the search
+  // result card (backend/app/schemas/search.py NearestLocationOut).
+  address_line1: string;
   city: string;
   state: string;
+  postal_code: string;
+  /** Nullable: restaurant_location.phone itself is nullable. */
+  phone: string | null;
   is_verified: boolean;
   is_paid: boolean;
   is_open_now: boolean | null;
@@ -38,6 +44,10 @@ export interface SearchResultItem {
   location_count_nearby: number;
   /** Cover photo of the nearest_location specifically — not a brand-wide concept. */
   cover_photo_url: string | null;
+  /** Smaller variant of cover_photo_url, sized for card-style listings
+   * like this one (backend/app/schemas/search.py SearchResultOut) — was
+   * already serialized by the backend but never consumed here. */
+  cover_photo_thumbnail_url: string | null;
 }
 
 export interface SearchResponse {

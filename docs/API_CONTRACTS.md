@@ -77,8 +77,11 @@ Response:
       "nearest_location": {
         "location_id": 456,
         "distance_mi": 3.2,
+        "address_line1": "4900 W Park Blvd",
         "city": "Plano",
         "state": "TX",
+        "postal_code": "75093",
+        "phone": "+14695551234",
         "is_verified": true,
         "is_paid": true,
         "is_open_now": true
