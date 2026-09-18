@@ -10,7 +10,8 @@
 // icon requirement is met without inventing a number.
 import Link from "next/link";
 import type { SearchResultItem } from "@/types/search";
-import { LocationPinIcon, PhoneIcon, StarIcon, StoreIcon } from "@/components/ui/icons";
+import SwarasaMark from "@/components/icons/SwarasaMark";
+import { LocationPinIcon, PhoneIcon, StarIcon } from "@/components/ui/icons";
 import OpenStatusBadge from "@/components/ui/OpenStatusBadge";
 
 export default function RestaurantCard({ item }: { item: SearchResultItem }) {
@@ -39,11 +40,14 @@ export default function RestaurantCard({ item }: { item: SearchResultItem }) {
               className="absolute inset-0 h-full w-full object-cover"
             />
           ) : (
-            // Default generic image when no cover photo is set — same
-            // StoreIcon already used for "this is a restaurant" elsewhere
-            // in the app (e.g. portal/BrandCard.tsx), not a new asset.
-            <div className="absolute inset-0 flex items-center justify-center">
-              <StoreIcon className="h-12 w-12 text-brand-bg/70" />
+            // Default placeholder when no cover photo is set — the app's
+            // own brand mark (same SwarasaMark used in the header),
+            // large and low-opacity, filling most of the tile with a
+            // small consistent margin (`inset-4`) rather than a small
+            // centered glyph. Reuses an existing on-brand asset instead
+            // of inventing new iconography.
+            <div className="absolute inset-4 flex items-center justify-center">
+              <SwarasaMark className="h-full w-full text-brand-bg/60" />
             </div>
           )}
           {nearest_location.is_paid && (
