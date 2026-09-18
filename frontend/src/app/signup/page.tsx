@@ -11,7 +11,17 @@ export const metadata: Metadata = {
   title: "Create an Account",
 };
 
-export default function SignUpPage() {
+// `?role=owner` (linked from the header's "For Owners" / "Add Your
+// Restaurant") pre-selects the Owner account type. Validated against the
+// allowed value; anything else (missing, repeated, unknown) falls back to
+// the default (diner).
+export default function SignUpPage({
+  searchParams,
+}: {
+  searchParams?: { role?: string | string[] };
+}) {
+  const initialRole = searchParams?.role === "owner" ? "owner" : undefined;
+
   return (
     <main className="min-h-screen bg-brand-bg">
       <TopBar />
@@ -27,7 +37,7 @@ export default function SignUpPage() {
           </p>
 
           <div className="mt-6">
-            <SignUpForm />
+            <SignUpForm initialRole={initialRole} />
           </div>
         </div>
       </div>
