@@ -131,20 +131,19 @@ def _decode_token(token: str) -> dict:
     return claims
 
 
-async def get_current_user(
-    authorization: str | None = Header(default=None),
-) -> CurrentUser:
-    """Verify the bearer JWT and return the caller's identity/role.
-
-    Public routes (backend/CLAUDE.md "Public Routes") do not depend on
-    this at all. Every other route does.
+async def _resolve_current_user(authorization: str | None) -> CurrentUser | None:
+    """Shared verification logic behind both `get_current_user` (below) and
+    `get_current_user_optional`. Returns `None` when no bearer token was
+    presented at all; raises `AppError(401, ...)` when one WAS presented
+    but is malformed/invalid/expired — presenting bad credentials should
+    always surface a clear 401, never silently fall back to anonymous.
     """
     if not authorization or not authorization.strip().lower().startswith("bearer "):
-        raise AppError(401, "Missing bearer token", "unauthorized")
+        return None
 
     token = authorization.split(" ", 1)[1].strip()
     if not token:
-        raise AppError(401, "Missing bearer token", "unauthorized")
+        return None
 
     claims = _decode_token(token)
 
@@ -162,6 +161,45 @@ async def get_current_user(
         role=_extract_role(list(groups)),
         groups=list(groups),
     )
+
+
+async def get_current_user(
+    authorization: str | None = Header(default=None),
+) -> CurrentUser:
+    """Verify the bearer JWT and return the caller's identity/role.
+
+    Public routes (backend/CLAUDE.md "Public Routes") do not depend on
+    this at all. Every other route does.
+    """
+    user = await _resolve_current_user(authorization)
+    if user is None:
+        raise AppError(401, "Missing bearer token", "unauthorized")
+    return user
+
+
+async def get_current_user_optional(
+    authorization: str | None = Header(default=None),
+) -> CurrentUser | None:
+    """Same verification as `get_current_user`, but returns `None` instead
+    of raising when no bearer token is present — for a route that is
+    public by default but behaves differently for an authenticated caller
+    (e.g. `GET /restaurants/{id}/locations` additionally surfacing the
+    owning owner's/admin's own deactivated locations — see
+    `docs/API_CONTRACTS.md` "GET /restaurants/{id}/locations" and
+    `docs/PROJECT_PLAN.csv` "Serialize paid_until/is_active on location
+    endpoints..."). A token that IS present but invalid/expired still
+    raises 401 via `_resolve_current_user`, same as `get_current_user` —
+    a caller presenting bad credentials gets a clear error, not a silent
+    fallback to anonymous/public behavior.
+
+    Deliberately does NOT delegate to `get_current_user` via `Depends` —
+    that sub-dependency would raise on a missing token unconditionally,
+    defeating the "optional" purpose. Both this and `get_current_user`
+    share `_resolve_current_user` instead, kept as two separate top-level
+    dependency callables so each can still be overridden independently in
+    tests (`app.dependency_overrides` keys on the exact callable).
+    """
+    return await _resolve_current_user(authorization)
 
 
 async def require_owner(

@@ -264,7 +264,7 @@ listing" CTA when `is_claimed` is `false`).
 
 ### GET /restaurants/{id}/locations
 
-Auth: none (public)
+Auth: none (public) — but see the owner/admin note below.
 
 Query params: `page` (default 1), `page_size` (default 20, max 100).
 
@@ -282,6 +282,8 @@ Response:
       "phone": "+14695551234",
       "is_verified": true,
       "is_paid": true,
+      "paid_until": "2027-03-01T00:00:00Z",
+      "is_active": true,
       "is_open_now": true
     }
   ],
@@ -292,6 +294,26 @@ Response:
 ```
 Summary shape only (no hours breakdown, no photos) — see
 `GET /locations/{id}` for the full location detail.
+
+`paid_until` and `is_active` added 2026-09-17 (`docs/PROJECT_PLAN.csv`
+"Serialize paid_until/is_active on location endpoints + let owner see own
+deactivated locations") — same fields/semantics as `GET /locations/{id}`
+above.
+
+**Owner/admin see their own deactivated locations here too (added
+2026-09-17, same row):** this endpoint stays public by default and
+filters to `is_active=true` only for an anonymous caller (or any
+authenticated caller who is not this brand's owner and not an admin) —
+that behavior is unchanged. If the request carries a valid bearer token
+AND the caller is either an admin, or an owner who owns `restaurant_brand
+{id}`, the `is_active` filter is dropped entirely and the response also
+includes that brand's deactivated (`is_active=false`) locations — there is
+no separate owner-scoped locations-list endpoint, so this is the one
+place an owner (via the dashboard) or admin can see a location they
+soft-deleted, as a first step toward eventually reactivating it (no
+reactivate endpoint exists yet — out of scope for this row). A manager or
+`registered_user` caller, and an owner who does not own this brand, still
+only sees active locations, same as a public caller.
 
 ### POST /restaurants
 
@@ -373,6 +395,8 @@ Response:
   "longitude": -96.6989,
   "is_verified": true,
   "is_paid": true,
+  "paid_until": "2027-03-01T00:00:00Z",
+  "is_active": true,
   "is_open_now": true,
   "hours": [
     { "day_of_week": 0, "open_time": "11:00:00", "close_time": "22:00:00", "is_closed": false },
@@ -384,6 +408,15 @@ Response:
 }
 ```
 Notes:
+- `paid_until` and `is_active` (added 2026-09-17 — `docs/PROJECT_PLAN.csv`
+  "Serialize paid_until/is_active on location endpoints + let owner see
+  own deactivated locations") are real `restaurant_location` columns
+  that were already stored but not previously serialized on this
+  response. `paid_until` is `null` on the free tier (root CLAUDE.md "Tier
+  model (is_paid)"). Unlike the list endpoint below, this single-location
+  lookup does **not** filter by `is_active` at all — a deactivated
+  location's detail is still returned here to any caller, unchanged by
+  this fix (pre-existing behavior; flagged, not in this change's scope).
 - `hours` is all 7 `restaurant_hours` rows for this location, `day_of_week`
   0=Monday..6=Sunday (see `docs/DATA_MODEL.md` judgment-call note — a
   day with no seeded row yet is simply absent from the array, which the
