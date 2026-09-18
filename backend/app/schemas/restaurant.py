@@ -15,6 +15,7 @@ class RestaurantOut(BaseModel):
     name: str
     slug: str
     description: str | None
+    website: str | None
     is_claimed: bool
     owner_id: int | None
     cuisine_tags: list[CuisineTagOut]
@@ -24,12 +25,14 @@ class RestaurantOut(BaseModel):
 class RestaurantCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     description: str | None = None
+    website: str | None = Field(default=None, max_length=500)
     cuisine_tag_ids: list[int] = Field(default_factory=list)
 
 
 class RestaurantUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = None
+    website: str | None = Field(default=None, max_length=500)
     cuisine_tag_ids: list[int] | None = None
 
 

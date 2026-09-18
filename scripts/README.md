@@ -42,3 +42,23 @@ with no group (the pre-PR-#84 symptom).
 ```bash
 python3 scripts/list_users.py
 ```
+
+### `bulk_import_restaurants_csv.py`
+Reads a local CSV of restaurants (`name`, `address_line1`, `city`, `state`,
+`postal_code`, `owner_email` required; `address_line2`, `country`, `phone`,
+`website`, `type` [free-text cuisine], `description`, `latitude`,
+`longitude` optional), geocodes any row missing `latitude`/`longitude` via
+Nominatim (OpenStreetMap — free, no API key, rate-limited to this script's
+own machine), and invokes the `bulk_import_restaurants` management
+command's CSV path with the result. Each row resolves its own
+`owner_email` to an EXISTING `owner_account` (never creates one) and
+matches `type` against `cuisine_tag.name`/`display_name` case-insensitively
+(unmatched is reported, not a failure). Geocoding happens here rather than
+inside the Lambda deliberately — see the script's own module docstring
+"Why geocoding happens HERE, not inside the Lambda" (the Lambda has no
+NAT Gateway, so no route to the public internet at all).
+
+```bash
+python3 scripts/bulk_import_restaurants_csv.py --csv-file restaurants.csv
+python3 scripts/bulk_import_restaurants_csv.py --csv-file restaurants.csv --dry-run
+```

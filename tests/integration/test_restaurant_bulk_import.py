@@ -1,5 +1,7 @@
 """Tests for `app.services.restaurant_bulk_import_service.bulk_import_restaurants`
-and its admin-only HTTP surface (`POST /admin/restaurants/bulk-import`).
+and its admin-only HTTP surface (`POST /admin/restaurants/bulk-import`),
+plus the CSV import path (`bulk_import_restaurants_csv`) added for the CSV
+bulk-import feature (docs/PROJECT_PLAN.csv "CSV bulk restaurant import").
 
 Uses the `db_session`/`client`/`as_user` fixtures from
 `tests/integration/conftest.py` (real SQLite-backed AsyncSession + real
@@ -11,6 +13,15 @@ can't faithfully exercise.
 Covers the two behaviors called out in the task: idempotency (re-running
 the same batch creates zero duplicate rows) and partial failure (one bad
 row doesn't abort the batch) -- plus admin-gating on the HTTP endpoint.
+CSV-path-specific coverage lives at the bottom of this file: per-row
+owner_email resolution (existing owner succeeds, missing owner is a
+per-row error not a batch failure), cuisine_type matching (matched
+case-insensitively, unmatched reported not failed), and the `website`
+field round-tripping through brand creation.
+
+Pure CSV-text PARSING (`parse_csv_rows`, no DB) is covered separately in
+`tests/unit/test_bulk_import_csv_parsing.py` per tests/CLAUDE.md's
+unit-vs-integration split.
 """
 from __future__ import annotations
 
@@ -18,11 +29,16 @@ import pytest
 from sqlalchemy import func, select
 
 from app.models.audit_log import AuditLog
+from app.models.cuisine_tag import CuisineTag
 from app.models.restaurant_brand import RestaurantBrand
+from app.models.restaurant_cuisine import RestaurantCuisine
 from app.models.restaurant_location import RestaurantLocation
 from app.schemas.restaurant_bulk_import import RestaurantBasicDetailIn
-from app.services.restaurant_bulk_import_service import bulk_import_restaurants
-from factories import create_owner
+from app.services.restaurant_bulk_import_service import (
+    bulk_import_restaurants,
+    bulk_import_restaurants_csv,
+)
+from factories import create_cuisine_tag, create_owner
 
 
 def _row(**overrides) -> RestaurantBasicDetailIn:
@@ -207,3 +223,213 @@ async def test_bulk_import_endpoint_unknown_owner_id_is_404(client, db_session, 
         json={"owner_id": 999999, "restaurants": [_row().model_dump()]},
     )
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_bulk_import_website_round_trips_on_json_path(db_session):
+    """The new `website` field (docs/DATA_MODEL.md "restaurant_brand") is
+    stored on the created brand and comes back unchanged -- covers the
+    JSON path; the CSV path's equivalent is
+    `test_bulk_import_csv_website_round_trips` below.
+    """
+    owner = await create_owner(db_session)
+    await db_session.commit()
+
+    rows = [_row(website="https://namastegrill.example")]
+    result = await bulk_import_restaurants(
+        db_session, rows, owner_id=owner.id, actor_id="admin-sub-1", actor_role="admin"
+    )
+    assert result.created == 1
+
+    brand = (await db_session.execute(select(RestaurantBrand))).scalar_one()
+    assert brand.website == "https://namastegrill.example"
+
+
+# ---------------------------------------------------------------------------
+# CSV import path (`bulk_import_restaurants_csv`) -- per-row owner_email
+# resolution, free-text cuisine matching, website round-tripping.
+# ---------------------------------------------------------------------------
+
+
+def _csv_row(**overrides) -> dict:
+    defaults = dict(
+        name="Namaste Grill & Sports Bar",
+        address_line1="2234 W Walnut Hill Ln",
+        city="Irving",
+        state="TX",
+        postal_code="75038",
+        country="US",
+        owner_email="owner@example.com",
+    )
+    defaults.update(overrides)
+    return defaults
+
+
+@pytest.mark.asyncio
+async def test_bulk_import_csv_creates_brand_and_location_for_existing_owner(db_session):
+    owner = await create_owner(db_session, email="owner@example.com")
+    await db_session.commit()
+
+    rows = [_csv_row(owner_email=owner.email, website="https://namastegrill.example")]
+    result = await bulk_import_restaurants_csv(
+        db_session, rows, actor_id="system:test", actor_role="admin"
+    )
+
+    assert result.created == 1
+    assert result.errors == 0
+    assert result.rows[0].brand_id is not None
+    assert result.rows[0].location_id is not None
+
+    brand = (await db_session.execute(select(RestaurantBrand))).scalar_one()
+    assert brand.owner_id == owner.id
+    assert brand.website == "https://namastegrill.example"
+
+    location_audits = (
+        await db_session.execute(select(AuditLog).where(AuditLog.table_name == "restaurant_location"))
+    ).scalars().all()
+    assert len(location_audits) == 1
+    assert location_audits[0].actor_role == "admin"
+
+
+@pytest.mark.asyncio
+async def test_bulk_import_csv_unknown_owner_email_is_per_row_error(db_session):
+    """A row whose owner_email doesn't resolve to an existing owner_account
+    is a per-row error (this path never creates an owner_account for a
+    possibly-typo'd email) -- it must not abort the rest of the batch.
+    """
+    good_owner = await create_owner(db_session, email="real-owner@example.com")
+    await db_session.commit()
+
+    rows = [
+        _csv_row(owner_email="real-owner@example.com"),
+        _csv_row(
+            name="Spices Of India Kitchen",
+            address_line1="833 E Shady Grove Rd A",
+            owner_email="typo-owner@example.com",
+        ),
+    ]
+    result = await bulk_import_restaurants_csv(
+        db_session, rows, actor_id="system:test", actor_role="admin"
+    )
+
+    assert result.created == 1
+    assert result.errors == 1
+    error_row = next(r for r in result.rows if r.status.value == "error")
+    assert error_row.name == "Spices Of India Kitchen"
+    assert "typo-owner@example.com" in error_row.detail
+
+    # The good row still landed under the real owner despite the other
+    # row's unresolvable email.
+    brand = (await db_session.execute(select(RestaurantBrand))).scalar_one()
+    assert brand.owner_id == good_owner.id
+
+
+@pytest.mark.asyncio
+async def test_bulk_import_csv_cuisine_type_matched_case_insensitively(db_session):
+    owner = await create_owner(db_session, email="owner@example.com")
+    tag = await create_cuisine_tag(
+        db_session, name="south_indian", display_name="South Indian", category="regional"
+    )
+    await db_session.commit()
+
+    rows = [_csv_row(owner_email=owner.email, cuisine_type="south indian")]
+    result = await bulk_import_restaurants_csv(
+        db_session, rows, actor_id="system:test", actor_role="admin"
+    )
+
+    assert result.created == 1
+    assert result.rows[0].cuisine_type_input == "south indian"
+    assert result.rows[0].cuisine_match == "south_indian"
+
+    brand = (await db_session.execute(select(RestaurantBrand))).scalar_one()
+    link = (
+        await db_session.execute(
+            select(RestaurantCuisine).where(
+                RestaurantCuisine.brand_id == brand.id, RestaurantCuisine.cuisine_tag_id == tag.id
+            )
+        )
+    ).scalar_one_or_none()
+    assert link is not None
+
+
+@pytest.mark.asyncio
+async def test_bulk_import_csv_cuisine_type_unmatched_is_reported_not_failed(db_session):
+    """No `cuisine_tag` matches "klingon fusion" -- the row must still
+    import successfully; the mismatch is only visible in the row result,
+    per the task's explicit "don't fail the row" requirement.
+    """
+    owner = await create_owner(db_session, email="owner@example.com")
+    await db_session.commit()
+
+    rows = [_csv_row(owner_email=owner.email, cuisine_type="klingon fusion")]
+    result = await bulk_import_restaurants_csv(
+        db_session, rows, actor_id="system:test", actor_role="admin"
+    )
+
+    assert result.created == 1
+    assert result.errors == 0
+    assert result.rows[0].cuisine_type_input == "klingon fusion"
+    assert result.rows[0].cuisine_match is None
+
+    count = (
+        await db_session.execute(select(func.count()).select_from(RestaurantCuisine))
+    ).scalar_one()
+    assert count == 0
+
+
+@pytest.mark.asyncio
+async def test_bulk_import_csv_cuisine_type_matches_display_name_too(db_session):
+    """Matching also checks `display_name` as-typed (case-insensitively),
+    not just the `name` slug -- e.g. a CSV author typing "Biryani" exactly
+    as the display name shown in docs/TAXONOMY.md, not the underscored
+    slug form.
+    """
+    owner = await create_owner(db_session, email="owner@example.com")
+    tag = await create_cuisine_tag(
+        db_session, name="biryani", display_name="Biryani", category="signature"
+    )
+    await db_session.commit()
+
+    rows = [_csv_row(owner_email=owner.email, cuisine_type="BIRYANI")]
+    result = await bulk_import_restaurants_csv(
+        db_session, rows, actor_id="system:test", actor_role="admin"
+    )
+
+    assert result.rows[0].cuisine_match == tag.name
+
+
+@pytest.mark.asyncio
+async def test_bulk_import_csv_website_round_trips(db_session):
+    owner = await create_owner(db_session, email="owner@example.com")
+    await db_session.commit()
+
+    rows = [_csv_row(owner_email=owner.email, website="https://spicesofindia.example")]
+    result = await bulk_import_restaurants_csv(
+        db_session, rows, actor_id="system:test", actor_role="admin"
+    )
+    assert result.created == 1
+
+    brand = (await db_session.execute(select(RestaurantBrand))).scalar_one()
+    assert brand.website == "https://spicesofindia.example"
+
+
+@pytest.mark.asyncio
+async def test_bulk_import_csv_is_idempotent_on_rerun(db_session):
+    owner = await create_owner(db_session, email="owner@example.com")
+    await db_session.commit()
+
+    rows = [_csv_row(owner_email=owner.email)]
+
+    first = await bulk_import_restaurants_csv(
+        db_session, rows, actor_id="system:test", actor_role="admin"
+    )
+    assert first.created == 1
+
+    second = await bulk_import_restaurants_csv(
+        db_session, rows, actor_id="system:test", actor_role="admin"
+    )
+    assert second.created == 0
+    assert second.skipped == 1
+
+    count = (await db_session.execute(select(func.count()).select_from(RestaurantBrand))).scalar_one()
+    assert count == 1

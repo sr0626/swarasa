@@ -44,6 +44,16 @@ class RestaurantBrand(TimestampMixin, Base):
     slug: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Restaurant's own website URL. Added for the CSV bulk-import feature
+    # (docs/PROJECT_PLAN.csv "CSV bulk restaurant import") — brand-level,
+    # not location-level: a restaurant's website describes the concept as
+    # a whole, the same rationale `restaurant_cuisine.py` already uses for
+    # keeping cuisine tags at the brand level rather than per-location (see
+    # that model's docstring and docs/DATA_MODEL.md's matching judgment
+    # call). String(500) matches `claim_request.google_business_profile_url`'s
+    # sizing convention for a URL column in this schema.
+    website: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
     # Claim flow — see DECISIONS.md "Claim flow": Google Business Profile
     # match or phone verification, admin-reviewed. Unclaimed brands stay
     # visible/searchable with a "Claim this listing" CTA.

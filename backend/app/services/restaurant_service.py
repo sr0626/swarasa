@@ -53,6 +53,7 @@ async def _brand_to_out(db: AsyncSession, brand: RestaurantBrand) -> RestaurantO
         name=brand.name,
         slug=brand.slug,
         description=brand.description,
+        website=brand.website,
         is_claimed=brand.is_claimed,
         owner_id=brand.owner_id,
         cuisine_tags=[CuisineTagOut.model_validate(t) for t in tags],
@@ -140,6 +141,7 @@ async def create_restaurant(db: AsyncSession, body: RestaurantCreate, current_us
         name=body.name,
         slug=slug,
         description=body.description,
+        website=body.website,
         is_claimed=True,
         claimed_at=datetime.now(timezone.utc),
     )
@@ -174,16 +176,18 @@ async def update_restaurant(
 ) -> RestaurantOut:
     brand = await get_brand_or_404(db, brand_id)
 
-    old_val = {"name": brand.name, "description": brand.description}
+    old_val = {"name": brand.name, "description": brand.description, "website": brand.website}
 
     if body.name is not None:
         brand.name = body.name
     if body.description is not None:
         brand.description = body.description
+    if body.website is not None:
+        brand.website = body.website
     if body.cuisine_tag_ids is not None:
         await cuisine_service.set_brand_cuisine_tags(db, brand.id, body.cuisine_tag_ids)
 
-    new_val = {"name": brand.name, "description": brand.description}
+    new_val = {"name": brand.name, "description": brand.description, "website": brand.website}
 
     await audit_service.log(
         db,
