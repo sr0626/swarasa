@@ -151,3 +151,50 @@ def test_database_url_takes_precedence_over_db_secret_name(
     url = db_session._get_database_url()
 
     assert url == "postgresql+asyncpg://local:local@localhost:5432/dev_db"
+
+
+class _FakeAsyncEngine:
+    """Stub replacing a real `AsyncEngine` — just needs an async
+    `dispose()` that records it was called."""
+
+    def __init__(self):
+        self.dispose_calls = 0
+
+    async def dispose(self):
+        self.dispose_calls += 1
+
+
+@pytest.mark.asyncio
+async def test_dispose_engine_disposes_and_resets_cache(monkeypatch: pytest.MonkeyPatch):
+    """Real bug (2026-09-18, CSV bulk import, see dispose_engine's own
+    docstring): a cached `_engine`'s asyncpg connection pool is bound to
+    whatever event loop first used it. Each management-command invocation
+    runs its own `asyncio.run()` — its own fresh loop — so a warm
+    container reusing the cached engine across invocations hit "Task ...
+    got Future ... attached to a different loop" on the batch's first DB
+    call. dispose_engine() must actually dispose the engine AND null out
+    both module globals so the next get_engine() call builds a fresh one.
+    """
+    fake_engine = _FakeAsyncEngine()
+    monkeypatch.setattr(db_session, "_engine", fake_engine)
+    monkeypatch.setattr(db_session, "_session_factory", object())
+
+    await db_session.dispose_engine()
+
+    assert fake_engine.dispose_calls == 1
+    assert db_session._engine is None
+    assert db_session._session_factory is None
+
+
+@pytest.mark.asyncio
+async def test_dispose_engine_is_a_no_op_when_never_created(monkeypatch: pytest.MonkeyPatch):
+    """An early-return command path (e.g. no Cognito user found for the
+    given email) can call dispose_engine() before get_engine() was ever
+    reached — must not raise just because there's nothing to dispose."""
+    monkeypatch.setattr(db_session, "_engine", None)
+    monkeypatch.setattr(db_session, "_session_factory", None)
+
+    await db_session.dispose_engine()  # must not raise
+
+    assert db_session._engine is None
+    assert db_session._session_factory is None

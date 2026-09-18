@@ -116,3 +116,38 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
     session_factory = get_session_factory()
     async with session_factory() as session:
         yield session
+
+
+async def dispose_engine() -> None:
+    """Disposes the cached engine and resets `_engine`/`_session_factory`
+    to `None`.
+
+    Real bug found live (2026-09-18, CSV bulk import): `_engine`'s
+    `asyncpg` connection pool binds its internal locks/futures to
+    whichever asyncio event loop is running the first time a connection
+    actually opens. `app/scripts/management.py`'s management commands
+    each wrap their DB work in their own `asyncio.run(...)` call — a
+    fresh event loop every invocation. On a WARM Lambda container (the
+    module-level `_engine` global survives between invocations, same
+    warm-container reuse `run_management_command`'s own
+    `asyncio.set_event_loop` comment already documents for a different
+    symptom), a second management-command invocation reuses the first
+    invocation's cached `_engine`, but this invocation's `asyncio.run()`
+    gave it a brand-new loop — the pool's connections are still bound to
+    the first invocation's now-closed loop. First DB operation on the new
+    loop fails: "Task ... got Future ... attached to a different loop."
+    Reproduced twice, always on the batch's first row.
+
+    Every management command that touches the DB calls this at the end of
+    its own DB-touching coroutine (same loop the engine was used under —
+    disposing from a third, later loop would hit the identical bug), so
+    the next invocation always builds a fresh engine bound to whatever
+    loop is current then. Never called from the FastAPI/Mangum HTTP path —
+    that path's ASGI lifespan keeps one loop alive for the container's
+    life, so the plain lazy-cache in `get_engine()` is correct there.
+    """
+    global _engine, _session_factory
+    if _engine is not None:
+        await _engine.dispose()
+    _engine = None
+    _session_factory = None

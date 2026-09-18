@@ -41,11 +41,23 @@ def _command(name: str):
 
 @_command("seed_dev_data")
 def _run_seed_dev_data(event: dict) -> dict:
+    from app.db.session import dispose_engine
     from app.scripts.seed_dev_data import SeedConfigError, run_seed
 
     identities_path = event.get("identities_path")
+
+    # dispose_engine() must run inside the SAME event loop run_seed used
+    # (see app/db/session.py's dispose_engine docstring) — this wrapper
+    # coroutine runs entirely inside the one `asyncio.run()` call below,
+    # so `await dispose_engine()` still executes before that loop closes.
+    async def _run_and_dispose() -> dict:
+        try:
+            return await run_seed(identities_path)
+        finally:
+            await dispose_engine()
+
     try:
-        counts = asyncio.run(run_seed(identities_path))
+        counts = asyncio.run(_run_and_dispose())
     except SeedConfigError as exc:
         return {"ok": False, "command": "seed_dev_data", "error": str(exc)}
     return {"ok": True, "command": "seed_dev_data", "counts": counts}
@@ -94,7 +106,7 @@ def _run_bulk_import_restaurants(event: dict) -> dict:
     wins (CSV is the newer, per-row-owner path; silently ignoring one of
     two conflicting inputs would be more surprising than picking one).
     """
-    from app.db.session import get_session_factory
+    from app.db.session import dispose_engine, get_session_factory
     from app.services import auth_service, cognito_service
     from app.services.restaurant_bulk_import_service import BulkImportError, bulk_import_restaurants
 
@@ -120,60 +132,67 @@ def _run_bulk_import_restaurants(event: dict) -> dict:
         }
 
     async def _run() -> dict:
-        sub = owner_cognito_sub
-        if not sub:
-            sub = cognito_service.find_sub_by_email(owner_email)
-            if sub is None:
-                return {
-                    "ok": False,
-                    "command": "bulk_import_restaurants",
-                    "error": f"No Cognito user found for owner_email {owner_email!r}.",
-                }
+        # dispose_engine() in `finally` — see its own docstring
+        # (app/db/session.py) for why: a cached engine's connection pool
+        # is bound to whatever event loop first used it, and this whole
+        # function runs inside its own fresh `asyncio.run()` loop below.
+        try:
+            sub = owner_cognito_sub
+            if not sub:
+                sub = cognito_service.find_sub_by_email(owner_email)
+                if sub is None:
+                    return {
+                        "ok": False,
+                        "command": "bulk_import_restaurants",
+                        "error": f"No Cognito user found for owner_email {owner_email!r}.",
+                    }
 
-        session_factory = get_session_factory()
-        async with session_factory() as db:
-            owner = await auth_service.get_owner_account_by_sub(db, sub)
-            if owner is None:
-                return {
-                    "ok": False,
-                    "command": "bulk_import_restaurants",
-                    "error": (
-                        f"No local owner_account row for cognito_sub {sub!r} "
-                        f"(owner_email={owner_email!r}). This command looks up "
-                        f"an existing owner_account, it does not create one -- "
-                        f"run the 'seed_dev_data' command first if this owner "
-                        f"hasn't been seeded yet."
-                    ),
-                }
+            session_factory = get_session_factory()
+            async with session_factory() as db:
+                owner = await auth_service.get_owner_account_by_sub(db, sub)
+                if owner is None:
+                    return {
+                        "ok": False,
+                        "command": "bulk_import_restaurants",
+                        "error": (
+                            f"No local owner_account row for cognito_sub {sub!r} "
+                            f"(owner_email={owner_email!r}). This command looks up "
+                            f"an existing owner_account, it does not create one -- "
+                            f"run the 'seed_dev_data' command first if this owner "
+                            f"hasn't been seeded yet."
+                        ),
+                    }
 
-            try:
-                result = await bulk_import_restaurants(
-                    db,
-                    restaurants,
-                    owner_id=owner.id,
-                    actor_id="system:bulk_import_restaurants",
-                    actor_role="admin",
-                )
-            except BulkImportError as exc:
-                return {"ok": False, "command": "bulk_import_restaurants", "error": str(exc)}
+                try:
+                    result = await bulk_import_restaurants(
+                        db,
+                        restaurants,
+                        owner_id=owner.id,
+                        actor_id="system:bulk_import_restaurants",
+                        actor_role="admin",
+                    )
+                except BulkImportError as exc:
+                    return {"ok": False, "command": "bulk_import_restaurants", "error": str(exc)}
 
-        return {
-            "ok": True,
-            "command": "bulk_import_restaurants",
-            "owner_id": owner.id,
-            "summary": {"created": result.created, "skipped": result.skipped, "errors": result.errors},
-            "rows": [
-                {
-                    "index": row.index,
-                    "name": row.name,
-                    "status": row.status.value,
-                    "brand_id": row.brand_id,
-                    "location_id": row.location_id,
-                    "detail": row.detail,
-                }
-                for row in result.rows
-            ],
-        }
+            return {
+                "ok": True,
+                "command": "bulk_import_restaurants",
+                "owner_id": owner.id,
+                "summary": {"created": result.created, "skipped": result.skipped, "errors": result.errors},
+                "rows": [
+                    {
+                        "index": row.index,
+                        "name": row.name,
+                        "status": row.status.value,
+                        "brand_id": row.brand_id,
+                        "location_id": row.location_id,
+                        "detail": row.detail,
+                    }
+                    for row in result.rows
+                ],
+            }
+        finally:
+            await dispose_engine()
 
     return asyncio.run(_run())
 
@@ -185,7 +204,7 @@ async def _run_csv_bulk_import(csv_content: str) -> dict:
     it. See `app/services/restaurant_bulk_import_service.py`'s "CSV import
     path" docstring for why no geocoding happens here.
     """
-    from app.db.session import get_session_factory
+    from app.db.session import dispose_engine, get_session_factory
     from app.services.restaurant_bulk_import_service import (
         BulkImportError,
         bulk_import_restaurants_csv,
@@ -197,36 +216,43 @@ async def _run_csv_bulk_import(csv_content: str) -> dict:
     except BulkImportError as exc:
         return {"ok": False, "command": "bulk_import_restaurants", "error": str(exc)}
 
-    session_factory = get_session_factory()
-    async with session_factory() as db:
-        try:
-            result = await bulk_import_restaurants_csv(
-                db,
-                rows,
-                actor_id="system:bulk_import_restaurants_csv",
-                actor_role="admin",
-            )
-        except BulkImportError as exc:
-            return {"ok": False, "command": "bulk_import_restaurants", "error": str(exc)}
+    # dispose_engine() in `finally` — see its own docstring
+    # (app/db/session.py) for why: reproduced live twice, always on the
+    # first row of a batch on a warm container that had already run a
+    # prior management-command invocation.
+    try:
+        session_factory = get_session_factory()
+        async with session_factory() as db:
+            try:
+                result = await bulk_import_restaurants_csv(
+                    db,
+                    rows,
+                    actor_id="system:bulk_import_restaurants_csv",
+                    actor_role="admin",
+                )
+            except BulkImportError as exc:
+                return {"ok": False, "command": "bulk_import_restaurants", "error": str(exc)}
 
-    return {
-        "ok": True,
-        "command": "bulk_import_restaurants",
-        "summary": {"created": result.created, "skipped": result.skipped, "errors": result.errors},
-        "rows": [
-            {
-                "index": row.index,
-                "name": row.name,
-                "status": row.status.value,
-                "brand_id": row.brand_id,
-                "location_id": row.location_id,
-                "detail": row.detail,
-                "cuisine_type_input": row.cuisine_type_input,
-                "cuisine_match": row.cuisine_match,
-            }
-            for row in result.rows
-        ],
-    }
+        return {
+            "ok": True,
+            "command": "bulk_import_restaurants",
+            "summary": {"created": result.created, "skipped": result.skipped, "errors": result.errors},
+            "rows": [
+                {
+                    "index": row.index,
+                    "name": row.name,
+                    "status": row.status.value,
+                    "brand_id": row.brand_id,
+                    "location_id": row.location_id,
+                    "detail": row.detail,
+                    "cuisine_type_input": row.cuisine_type_input,
+                    "cuisine_match": row.cuisine_match,
+                }
+                for row in result.rows
+            ],
+        }
+    finally:
+        await dispose_engine()
 
 
 @_command("alembic_upgrade")
@@ -247,12 +273,21 @@ def _run_delete_user_data(event: dict) -> dict:
         {"_management_command": "delete_user_data", "email": "test@example.com"}
         # OR: {"_management_command": "delete_user_data", "cognito_sub": "..."}
     """
+    from app.db.session import dispose_engine
     from app.scripts.delete_user_data import DeleteUserDataError, delete_user_data
 
     email = event.get("email")
     cognito_sub = event.get("cognito_sub")
+
+    # Same same-loop-disposal reasoning as _run_seed_dev_data above.
+    async def _run_and_dispose() -> dict:
+        try:
+            return await delete_user_data(email=email, cognito_sub=cognito_sub)
+        finally:
+            await dispose_engine()
+
     try:
-        result = asyncio.run(delete_user_data(email=email, cognito_sub=cognito_sub))
+        result = asyncio.run(_run_and_dispose())
     except DeleteUserDataError as exc:
         return {"ok": False, "command": "delete_user_data", "error": str(exc)}
     return {"command": "delete_user_data", **result}
