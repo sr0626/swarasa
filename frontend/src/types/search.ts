@@ -30,6 +30,12 @@ export interface SearchNearestLocation {
   is_verified: boolean;
   is_paid: boolean;
   is_open_now: boolean | null;
+  // Today's hours in the location's timezone (NearestLocationOut). All
+  // null/absent = unknown -> the card shows no hours label. Optional so an
+  // older deployed API without these fields degrades to no label.
+  open_time?: string | null;
+  close_time?: string | null;
+  is_closed?: boolean | null;
 }
 
 /** One brand-level card in the search results (docs/DECISIONS.md "Brand-level search results"). */

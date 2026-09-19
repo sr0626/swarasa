@@ -215,3 +215,25 @@ export function EyeOffIcon(props: IconProps) {
     </svg>
   );
 }
+
+/**
+ * Coffee cup on a saucer with two steam wisps. Drawn on the same 24px grid
+ * as the icons above, but also used large as the search tile's default
+ * (no-cover-photo) image — at that size pass a thinner `strokeWidth`
+ * (e.g. 0.7) so the line weight stays delicate instead of scaling up 5x.
+ */
+export function CoffeeCupIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} {...props}>
+      {/* steam */}
+      <path d="M10 2.25c-1.25 1.3 1.25 2.2 0 4" />
+      <path d="M14 2.25c-1.25 1.3 1.25 2.2 0 4" />
+      {/* cup body */}
+      <path d="M6.5 9.5h11v4.5a5 5 0 0 1-5 5h-1a5 5 0 0 1-5-5V9.5z" />
+      {/* handle */}
+      <path d="M17.5 11h1a2.75 2.75 0 0 1 0 5.5h-1.75" />
+      {/* saucer */}
+      <path d="M3.5 20.25h17c-.9 1.6-3.4 2.25-8.5 2.25s-7.6-.65-8.5-2.25z" />
+    </svg>
+  );
+}

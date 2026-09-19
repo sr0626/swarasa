@@ -1,6 +1,8 @@
 """Response shapes for GET /search — see docs/API_CONTRACTS.md."""
 from __future__ import annotations
 
+from datetime import time
+
 from pydantic import BaseModel
 
 from app.schemas.cuisine import CuisineTagOut
@@ -25,6 +27,13 @@ class NearestLocationOut(BaseModel):
     is_verified: bool
     is_paid: bool
     is_open_now: bool | None
+    # Today's hours in the location's own timezone, for the card's
+    # "Open today 11am-9pm" / "Closed today" label. None = unknown (no
+    # hours row, or times missing) — the frontend shows no label then.
+    # When is_closed is true, open_time/close_time are None.
+    open_time: time | None = None
+    close_time: time | None = None
+    is_closed: bool | None = None
 
 
 class SearchResultOut(BaseModel):

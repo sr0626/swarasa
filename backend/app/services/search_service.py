@@ -153,9 +153,17 @@ async def search(
         nearest = min(rows, key=lambda r: r.distance_mi)
         cards.append(_BrandCard(brand=brand, nearest=nearest, location_count_nearby=len(rows)))
 
-    # Default sort: verified first, then distance, then alphabetical
-    # (DECISIONS.md "Search default sort").
-    cards.sort(key=lambda c: (not c.nearest.is_verified, c.nearest.distance_mi, c.brand.name.lower()))
+    # Default sort: paid first, then verified, then distance, then
+    # alphabetical (DECISIONS.md "Search default sort"). Paid placement is
+    # labeled "Featured" on the card, per the BRD's promoted-placement rule.
+    cards.sort(
+        key=lambda c: (
+            not c.nearest.is_paid,
+            not c.nearest.is_verified,
+            c.nearest.distance_mi,
+            c.brand.name.lower(),
+        )
+    )
 
     total = len(cards)
     start = pagination.offset
@@ -169,7 +177,7 @@ async def search(
     results: list[SearchResultOut] = []
     for card in page_cards:
         nearest = card.nearest
-        is_open_now = await hours_service.is_open_now_for_location(
+        today = await hours_service.today_status_for_location(
             db, nearest.location_id, nearest.timezone
         )
         cover = await photo_service.get_cover_photo(db, nearest.location_id)
@@ -192,7 +200,10 @@ async def search(
                     phone=nearest.phone,
                     is_verified=nearest.is_verified,
                     is_paid=nearest.is_paid,
-                    is_open_now=is_open_now,
+                    is_open_now=today.is_open_now,
+                    open_time=today.open_time,
+                    close_time=today.close_time,
+                    is_closed=today.is_closed,
                 ),
                 location_count_nearby=card.location_count_nearby,
                 cover_photo_url=s3_service.resolve_media_url(cover.s3_key) if cover else None,

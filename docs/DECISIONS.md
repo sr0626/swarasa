@@ -1406,6 +1406,20 @@ May 2026 | Phase 1 and 2 default. Phase 3 introduces weighted ranking
 (paid + verified + recent deals). Simple and predictable for launch.
 *Rejected: Random, purely alphabetical, purely distance*
 
+**Search sort updated: paid first, then verified, then distance, then alphabetical**
+2026-09-18 | User request: paid restaurants take precedence in "Popular near
+you" and /search. Sort key is now `(not is_paid, not is_verified,
+distance_mi, name)`, evaluated on the brand's nearest location. Promoted
+placement must be clearly labeled (BRD section 9), so the search card's
+"Featured" badge (shown whenever `nearest_location.is_paid`) is a
+requirement of this ordering, not just decoration — do not remove it
+without also changing the sort. Phase 3 weighted ranking still supersedes
+this. Same change: the search card now shows today's hours ("Open today
+11am–9pm" / "Closed today", nothing when unknown) and a coffee-cup
+illustration replaces the logo watermark on tiles with no cover photo.
+*Rejected: Sorting paid within distance bands (harder to explain, unlabeled
+mixing)*
+
 **Default search radius: 15 miles**
 May 2026 | Appropriate for DFW metro — covers a full suburban drive.
 City search uses admin-configured bounding box. No location = city default.

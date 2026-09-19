@@ -10,8 +10,12 @@
 // icon requirement is met without inventing a number.
 import Link from "next/link";
 import type { SearchResultItem } from "@/types/search";
-import SwarasaMark from "@/components/icons/SwarasaMark";
-import { LocationPinIcon, PhoneIcon, StarIcon } from "@/components/ui/icons";
+import {
+  CoffeeCupIcon,
+  LocationPinIcon,
+  PhoneIcon,
+  StarIcon,
+} from "@/components/ui/icons";
 import OpenStatusBadge from "@/components/ui/OpenStatusBadge";
 
 export default function RestaurantCard({ item }: { item: SearchResultItem }) {
@@ -40,14 +44,16 @@ export default function RestaurantCard({ item }: { item: SearchResultItem }) {
               className="absolute inset-0 h-full w-full object-cover"
             />
           ) : (
-            // Default placeholder when no cover photo is set — the app's
-            // own brand mark (same SwarasaMark used in the header),
-            // large and low-opacity, filling most of the tile with a
-            // small consistent margin (`inset-4`) rather than a small
-            // centered glyph. Reuses an existing on-brand asset instead
-            // of inventing new iconography.
-            <div className="absolute inset-4 flex items-center justify-center">
-              <SwarasaMark className="h-full w-full text-brand-bg/60" />
+            // Default image when no cover photo is set — an inline-SVG
+            // coffee-cup line illustration (CoffeeCupIcon; drawn in-house,
+            // no third-party image), large and low-opacity cream on the
+            // warm gradient, with a consistent margin (`inset-6`). A thin
+            // strokeWidth keeps the 24px-grid icon delicate at this size.
+            <div className="absolute inset-6 flex items-center justify-center">
+              <CoffeeCupIcon
+                className="h-full w-full text-brand-bg/60"
+                strokeWidth={0.6}
+              />
             </div>
           )}
           {nearest_location.is_paid && (
@@ -108,9 +114,16 @@ export default function RestaurantCard({ item }: { item: SearchResultItem }) {
         )}
 
         <div className="mt-auto flex items-center justify-between pt-2">
-          <OpenStatusBadge isOpenNow={nearest_location.is_open_now} />
+          {/* TODO(Phase 2): a "Deals Today" label goes here once deals
+              data exists — there is no deals data in Phase 1. */}
+          <OpenStatusBadge
+            isOpenNow={nearest_location.is_open_now}
+            isClosedToday={nearest_location.is_closed}
+            openTime={nearest_location.open_time}
+            closeTime={nearest_location.close_time}
+          />
           {!item.is_claimed && (
-            <span className="text-xs font-medium text-brand-ink-subtle">
+            <span className="ml-auto text-xs font-medium text-brand-ink-subtle">
               Unclaimed
             </span>
           )}
