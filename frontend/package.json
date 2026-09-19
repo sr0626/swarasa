@@ -11,6 +11,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "test:unit": "node --test --experimental-strip-types \"src/**/*.test.ts\"",
     "lighthouse": "lhci autorun"
   },
   "dependencies": {

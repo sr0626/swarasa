@@ -93,8 +93,9 @@ export interface LocationDetail {
   /** Short specialty chips (max 8, each 1-40 chars); null until set. */
   specialties: string[] | null;
   timezone: string;
-  latitude: number;
-  longitude: number;
+  /** null when the listing has never been geocoded (e.g. Nominatim found no match). */
+  latitude: number | null;
+  longitude: number | null;
   is_verified: boolean;
   is_paid: boolean;
   is_open_now: boolean | null;
@@ -115,8 +116,10 @@ export interface CreateLocationInput {
   country: string;
   phone: string | null;
   timezone: string;
-  latitude: number;
-  longitude: number;
+  /** null/omitted when the address couldn't be geocoded — the listing then
+   * stays out of geo search until an admin sets a position. */
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 /**

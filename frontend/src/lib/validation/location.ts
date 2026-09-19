@@ -2,21 +2,61 @@
 // /locations/{id}/hours, and the photo sub-resource body shapes
 // (docs/API_CONTRACTS.md "Locations").
 import { z } from "zod";
+import { normalizePhone } from "@/lib/phone";
 
 const TIME_PATTERN = /^\d{2}:\d{2}:\d{2}$/;
 
+/**
+ * Optional phone: blank -> null, otherwise normalised to E.164
+ * (`lib/phone.ts` — "(972) 555-0142" -> "+19725550142").
+ */
+export const optionalPhoneSchema = z
+  .string()
+  .trim()
+  .nullish()
+  .transform((value, ctx): string | null => {
+    if (!value) return null;
+    const normalised = normalizePhone(value);
+    if (!normalised) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Enter a valid phone number, e.g. (972) 555-0142",
+      });
+      return z.NEVER;
+    }
+    return normalised;
+  });
+
+/**
+ * Address fields shared by POST /locations, PATCH /locations/{id} and the
+ * "Add restaurant" form. `state` is upper-cased; lat/lng are optional
+ * because a listing may exist before it has been geocoded.
+ */
+export const locationAddressShape = {
+  address_line1: z.string().trim().min(1, "Street address is required").max(200),
+  address_line2: z
+    .string()
+    .trim()
+    .max(200)
+    .nullish()
+    .transform((value) => value || null),
+  city: z.string().trim().min(1, "City is required").max(100),
+  state: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z]{2}$/, "Use a 2-letter state code, e.g. TX")
+    .transform((value) => value.toUpperCase()),
+  postal_code: z.string().trim().regex(/^\d{5}(-\d{4})?$/, "Enter a valid US ZIP code"),
+};
+
 export const createLocationSchema = z.object({
   brand_id: z.number().int().positive(),
-  address_line1: z.string().trim().min(1, "Address is required").max(200),
-  address_line2: z.string().trim().max(200).nullable(),
-  city: z.string().trim().min(1, "City is required").max(100),
-  state: z.string().trim().length(2, "Use a 2-letter state code"),
-  postal_code: z.string().trim().regex(/^\d{5}(-\d{4})?$/, "Enter a valid US ZIP code"),
+  ...locationAddressShape,
   country: z.string().trim().length(2, "Use a 2-letter country code"),
-  phone: z.string().trim().regex(/^\+?[1-9]\d{7,14}$/, "Enter a valid phone number"),
+  phone: optionalPhoneSchema,
   timezone: z.string().trim().min(1, "Timezone is required"),
-  latitude: z.number().min(-90).max(90),
-  longitude: z.number().min(-180).max(180),
+  latitude: z.number().min(-90).max(90).nullish(),
+  longitude: z.number().min(-180).max(180).nullish(),
 });
 
 export type CreateLocationFormValues = z.infer<typeof createLocationSchema>;

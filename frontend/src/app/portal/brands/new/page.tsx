@@ -40,7 +40,7 @@ export default async function NewBrandPage() {
           Add Your Restaurant
         </h1>
         <p className="mt-1 text-sm text-brand-ink-muted">
-          Tell us about your restaurant. You can add a location and photos next.
+          Tell us about your restaurant and where to find it. You can add hours and photos next.
         </p>
 
         <div className="mt-6 rounded-brand-card border border-brand-border bg-white p-5 shadow-brand-card sm:p-6">

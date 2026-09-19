@@ -1,21 +1,62 @@
 "use server";
 
-// Server Action backing CreateBrandForm.tsx — same "keep the Cognito
-// session token server-side" rationale as app/claim/actions.ts and
-// app/portal/locations/[id]/actions.ts. POST /restaurants is owner-only
-// (docs/API_CONTRACTS.md "POST /restaurants"), re-checked here even though
-// the backend enforces it too.
+// Server Action backing CreateBrandForm.tsx ("Add your restaurant") — same
+// "keep the Cognito session token server-side" rationale as
+// app/claim/actions.ts and app/portal/locations/[id]/actions.ts. POST
+// /restaurants and POST /locations are owner-only (docs/API_CONTRACTS.md),
+// re-checked here even though the backend enforces it too.
+//
+// One submit creates a usable listing in up to three steps:
+//   1. POST /restaurants  (the brand — name, description, website, tags)
+//   2. geocode the address (Nominatim, lib/geocode/nominatim.ts). Done HERE
+//      because the API Lambda has no internet access (no NAT Gateway), so
+//      it cannot geocode. Best-effort: never blocks creation.
+//   3. POST /locations    (the first location — address, phone, timezone,
+//      and lat/lng when geocoding succeeded; the backend syncs the PostGIS
+//      `geom` column search queries from them on create).
+//
+// Partial failure: if step 1 succeeds and step 3 fails, the brand exists
+// but has no location. The result carries `brandId` so the form can retry
+// ONLY the location step (`existingBrandId`) instead of creating a
+// duplicate brand.
 import { ApiError } from "@/lib/api/client";
+import { createLocation } from "@/lib/api/locations";
 import { createRestaurant } from "@/lib/api/restaurants";
 import { getServerSession } from "@/lib/auth/session";
-import { createRestaurantSchema } from "@/lib/validation/restaurant";
-import type { RestaurantBrand } from "@/types/restaurant";
+import { geocodeAddress } from "@/lib/geocode/nominatim";
+import { timezoneForState } from "@/lib/timezone";
+import { fieldErrorsFromZod, type FieldErrors } from "@/lib/validation/fieldErrors";
+import { addRestaurantSchema } from "@/lib/validation/restaurant";
 
-type ActionResult =
-  | { ok: true; data: RestaurantBrand }
-  | { ok: false; error: string };
+export type MapPosition = "exact" | "approximate" | "none";
 
-export async function createBrandAction(input: unknown): Promise<ActionResult> {
+export type AddRestaurantResult =
+  | {
+      ok: true;
+      locationId: number;
+      /**
+       * "none": geocoding found nothing, so the listing has no map position
+       * (and stays out of geo search) until an admin sets it. "approximate":
+       * only the ZIP area matched. "exact": street-level match.
+       */
+      mapPosition: MapPosition;
+    }
+  | {
+      ok: false;
+      error: string;
+      fieldErrors?: FieldErrors;
+      /** Set when the brand was created (or already existed) but the location step failed. */
+      brandId?: number;
+    };
+
+function messageFor(error: unknown, fallback: string): string {
+  return error instanceof ApiError ? error.message : fallback;
+}
+
+export async function addRestaurantAction(
+  input: unknown,
+  existingBrandId?: number
+): Promise<AddRestaurantResult> {
   const session = await getServerSession();
   if (!session) {
     return { ok: false, error: "Your session has expired. Please sign in again." };
@@ -24,20 +65,85 @@ export async function createBrandAction(input: unknown): Promise<ActionResult> {
     return { ok: false, error: "Only an owner account can add a restaurant." };
   }
 
-  const parsed = createRestaurantSchema.safeParse(input);
+  const parsed = addRestaurantSchema.safeParse(input);
   if (!parsed.success) {
     return {
       ok: false,
-      error: parsed.error.issues[0]?.message ?? "Please check the form and try again.",
+      error: "Please fix the highlighted fields and try again.",
+      fieldErrors: fieldErrorsFromZod(parsed.error),
     };
   }
+  const values = parsed.data;
+
+  let brandId: number;
+  if (existingBrandId !== undefined) {
+    // Retry of the location step after a partial failure. The id is
+    // client-supplied, so it's untrusted: POST /locations re-checks that
+    // the brand belongs to this owner (403/404 otherwise).
+    if (!Number.isInteger(existingBrandId) || existingBrandId <= 0) {
+      return { ok: false, error: "Something went wrong. Please try again." };
+    }
+    brandId = existingBrandId;
+  } else {
+    try {
+      const brand = await createRestaurant(
+        {
+          name: values.name,
+          description: values.description,
+          website: values.website,
+          cuisine_tag_ids: values.cuisine_tag_ids,
+        },
+        session.accessToken
+      );
+      brandId = brand.id;
+    } catch (error) {
+      return {
+        ok: false,
+        error: messageFor(error, "Something went wrong creating your restaurant."),
+      };
+    }
+  }
+
+  const coordinates = await geocodeAddress({
+    address_line1: values.address_line1,
+    city: values.city,
+    state: values.state,
+    postal_code: values.postal_code,
+  });
 
   try {
-    const brand = await createRestaurant(parsed.data, session.accessToken);
-    return { ok: true, data: brand };
+    const location = await createLocation(
+      {
+        brand_id: brandId,
+        address_line1: values.address_line1,
+        address_line2: values.address_line2,
+        city: values.city,
+        state: values.state,
+        postal_code: values.postal_code,
+        country: "US",
+        phone: values.phone,
+        timezone: timezoneForState(values.state),
+        // Never fabricated: null/omitted when geocoding found nothing, and
+        // the listing then stays out of geo search until an admin sets it.
+        latitude: coordinates?.latitude ?? null,
+        longitude: coordinates?.longitude ?? null,
+      },
+      session.accessToken
+    );
+    const mapPosition: MapPosition = !coordinates
+      ? "none"
+      : coordinates.precision === "postal_code"
+        ? "approximate"
+        : "exact";
+    return { ok: true, locationId: location.id, mapPosition };
   } catch (error) {
-    const message =
-      error instanceof ApiError ? error.message : "Something went wrong creating your restaurant.";
-    return { ok: false, error: message };
+    return {
+      ok: false,
+      brandId,
+      error: `Your restaurant was created, but we couldn't save its address. ${messageFor(
+        error,
+        "Please try again."
+      )}`,
+    };
   }
 }

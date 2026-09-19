@@ -41,9 +41,20 @@ function toFormState(location: LocationDetail): FormState {
     country: location.country,
     phone: location.phone ?? "",
     timezone: location.timezone,
-    latitude: String(location.latitude),
-    longitude: String(location.longitude),
+    // Null until the address has been geocoded (see NewListingNotice).
+    latitude: location.latitude === null ? "" : String(location.latitude),
+    longitude: location.longitude === null ? "" : String(location.longitude),
   };
+}
+
+/** True when the street/city/state/ZIP differ — coordinates would go stale. */
+function addressChanged(a: FormState, b: FormState): boolean {
+  return (
+    a.address_line1.trim() !== b.address_line1.trim() ||
+    a.city.trim() !== b.city.trim() ||
+    a.state.trim().toUpperCase() !== b.state.trim().toUpperCase() ||
+    a.postal_code.trim() !== b.postal_code.trim()
+  );
 }
 
 const inputClass =
@@ -52,6 +63,10 @@ const labelClass = "text-sm font-semibold text-brand-ink";
 
 export default function LocationInfoForm({ location }: { location: LocationDetail }) {
   const [form, setForm] = useState<FormState>(toFormState(location));
+  // Last-saved values: what "did the owner change the address / type new
+  // coordinates" is measured against.
+  const [baseline, setBaseline] = useState<FormState>(toFormState(location));
+  const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -64,32 +79,58 @@ export default function LocationInfoForm({ location }: { location: LocationDetai
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
+    setNotice(null);
     setSaved(false);
 
-    const latitude = Number(form.latitude);
-    const longitude = Number(form.longitude);
-    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    const latText = form.latitude.trim();
+    const lngText = form.longitude.trim();
+    if ((latText === "") !== (lngText === "")) {
+      setError("Enter both latitude and longitude, or leave both blank.");
+      return;
+    }
+    const latitude = latText === "" ? null : Number(latText);
+    const longitude = lngText === "" ? null : Number(lngText);
+    if (
+      (latitude !== null && !Number.isFinite(latitude)) ||
+      (longitude !== null && !Number.isFinite(longitude))
+    ) {
       setError("Latitude and longitude must be numbers.");
       return;
     }
 
+    // Address edited without hand-typing new coordinates: re-geocode
+    // server-side rather than leaving the old (now wrong) position. Also
+    // covers a listing that has no position yet (blank coordinates).
+    const coordsEditedByHand =
+      form.latitude.trim() !== baseline.latitude.trim() ||
+      form.longitude.trim() !== baseline.longitude.trim();
+    const regeocode =
+      !coordsEditedByHand && (addressChanged(form, baseline) || latitude === null);
+
     setSaving(true);
     try {
-      const result = await updateLocationInfoAction(location.id, {
-        address_line1: form.address_line1.trim(),
-        address_line2: form.address_line2.trim() || null,
-        city: form.city.trim(),
-        state: form.state.trim().toUpperCase(),
-        postal_code: form.postal_code.trim(),
-        country: form.country.trim().toUpperCase(),
-        phone: form.phone.trim(),
-        timezone: form.timezone.trim(),
-        latitude,
-        longitude,
-      });
+      const result = await updateLocationInfoAction(
+        location.id,
+        {
+          address_line1: form.address_line1.trim(),
+          address_line2: form.address_line2.trim() || null,
+          city: form.city.trim(),
+          state: form.state.trim().toUpperCase(),
+          postal_code: form.postal_code.trim(),
+          country: form.country.trim().toUpperCase(),
+          phone: form.phone.trim(),
+          timezone: form.timezone.trim(),
+          // When re-geocoding, the server supplies fresh coordinates.
+          ...(regeocode || latitude === null || longitude === null ? {} : { latitude, longitude }),
+        },
+        { regeocode }
+      );
       if (result.ok) {
-        setForm(toFormState(result.data));
+        const next = toFormState(result.data);
+        setForm(next);
+        setBaseline(next);
         setSaved(true);
+        setNotice(result.notice ?? null);
       } else {
         setError(result.error);
       }
@@ -183,11 +224,12 @@ export default function LocationInfoForm({ location }: { location: LocationDetai
         </div>
 
         <div>
-          <label htmlFor="phone" className={labelClass}>Phone</label>
+          <label htmlFor="phone" className={labelClass}>
+            Phone <span className="font-normal text-brand-ink-subtle">(optional)</span>
+          </label>
           <input
             id="phone"
             type="tel"
-            required
             value={form.phone}
             onChange={(e) => set("phone", e.target.value)}
             className={inputClass}
@@ -213,7 +255,6 @@ export default function LocationInfoForm({ location }: { location: LocationDetai
             id="latitude"
             type="number"
             step="any"
-            required
             value={form.latitude}
             onChange={(e) => set("latitude", e.target.value)}
             className={inputClass}
@@ -226,7 +267,6 @@ export default function LocationInfoForm({ location }: { location: LocationDetai
             id="longitude"
             type="number"
             step="any"
-            required
             value={form.longitude}
             onChange={(e) => set("longitude", e.target.value)}
             className={inputClass}
@@ -238,9 +278,14 @@ export default function LocationInfoForm({ location }: { location: LocationDetai
             {error}
           </p>
         )}
-        {saved && !error && (
+        {saved && !error && !notice && (
           <p className="sm:col-span-2 rounded-brand-control bg-brand-success-bg px-3 py-2.5 text-sm text-brand-success">
             Saved.
+          </p>
+        )}
+        {saved && !error && notice && (
+          <p className="sm:col-span-2 rounded-brand-control bg-brand-chip px-3 py-2.5 text-sm text-brand-ink">
+            {notice}
           </p>
         )}
 

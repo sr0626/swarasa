@@ -20,6 +20,7 @@ import LocationAboutForm from "@/components/portal/LocationAboutForm";
 import LocationHoursEditor from "@/components/portal/LocationHoursEditor";
 import LocationPhotoManager from "@/components/portal/LocationPhotoManager";
 import LocationManagerAssignment from "@/components/portal/LocationManagerAssignment";
+import NewListingNotice, { parseNewListingParam } from "@/components/portal/NewListingNotice";
 import InfoPanel from "@/components/ui/InfoPanel";
 import type { LocationDetail, LocationManager } from "@/types/location";
 
@@ -29,6 +30,7 @@ export const metadata: Metadata = {
 
 interface LocationPageProps {
   params: { id: string };
+  searchParams?: { new?: string | string[] };
 }
 
 /** Where "back" goes depends on the role: the portal dashboard is
@@ -61,7 +63,7 @@ function NotFoundOrNoAccess({ role }: { role: string }) {
   );
 }
 
-export default async function PortalLocationPage({ params }: LocationPageProps) {
+export default async function PortalLocationPage({ params, searchParams }: LocationPageProps) {
   const session = await requireSession(["owner", "manager", "admin"]);
 
   const locationId = Number.parseInt(params.id, 10);
@@ -92,6 +94,8 @@ export default async function PortalLocationPage({ params }: LocationPageProps) 
 
   const isOwner = session.role === "owner";
   const back = backTarget(session.role);
+  // Only owners create listings; ignore the flag for anyone else.
+  const newListing = isOwner ? parseNewListingParam(searchParams?.new) : null;
 
   return (
     <main className="min-h-screen bg-brand-bg">
@@ -107,6 +111,7 @@ export default async function PortalLocationPage({ params }: LocationPageProps) 
         <p className="mt-1 text-sm text-brand-ink-muted">
           {location.address_line1}, {location.city}, {location.state} {location.postal_code}
         </p>
+        {newListing && <NewListingNotice mapPosition={newListing} />}
 
         <div className="mt-6 flex flex-col gap-6">
           <LocationInfoForm location={location} />

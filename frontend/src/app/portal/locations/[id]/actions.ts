@@ -24,6 +24,7 @@ import {
   updateLocationPhoto,
 } from "@/lib/api/locations";
 import { getServerSession } from "@/lib/auth/session";
+import { geocodeAddress } from "@/lib/geocode/nominatim";
 import {
   assignLocationManagerSchema,
   createPhotoSchema,
@@ -42,7 +43,7 @@ import type {
 } from "@/types/location";
 import type { UserRole } from "@/types/auth";
 
-type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
+type ActionResult<T> = { ok: true; data: T; notice?: string } | { ok: false; error: string };
 
 async function requireLocationSession(): Promise<
   { ok: true; accessToken: string; role: UserRole } | { ok: false; error: string }
@@ -66,10 +67,20 @@ function messageFor(error: unknown, fallback: string): string {
   return fallback;
 }
 
-/** PATCH /locations/{id} — info/address/contact fields. */
+/**
+ * PATCH /locations/{id} — info/address/contact fields.
+ *
+ * `options.regeocode`: the client sets this when the street/city/state/ZIP
+ * changed and the owner did NOT type new coordinates by hand — the old
+ * lat/lng would otherwise silently go stale. The address is then geocoded
+ * here (server-side: the API Lambda has no internet, see
+ * lib/geocode/nominatim.ts). On a miss the coordinates are left unchanged
+ * and a `notice` tells the owner; the save itself never fails on geocoding.
+ */
 export async function updateLocationInfoAction(
   locationId: number,
-  input: unknown
+  input: unknown,
+  options?: { regeocode?: boolean }
 ): Promise<ActionResult<LocationDetail>> {
   const auth = await requireLocationSession();
   if (!auth.ok) return auth;
@@ -82,9 +93,40 @@ export async function updateLocationInfoAction(
     };
   }
 
+  const update = { ...parsed.data };
+  let notice: string | undefined;
+  if (
+    options?.regeocode &&
+    update.address_line1 &&
+    update.city &&
+    update.state &&
+    update.postal_code
+  ) {
+    const coordinates = await geocodeAddress({
+      address_line1: update.address_line1,
+      city: update.city,
+      state: update.state,
+      postal_code: update.postal_code,
+    });
+    if (coordinates) {
+      update.latitude = coordinates.latitude;
+      update.longitude = coordinates.longitude;
+      if (coordinates.precision === "postal_code") {
+        notice = "Saved. The map position is approximate (matched by ZIP code only).";
+      }
+    } else {
+      // Keep whatever is stored; never fabricate. A missing position keeps
+      // the listing out of nearby searches, so say so.
+      delete update.latitude;
+      delete update.longitude;
+      notice =
+        "Saved, but we couldn't find the new address on the map, so the map position wasn't updated. Check the street address, or contact us and we'll set it for you.";
+    }
+  }
+
   try {
-    const location = await updateLocation(locationId, parsed.data, auth.accessToken);
-    return { ok: true, data: location };
+    const location = await updateLocation(locationId, update, auth.accessToken);
+    return { ok: true, data: location, notice };
   } catch (error) {
     return { ok: false, error: messageFor(error, "Something went wrong saving these details.") };
   }
