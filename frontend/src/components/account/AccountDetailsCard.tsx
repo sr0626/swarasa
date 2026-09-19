@@ -5,7 +5,14 @@
 // yet" note the page previously showed as a standalone panel.
 import type { AuthMe } from "@/types/auth";
 
-export default function AccountDetailsCard({ me }: { me: AuthMe }) {
+export default function AccountDetailsCard({
+  me,
+  stacked = false,
+}: {
+  me: AuthMe;
+  /** One field per row (narrow side columns) instead of two side by side. */
+  stacked?: boolean;
+}) {
   return (
     <section
       aria-labelledby="account-details-heading"
@@ -15,7 +22,7 @@ export default function AccountDetailsCard({ me }: { me: AuthMe }) {
         Account details
       </h2>
 
-      <dl className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <dl className={`mt-4 grid grid-cols-1 gap-4 ${stacked ? "" : "sm:grid-cols-2"}`}>
         <div>
           <dt className="text-sm font-semibold text-brand-ink">Name</dt>
           <dd className="mt-1 break-words text-sm text-brand-ink-muted">
