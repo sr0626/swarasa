@@ -1,27 +1,17 @@
-// Right-hand panel of the owner console on /portal/dashboard ("My
-// restaurants"): page heading with an "Add a restaurant" action, stat tiles
-// (restaurants / locations / paid / free -- derived from the data the page
-// already loads, no extra calls), then one BrandCard per brand (locations with
-// Edit link, tier/status badges and assigned managers), or the error / empty
-// states. The banner and left menu come from OwnerShell; the data fetching
-// stays in app/portal/dashboard/page.tsx. Server Component.
+// "My restaurants" section of the owner's single business page (/account,
+// components/account/OwnerAccountView.tsx): section heading with an "Add a
+// restaurant" action, then one BrandCard per brand (locations with Edit / View
+// public page links, tier/status badges and assigned managers), or the error /
+// empty states. Data fetching lives in lib/owner/loadOwnerRestaurants.ts.
+// Server Component.
 import Link from "next/link";
 import BrandCard from "@/components/portal/BrandCard";
-import OwnerStatTiles from "@/components/account/OwnerStatTiles";
 import { primaryLinkClass } from "@/components/account/accountShared";
 import InfoPanel from "@/components/ui/InfoPanel";
 import { PlusIcon } from "@/components/ui/icons";
-import type { LocationWithManagers } from "@/types/location";
-import type { RestaurantBrand } from "@/types/restaurant";
+import type { BrandWithLocations } from "@/lib/owner/loadOwnerRestaurants";
 
-/** A brand plus its (already fetched) locations + managers, or why they couldn't load. */
-export interface BrandWithLocations {
-  brand: RestaurantBrand;
-  locations: LocationWithManagers[];
-  locationsError: string | null;
-}
-
-export default function OwnerDashboardPanel({
+export default function OwnerRestaurantsSection({
   brands,
   loadError,
 }: {
@@ -29,12 +19,19 @@ export default function OwnerDashboardPanel({
   loadError: string | null;
 }) {
   return (
-    <div className="flex flex-col gap-6">
+    <section
+      id="restaurants"
+      aria-labelledby="restaurants-heading"
+      className="flex scroll-mt-24 flex-col gap-5"
+    >
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
-          <h1 className="font-display text-2xl font-bold text-brand-ink sm:text-3xl">
+          <h2
+            id="restaurants-heading"
+            className="font-display text-2xl font-bold text-brand-ink sm:text-3xl"
+          >
             My restaurants
-          </h1>
+          </h2>
           <p className="mt-2 text-sm text-brand-ink-muted">
             Your restaurant brands and locations. Select a location to edit its details, hours,
             photos, and managers.
@@ -45,14 +42,6 @@ export default function OwnerDashboardPanel({
           Add a restaurant
         </Link>
       </header>
-
-      <OwnerStatTiles
-        brands={brands.map(({ locations, locationsError }) => ({
-          locations: locations.map((l) => l.location),
-          locationsError,
-        }))}
-        loadFailed={loadError !== null}
-      />
 
       {loadError && <InfoPanel title="Couldn't load your restaurants" body={loadError} />}
 
@@ -81,6 +70,6 @@ export default function OwnerDashboardPanel({
           ))}
         </div>
       )}
-    </div>
+    </section>
   );
 }

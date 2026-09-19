@@ -1,5 +1,5 @@
 // Small pieces shared by every role's /account layout (Diner/Owner/Manager/
-// Admin views) and AccountSummaryCard: role labels, display-name helpers and
+// Admin views): role labels, display-name helpers and
 // the repeated Tailwind class strings for cards and pill links, so a rebrand
 // tweak lands in one place.
 import type { AuthMe } from "@/types/auth";

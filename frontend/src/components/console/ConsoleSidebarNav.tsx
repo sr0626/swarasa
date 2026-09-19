@@ -46,7 +46,7 @@ export default function ConsoleSidebarNav({
       className="overflow-x-auto py-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:overflow-visible lg:rounded-brand-card lg:border lg:border-brand-border lg:bg-white lg:p-2 lg:shadow-brand-card"
     >
       <ul className="flex gap-2 px-1 lg:flex-col lg:gap-1 lg:px-0">
-        {items.map(({ href, label: itemLabel, icon }) => {
+        {items.map(({ href, label: itemLabel, icon, subItems }) => {
           const active = isActive(pathname, href);
           const Icon = ICONS[icon];
           return (
@@ -63,6 +63,22 @@ export default function ConsoleSidebarNav({
                 <Icon className="h-5 w-5 shrink-0" />
                 {itemLabel}
               </Link>
+              {active && subItems && subItems.length > 0 && (
+                // In-page section links: desktop only -- below `lg` the menu
+                // is a single pill row and the page is short enough to scroll.
+                <ul className="mb-1 mt-1 hidden flex-col gap-0.5 border-l border-brand-border pl-3 ml-6 lg:flex">
+                  {subItems.map((sub) => (
+                    <li key={sub.href}>
+                      <Link
+                        href={sub.href}
+                        className="flex min-h-[36px] items-center rounded-brand-control px-2 text-sm font-medium text-brand-ink-muted transition hover:bg-brand-chip hover:text-brand-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent"
+                      >
+                        {sub.label}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </li>
           );
         })}

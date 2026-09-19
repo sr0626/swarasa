@@ -1,7 +1,7 @@
 // Owner console frame: the generic ConsoleShell with the "Business account"
-// banner and the owner menu (My restaurants / Add a restaurant / Profile &
-// account). Used by /portal/dashboard (owner branch), /portal/brands/* (via
-// its layout) and the owner branch of /account. Managers are not given this
+// banner and the owner menu (Business account with in-page links / Add a
+// restaurant). Used by the owner branch of /account (the single business
+// page) and /portal/brands/* (via its layout). Managers are not given this
 // shell yet -- a ManagerShell can reuse ConsoleShell with its own menu.
 import type { ReactNode } from "react";
 import ConsoleShell from "@/components/console/ConsoleShell";

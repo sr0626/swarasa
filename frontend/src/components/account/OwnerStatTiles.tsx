@@ -1,5 +1,4 @@
-// Stat tiles across the top of the owner's My restaurants panel
-// (/portal/dashboard): restaurants, locations, paid vs free locations. Counts
+// Stat tiles across the top of the owner's business page (/account): restaurants, locations, paid vs free locations. Counts
 // are derived from data the page already loads (GET /restaurants + per-brand
 // GET /restaurants/{id}/locations).
 // Paid/free are only shown when every brand's locations loaded; otherwise a

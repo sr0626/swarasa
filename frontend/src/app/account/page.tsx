@@ -23,13 +23,16 @@
 // each role has its own layout under components/account/ (DinerAccountView,
 // OwnerAccountView, ManagerAccountView, AdminAccountView), sharing the
 // summary/details/security/privacy pieces. Admin and owner views render
-// inside their console shell (banner + left menu); the owner's restaurant
-// list lives on /portal/dashboard, not here. All data-fetching, the server
-// actions (app/account/actions.ts) and the role gating are unchanged.
+// inside their console shell (banner + left menu). For an owner this page is
+// THE business page (stat tiles + restaurants + profile + security + data &
+// privacy): the separate owner dashboard was folded in (2026-09-19), and
+// /portal/dashboard now just redirects owners here. The server actions
+// (app/account/actions.ts) and the role gating are unchanged.
 import type { Metadata } from "next";
 import { requireSession } from "@/lib/auth/guards";
 import TopBar from "@/components/home/TopBar";
 import { ApiError } from "@/lib/api/client";
+import { loadOwnerRestaurants, type OwnerRestaurants } from "@/lib/owner/loadOwnerRestaurants";
 import {
   getCurrentUser,
   getMyDataDeletionRequests,
@@ -94,6 +97,13 @@ export default async function AccountPage() {
     }
   }
 
+  // Owners: the restaurants list rendered on this page (never throws; a
+  // failure comes back as `loadError` and the section shows it).
+  let ownerRestaurants: OwnerRestaurants | null = null;
+  if (me && me.role === "owner") {
+    ownerRestaurants = await loadOwnerRestaurants(session.accessToken);
+  }
+
   // Best-effort — the privacy section still renders (just without a known
   // "already pending" state) if this call fails, since it isn't essential
   // to reading the page.
@@ -120,12 +130,17 @@ export default async function AccountPage() {
     );
   }
 
-  // Owners get the business console frame (banner + left menu, "Profile &
-  // account" active) -- the same OwnerShell the owner dashboard uses.
+  // Owners get the business console frame (banner + left menu, "Business
+  // account" active) -- the same OwnerShell /portal/brands/* uses.
   if (me?.role === "owner") {
     return (
       <OwnerShell me={me} profile>
-        <OwnerAccountView me={me} latestDeletionRequest={latestDeletionRequest} />
+        <OwnerAccountView
+          me={me}
+          brands={ownerRestaurants?.brands ?? []}
+          restaurantsError={ownerRestaurants?.loadError ?? null}
+          latestDeletionRequest={latestDeletionRequest}
+        />
       </OwnerShell>
     );
   }
