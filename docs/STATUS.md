@@ -28,10 +28,7 @@ fully satisfied and asked to stop iterating for now, with an explicit intent
 to revisit later, not a final sign-off.
 
 ## Open PRs
-- #135 (ready for review) — search page tag filters moved into a Filters dropdown
-  with active-filter chips.
-- #136 (ready for review) — admin console layout with a left sidebar menu
-  (Profile / Claims / Reports / Listings).
+- Follow-up PR in flight: owner links to /account + phone display formatting.
 
 ## Recently landed (2026-09-17 → 2026-09-19, PRs #64–#134)
 - Auth: sign-up / forgot-password / remember-me, post-confirmation role Lambda,
@@ -55,12 +52,18 @@ to revisit later, not a final sign-off.
   #115, #118).
 - BRD v3.7 (admin capabilities) (#111).
 
+## Also landed (2026-09-19, #135–#147)
+- Search Filters dropdown + chips (#135); admin console left-sidebar layout (#136).
+- Claim approval adds the claimant to the Cognito `owner` group (#138 IAM applied to dev, #139).
+- Geocode backfill run on dev: all 26 restaurants now have coordinates (#140, #143, #145).
+- Owner console: single Business account page at `/account` (#142, #147); Add restaurant collects address/phone/website and geocodes (#144); authenticated fetches uncached (#141); scripts guide `docs/SCRIPTS.md` (#146).
+- Payments/subscriptions/refunds/deals deferred by decision.
+
 ## Known gaps (2026-09-19)
-- Approving a claim does not add the claimant to the Cognito `owner` group
-  (needs Infra IAM grant).
-- 15 of 26 imported restaurants have no coordinates (invisible to non-text search).
+- Admin claims UI doesn't yet show the `owner_group_granted` flag.
+- Set `NEXT_PUBLIC_CONTACT_EMAIL` in Amplify (Nominatim User-Agent contact).
 - Admin new-user feed covers owner accounts only (no local diner user table).
-- Deals engine, refunds mechanism, social login not started.
+- Social login not started. Deals/refunds/payments deferred by decision.
 
 ## Architect (schema + contracts)
 - [x] 13 entities modeled, 2 migrations written (never run)

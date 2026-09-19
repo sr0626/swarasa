@@ -484,3 +484,21 @@ aws lambda get-function --function-name swarasa-api-dev --profile swarasa-dev --
 python3 scripts/dev_unclaim_restaurants.py   # user  (aws lambda invoke dev_unclaim_restaurants: dera-grill, masala-wok-indian-asian-fare)
 aws logs tail /aws/lambda/swarasa-api-dev --profile swarasa-dev --region us-east-1 --since 15m   # user  (claim-submit investigation; no errors)
 ```
+
+## 2026-09-19 (later)
+```bash
+git push -u origin infra/api-lambda-cognito-add-user-to-group   # claude
+git push -u origin feature/claim-approval-owner-group   # claude
+git push -u origin feature/geocode-missing-locations   # claude
+git push -u origin fix/no-cache-authenticated-fetch   # claude
+git push -u origin feature/owner-console-layout   # claude
+git push -u origin fix/geocode-script-unit-tokens   # claude
+git push -u origin feature/add-restaurant-full-details   # claude
+git push -u origin fix/geocode-script-census-primary   # claude
+git push -u origin docs/scripts-guide   # claude
+git push -u origin feature/owner-single-business-page   # claude
+terraform plan -var-file=envs/dev.tfvars   # user  (infra/, swarasa-dev; first run showed no changes before #138 merged, second showed 1 in-place IAM update)
+terraform apply -var-file=envs/dev.tfvars   # user  (infra/, swarasa-dev; api_lambda_custom policy: +AdminAddUserToGroup/AdminGetUser)
+python3 scripts/geocode_missing_locations.py --dry-run   # user  (x several: 0/15 on old script, 429s, then 15/15 with Census)
+python3 scripts/geocode_missing_locations.py   # user  (aws lambda invoke set_location_coordinates: updated 15)
+```
