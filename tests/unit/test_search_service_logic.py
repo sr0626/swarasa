@@ -264,7 +264,7 @@ async def test_pagination_slices_sorted_results(monkeypatch: pytest.MonkeyPatch)
 async def test_omitted_lat_lng_uses_dallas_default(monkeypatch: pytest.MonkeyPatch):
     captured = {}
 
-    async def _fake_fetch(db, lat, lng, radius_mi, cuisine, dietary, type_):
+    async def _fake_fetch(db, lat, lng, radius_mi, cuisine, dietary, type_, q=None):
         captured["lat"] = lat
         captured["lng"] = lng
         return []
@@ -276,3 +276,73 @@ async def test_omitted_lat_lng_uses_dallas_default(monkeypatch: pytest.MonkeyPat
     )
     assert captured["lat"] == search_service._DEFAULT_LAT
     assert captured["lng"] == search_service._DEFAULT_LNG
+
+
+# --- text search (`q`) ---------------------------------------------------------
+from sqlalchemy.dialects import postgresql
+
+
+def test_escape_like_makes_wildcards_literal():
+    assert search_service._escape_like("100%_off") == "100\\%\\_off"
+
+
+def test_distance_key_sorts_unlocated_after_located():
+    assert search_service._distance_key(None) > search_service._distance_key(9999.0)
+
+
+class _CapturingSession:
+    """Captures the statement `_fetch_candidates` executes, returns no rows."""
+
+    def __init__(self):
+        self.stmt = None
+
+    async def execute(self, stmt):
+        self.stmt = stmt
+
+        class _Result:
+            def all(self):
+                return []
+
+        return _Result()
+
+
+@pytest.mark.asyncio
+async def test_text_search_matches_name_or_tag_and_drops_geo_requirement():
+    db = _CapturingSession()
+    await search_service._fetch_candidates(db, 32.8, -96.9, 15, None, None, None, "katha")
+    sql = str(db.stmt.compile(dialect=postgresql.dialect())).lower()
+    assert "ilike" in sql  # name / tag match
+    assert "st_dwithin" not in sql  # radius not required for a name search
+    assert "geom is not null" not in sql  # un-geocoded restaurants stay findable
+
+
+@pytest.mark.asyncio
+async def test_without_q_the_geo_radius_filter_is_still_applied():
+    db = _CapturingSession()
+    await search_service._fetch_candidates(db, 32.8, -96.9, 15, None, None, None, None)
+    sql = str(db.stmt.compile(dialect=postgresql.dialect())).lower()
+    assert "st_dwithin" in sql and "geom is not null" in sql
+    assert "ilike" not in sql
+
+
+@pytest.mark.asyncio
+async def test_unlocated_text_hit_is_returned_with_null_distance(monkeypatch: pytest.MonkeyPatch):
+    rows = [
+        _row(location_id=1, brand_id=1, distance_mi=None),
+        _row(location_id=2, brand_id=2, distance_mi=4.0),
+    ]
+
+    async def _fake_fetch(*args, **kwargs):
+        return rows
+
+    monkeypatch.setattr(search_service, "_fetch_candidates", _fake_fetch)
+    db = _FakeSession(brands=[_brand(1, "Katha Kitchen"), _brand(2, "Spice Route")])
+
+    results, total = await search_service.search(
+        db, 32.8, -96.9, 15, None, None, None, Pagination(page=1, page_size=20), "kitchen"
+    )
+    assert total == 2
+    by_name = {r.name: r for r in results}
+    assert by_name["Katha Kitchen"].nearest_location.distance_mi is None
+    assert by_name["Spice Route"].nearest_location.distance_mi == 4.0
+    assert [r.name for r in results] == ["Spice Route", "Katha Kitchen"]  # located first

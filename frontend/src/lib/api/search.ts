@@ -17,6 +17,7 @@ export async function searchRestaurants(
     "cuisine[]": params.cuisine,
     "dietary[]": params.dietary,
     "type[]": params.type,
+    q: params.q,
     page: params.page,
     page_size: params.page_size,
   });

@@ -20,11 +20,12 @@ async def search(
     cuisine: list[str] | None = Query(default=None, alias="cuisine[]"),
     dietary: list[str] | None = Query(default=None, alias="dietary[]"),
     type_: list[str] | None = Query(default=None, alias="type[]"),
+    q: str | None = Query(default=None, max_length=100),
     pagination: Pagination = Depends(pagination_params),
     db: AsyncSession = Depends(get_db),
 ) -> SearchResponse:
     results, total = await search_service.search(
-        db, lat, lng, radius, cuisine, dietary, type_, pagination
+        db, lat, lng, radius, cuisine, dietary, type_, pagination, q
     )
     return SearchResponse(
         results=results, page=pagination.page, page_size=pagination.page_size, total=total

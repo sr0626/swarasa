@@ -11,19 +11,11 @@
 // component is the only place that navigates. Every filter change pushes
 // a new URL WITHOUT `page`, i.e. resets pagination to page 1.
 //
-// FLAGGED GAP (see PR description): `docs/API_CONTRACTS.md`'s `GET
-// /search` only documents `lat`/`lng`/`radius`/`cuisine[]`/`dietary[]`/
-// `type[]`/`page`/`page_size` — there is no free-text search param and no
-// "resolve this city/ZIP to lat/lng" endpoint in Phase 1. So `location`
-// and `q` below are read from the URL (completing Hero.tsx's navigation
-// contract — the fields round-trip and stay visible) and kept in local
-// state so the inputs work, but they are deliberately NOT sent to
-// `searchRestaurants()` in `SearchResults` — there is nothing real to send
-// them as. Only the tag filters (which map directly to the real
-// `cuisine[]`/`dietary[]`/`type[]` params) actually filter results.
-// This is a UI-completeness vs. fabricated-behavior tradeoff, not a bug:
-// the fields don't silently do nothing forever, they're wired the moment
-// a geocoding/text-search endpoint exists.
+// `q` (the "Cuisine, dish, or restaurant" box) IS sent to the API as the
+// free-text `q` param (2026-09-19): it matches restaurant names and cuisine
+// tags. `location` is still read from the URL and kept visible but NOT sent
+// -- there is no "resolve this city/ZIP to lat/lng" endpoint in Phase 1, so
+// there is nothing real to send it as.
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { LocationPinIcon, SearchIcon } from "@/components/ui/icons";

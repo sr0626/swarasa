@@ -12,13 +12,16 @@ export interface SearchParams {
   dietary?: string[];
   /** cuisine_tag.name values, category=type. */
   type?: string[];
+  /** Free-text: restaurant name or cuisine tag (backend `q`). */
+  q?: string;
   page?: number;
   page_size?: number;
 }
 
 export interface SearchNearestLocation {
   location_id: number;
-  distance_mi: number;
+  /** null only for a text-search hit whose location has no coordinates. */
+  distance_mi: number | null;
   // Added for a clickable full-address / Google Maps link on the search
   // result card (backend/app/schemas/search.py NearestLocationOut).
   address_line1: string;
