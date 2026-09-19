@@ -37,3 +37,20 @@ def test_the_mix_includes_monday_closed_tuesday_closed_and_open_all_week():
         closed = {r["day_of_week"] for r in generate_weekly_hours(location_id) if r["is_closed"]}
         kinds.add(frozenset(closed))
     assert kinds == {frozenset({MONDAY}), frozenset({TUESDAY}), frozenset()}
+
+
+# --- fabricated phone numbers -------------------------------------------------
+import re
+
+from app.scripts.seed_random_hours import generate_phone
+
+
+def test_phone_is_e164_reserved_fictional_555_01xx_with_a_dfw_area_code():
+    for location_id in range(1, 300):
+        phone = generate_phone(location_id)
+        assert re.fullmatch(r"\+1(214|469|972)5550[1]\d\d", phone), phone
+
+
+def test_phone_is_deterministic_and_distinct_for_consecutive_ids():
+    assert generate_phone(7) == generate_phone(7)
+    assert len({generate_phone(i)[-4:] for i in range(1, 101)}) == 100
