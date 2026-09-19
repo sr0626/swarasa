@@ -10,6 +10,7 @@
 // icon requirement is met without inventing a number.
 import Link from "next/link";
 import type { SearchResultItem } from "@/types/search";
+import { formatPhone } from "@/lib/formatPhone";
 import DefaultRestaurantImage from "@/components/ui/DefaultRestaurantImage";
 import {
   LocationPinIcon,
@@ -100,7 +101,7 @@ export default function RestaurantCard({ item }: { item: SearchResultItem }) {
             className="flex items-center gap-1 text-sm text-brand-ink-subtle hover:text-brand-ink hover:underline"
           >
             <PhoneIcon className="h-4 w-4 shrink-0" />
-            <span>{nearest_location.phone}</span>
+            <span>{formatPhone(nearest_location.phone)}</span>
           </a>
         )}
 

@@ -6,8 +6,8 @@
 // server-side so the listing is visible to geo search).
 // Backs app/portal/brands/new/page.tsx, the landing spot for the site
 // header's "Add Your Restaurant" CTA when a signed-in owner clicks it
-// (TopBarShell.tsx) and for the dashboard's own "create a new brand"
-// empty-state link (portal/dashboard/page.tsx).
+// (TopBarShell.tsx) and for the business account page's own "create a new
+// brand" empty-state link (components/portal/OwnerRestaurantsSection.tsx).
 //
 // Validation: the same zod schema (lib/validation/restaurant.ts
 // `addRestaurantSchema`) runs here for instant field-level errors and again
@@ -234,8 +234,8 @@ export default function CreateBrandForm({ cuisineTags }: { cuisineTags: CuisineT
           <p className="mt-1 text-brand-ink-muted">
             Only its address is left. Fix it below and try again — we won&rsquo;t create the
             restaurant a second time. Or{" "}
-            <Link href="/portal/dashboard" className="font-semibold text-brand-accent underline">
-              finish later from your dashboard
+            <Link href="/account" className="font-semibold text-brand-accent underline">
+              finish later from your business account
             </Link>
             .
           </p>
@@ -305,7 +305,7 @@ export default function CreateBrandForm({ cuisineTags }: { cuisineTags: CuisineT
           </p>
           {cuisineTags.length === 0 ? (
             <p className="mt-1.5 text-sm text-brand-ink-muted">
-              Cuisine tags aren&rsquo;t available right now — you can add them later from your dashboard.
+              Cuisine tags aren&rsquo;t available right now — you can add them later from your business account.
             </p>
           ) : (
             <div className="mt-2 flex flex-col gap-4">

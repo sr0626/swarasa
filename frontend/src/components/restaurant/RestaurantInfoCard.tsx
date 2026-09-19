@@ -9,6 +9,7 @@
 // unknown). Maps links use the same Google Maps URL pattern as
 // components/listing/RestaurantCard.tsx (address search) plus the
 // directions URL for the "Get directions" affordance.
+import { formatPhone } from "@/lib/formatPhone";
 import { DirectionsIcon, GlobeIcon, LocationPinIcon, PhoneIcon } from "@/components/ui/icons";
 import OpenStatusBadge from "@/components/ui/OpenStatusBadge";
 import RestaurantHours from "@/components/restaurant/RestaurantHours";
@@ -117,7 +118,7 @@ export default function RestaurantInfoCard({
             {location.phone && (
               <a href={`tel:${location.phone}`} className={linkClass}>
                 <PhoneIcon className="h-4 w-4 shrink-0" />
-                {location.phone}
+                {formatPhone(location.phone)}
               </a>
             )}
           </>
