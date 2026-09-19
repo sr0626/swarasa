@@ -1,26 +1,11 @@
-// Owner + manager portal dashboard — auth-gated per frontend/CLAUDE.md's
-// "Auth-gated portal pages" pattern. Lists the signed-in owner's brands and
-// locations via the owner-scoped `GET /restaurants` (docs/API_CONTRACTS.md,
-// landed 2026-09-13), each location linking into its editor
-// (`/portal/locations/{id}`).
+// Manager dashboard + owner redirect. Owners no longer have a separate
+// dashboard: their business page (stat tiles, restaurants, profile, security,
+// data & privacy) is /account (2026-09-19), so this route just sends owners
+// there -- login, the "create brand" flow and old bookmarks that still point
+// at /portal/dashboard keep working through the redirect. The owner data
+// loading lives in lib/owner/loadOwnerRestaurants.ts.
 //
-// Each location row also surfaces tier/billing status, active/inactive
-// state, and assigned managers (docs/PROJECT_PLAN.csv "Owner dashboard:
-// richer restaurant table" — added 2026-09-17). Tier and active/inactive
-// come from `is_paid`/`paid_until`/`is_active` on `LocationSummary`
-// (frontend/src/types/location.ts — see the flagged contract gap there:
-// `paid_until` and `is_active` aren't serialized by the backend yet, so
-// those two only render their "unknown"/default state today). Managers
-// come from the existing `GET /locations/{id}/managers`, fetched per
-// location alongside its brand's location list. This is read-only status
-// display only — no Stripe billing management (upgrade/downgrade) UI,
-// which is Phase 2 scope.
-//
-// LAYOUT (2026-09-19): the owner branch renders inside the business console
-// frame (components/portal/OwnerShell.tsx: banner + left menu) with
-// OwnerDashboardPanel as the right-hand panel; this file only fetches.
-//
-// FLAGGED CONTRACT GAP (see this PR's description): `GET /restaurants` is
+// FLAGGED CONTRACT GAP (see this route's original PR): `GET /restaurants` is
 // "Auth: owner or admin" only — there is no manager path at all, and no
 // other endpoint lets a manager discover which locations they're assigned
 // to (the closest thing, `GET /locations/{id}/managers`, needs a location
@@ -33,143 +18,38 @@
 // or a manager-scoped branch of `GET /restaurants`) — flagged for
 // Architect/Backend Dev, not built here.
 import type { Metadata } from "next";
-import Link from "next/link";
+import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/guards";
 import TopBar from "@/components/home/TopBar";
-import { ApiError } from "@/lib/api/client";
-import { getMyRestaurants, getRestaurantLocations } from "@/lib/api/restaurants";
-import { getLocationManagers } from "@/lib/api/locations";
-import { mapWithConcurrency } from "@/lib/concurrency";
-import OwnerDashboardPanel, {
-  type BrandWithLocations,
-} from "@/components/portal/OwnerDashboardPanel";
-import OwnerShell from "@/components/portal/OwnerShell";
-import { loadConsoleIdentity } from "@/lib/auth/consoleIdentity";
 import InfoPanel from "@/components/ui/InfoPanel";
-import type { LocationSummary, LocationWithManagers } from "@/types/location";
-import type { RestaurantBrand } from "@/types/restaurant";
 
 export const metadata: Metadata = {
-  title: "Owner Dashboard",
+  title: "Dashboard",
 };
-
-// Caps how many brands' locations are fetched in parallel — see
-// lib/concurrency.ts's header comment for why (DB connection-pool storm,
-// PR #101). 5 keeps a realistic production owner (3-4, up to ~10
-// restaurants per direct user confirmation) essentially fully parallel
-// while bounding the worst case for an outlier account.
-const DASHBOARD_FETCH_CONCURRENCY = 5;
-
-/**
- * Fetches a single location's actively-assigned managers via the existing
- * `GET /locations/{id}/managers` endpoint (already Done — see
- * docs/API_CONTRACTS.md "Location Managers"). Same bounded-per-page N+1
- * pattern as `loadLocationsForBrand` below: one call per location already
- * on this page (page_size 100 max), not a new unbounded fan-out. Failures
- * are scoped to the single location, not the whole brand/page.
- */
-async function loadManagersForLocation(
-  location: LocationSummary,
-  accessToken: string
-): Promise<LocationWithManagers> {
-  try {
-    const result = await getLocationManagers(location.id, { activeOnly: true }, accessToken);
-    return { location, managers: result.results, managersError: null };
-  } catch (error) {
-    return {
-      location,
-      managers: [],
-      managersError:
-        error instanceof ApiError
-          ? error.message
-          : "Could not load assigned managers for this location.",
-    };
-  }
-}
-
-/**
- * `GET /restaurants` only returns a `location_count` per brand, not the
- * location rows — this fetches each brand's locations via the existing
- * public `GET /restaurants/{id}/locations` so each one can link to its
- * editor. Brands with `location_count === 0` skip the extra call. Each
- * location's managers are then loaded alongside it (see
- * `loadManagersForLocation` above) so the card can show tier, active
- * status, and assigned managers together without a second page-level
- * round trip.
- */
-async function loadLocationsForBrand(
-  brand: RestaurantBrand,
-  accessToken: string
-): Promise<BrandWithLocations> {
-  if (brand.location_count === 0) {
-    return { brand, locations: [], locationsError: null };
-  }
-  try {
-    const page = await getRestaurantLocations(brand.id, { page: 1, page_size: 100 });
-    const locations = await Promise.all(
-      page.results.map((location) => loadManagersForLocation(location, accessToken))
-    );
-    return { brand, locations, locationsError: null };
-  } catch (error) {
-    return {
-      brand,
-      locations: [],
-      locationsError:
-        error instanceof ApiError
-          ? error.message
-          : "Could not load this brand's locations. Please try again.",
-    };
-  }
-}
 
 export default async function DashboardPage() {
   const session = await requireSession(["owner", "manager"]);
 
-  if (session.role === "manager") {
-    return (
-      <main className="min-h-screen bg-brand-bg">
-        <TopBar />
-        <section className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
-          <h1 className="font-display text-2xl font-bold text-brand-ink sm:text-3xl">
-            Dashboard
-          </h1>
-          <p className="mt-2 text-sm text-brand-ink-muted">Signed in as manager.</p>
-
-          <div className="mt-6">
-            <InfoPanel
-              title="No location list available for managers yet"
-              body="There isn't a backend endpoint yet that lists which locations you're assigned to manage. Ask the owner who assigned you for a direct link to the location — you'll be able to open its editor at /portal/locations/{id} once you have the id."
-            />
-          </div>
-        </section>
-      </main>
-    );
+  if (session.role === "owner") {
+    redirect("/account");
   }
-
-  let brands: RestaurantBrand[] = [];
-  let loadError: string | null = null;
-  try {
-    const page = await getMyRestaurants({ page: 1, page_size: 100 }, session.accessToken);
-    brands = page.results;
-  } catch (error) {
-    loadError =
-      error instanceof ApiError
-        ? error.message
-        : "Something went wrong loading your restaurants. Please try again.";
-  }
-
-  const brandsWithLocations = loadError
-    ? []
-    : await mapWithConcurrency(brands, DASHBOARD_FETCH_CONCURRENCY, (brand) =>
-        loadLocationsForBrand(brand, session.accessToken)
-      );
-
-  // Banner identity is best-effort (falls back to the session claims).
-  const me = await loadConsoleIdentity(session);
 
   return (
-    <OwnerShell me={me}>
-      <OwnerDashboardPanel brands={brandsWithLocations} loadError={loadError} />
-    </OwnerShell>
+    <main className="min-h-screen bg-brand-bg">
+      <TopBar />
+      <section className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
+        <h1 className="font-display text-2xl font-bold text-brand-ink sm:text-3xl">
+          Dashboard
+        </h1>
+        <p className="mt-2 text-sm text-brand-ink-muted">Signed in as manager.</p>
+
+        <div className="mt-6">
+          <InfoPanel
+            title="No location list available for managers yet"
+            body="There isn't a backend endpoint yet that lists which locations you're assigned to manage. Ask the owner who assigned you for a direct link to the location — you'll be able to open its editor at /portal/locations/{id} once you have the id."
+          />
+        </div>
+      </section>
+    </main>
   );
 }

@@ -1,11 +1,11 @@
-// One brand's card on the owner portal dashboard — brand header (from
+// One brand's card on the owner's business page (/account) — brand header (from
 // `GET /restaurants`, owner-scoped) plus its locations (fetched separately
 // per brand via the existing public `GET /restaurants/{id}/locations`,
 // since the owner-scoped list only returns a `location_count`, not the
 // location rows themselves — see docs/API_CONTRACTS.md "GET /restaurants").
 // Each location row also shows tier/billing status, active/inactive state,
 // and assigned managers (docs/PROJECT_PLAN.csv "Owner dashboard: richer
-// restaurant table") — see `portal/dashboard/page.tsx` for where that data
+// restaurant table") — see `lib/owner/loadOwnerRestaurants.ts` for where that data
 // is loaded and `LocationTierBadge`/`LocationStatusBadge`/
 // `LocationManagersSummary` for the flagged contract gaps on tier/status.
 // Server Component — no interactivity here, just links into the location
@@ -37,7 +37,7 @@ export default function BrandCard({
             <StoreIcon className="h-5 w-5" />
           </span>
           <div>
-            <h2 className="font-display text-lg font-bold text-brand-ink">{brand.name}</h2>
+            <h3 className="font-display text-lg font-bold text-brand-ink">{brand.name}</h3>
             {brand.description && (
               <p className="mt-0.5 max-w-lg text-sm text-brand-ink-muted">{brand.description}</p>
             )}
