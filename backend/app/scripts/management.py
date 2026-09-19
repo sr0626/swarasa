@@ -333,6 +333,13 @@ def run_management_command(event: dict, context: Any) -> dict:
             "error": f"Unknown management command: {command!r}. "
             f"Known commands: {sorted(_COMMANDS)}",
         }
+    # Start every command with no inherited engine -- see
+    # app/db/session.py's discard_engine_cache docstring (a warm container
+    # can hold an engine bound to another event loop, e.g. from an HTTP
+    # request, which the command's own fresh loop cannot use).
+    from app.db.session import discard_engine_cache
+
+    discard_engine_cache()
     try:
         return fn(event)
     except Exception as exc:  # noqa: BLE001 - top-level Lambda invoke boundary

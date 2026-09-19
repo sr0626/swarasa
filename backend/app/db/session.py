@@ -144,6 +144,31 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
         yield session
 
 
+def discard_engine_cache() -> None:
+    """Synchronously forgets any cached engine WITHOUT disposing it.
+
+    Real bug, found live 2026-09-18 running `seed_taxonomy` right after two
+    `alembic_upgrade` invocations: `dispose_engine()` only cleans up at the
+    END of a management command, but a warm container can already hold an
+    engine cached by something else -- typically a normal HTTP request
+    served on Mangum's own event loop -- before the command starts. The
+    command's fresh `asyncio.run()` loop then inherits a pool bound to that
+    other loop and its first query fails with "got Future ... attached to a
+    different loop". `run_management_command` calls this before every
+    command so each one always builds its own engine on its own loop.
+
+    Deliberately does NOT await `engine.dispose()`: that would have to run
+    on the loop that owns the pool, which is gone or unreachable from here
+    (the same reason `dispose_engine`'s docstring insists on same-loop
+    disposal). The abandoned pool's connections are closed when the object
+    is garbage collected or the container is recycled -- an acceptable leak
+    for a rare, dev/ops-only path.
+    """
+    global _engine, _session_factory
+    _engine = None
+    _session_factory = None
+
+
 async def dispose_engine() -> None:
     """Disposes the cached engine and resets `_engine`/`_session_factory`
     to `None`.
