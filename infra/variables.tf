@@ -36,6 +36,12 @@ variable "github_repo_url" {
   type        = string
 }
 
+variable "contact_email" {
+  description = "Public contact email for the site (NEXT_PUBLIC_CONTACT_EMAIL on Amplify). Empty = unset."
+  type        = string
+  default     = ""
+}
+
 variable "github_owner_id" {
   description = "Numeric GitHub id of the repo owner (`gh api repos/<org>/<repo> --jq .owner.id`) — the GitHub Actions OIDC trust policy's sub claim embeds this; see infra/modules/iam/github_actions.tf for why"
   type        = string

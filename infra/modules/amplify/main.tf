@@ -44,13 +44,18 @@ resource "aws_amplify_app" "frontend" {
         appRoot: frontend
   EOT
 
-  environment_variables = {
-    NEXT_PUBLIC_API_URL              = var.api_gateway_url
-    NEXT_PUBLIC_COGNITO_USER_POOL_ID = var.cognito_user_pool_id
-    NEXT_PUBLIC_COGNITO_CLIENT_ID    = var.cognito_client_id
-    NEXT_PUBLIC_MEDIA_URL            = var.cloudfront_url
-    AMPLIFY_MONOREPO_APP_ROOT        = "frontend"
-  }
+  environment_variables = merge(
+    {
+      NEXT_PUBLIC_API_URL              = var.api_gateway_url
+      NEXT_PUBLIC_COGNITO_USER_POOL_ID = var.cognito_user_pool_id
+      NEXT_PUBLIC_COGNITO_CLIENT_ID    = var.cognito_client_id
+      NEXT_PUBLIC_MEDIA_URL            = var.cloudfront_url
+      AMPLIFY_MONOREPO_APP_ROOT        = "frontend"
+    },
+    # Only set when provided; otherwise the frontend falls back to its
+    # provisional placeholder (frontend/src/lib/contact.ts).
+    var.contact_email == "" ? {} : { NEXT_PUBLIC_CONTACT_EMAIL = var.contact_email },
+  )
 
   # Redirect /* to /index.html for SPA fallback (Next.js handles its own routing)
   custom_rule {
