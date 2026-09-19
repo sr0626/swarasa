@@ -311,7 +311,11 @@ async def test_text_search_matches_name_or_tag_and_drops_geo_requirement():
     db = _CapturingSession()
     await search_service._fetch_candidates(db, 32.8, -96.9, 15, None, None, None, "katha")
     sql = str(db.stmt.compile(dialect=postgresql.dialect())).lower()
-    assert "ilike" in sql  # name / tag match
+    assert "ilike" in sql  # substring match on the restaurant name
+    # Tags match only on an exact (case-insensitive) name, never a substring,
+    # so "grill" doesn't pull in every brand tagged "BBQ & Grill".
+    assert "lower(cuisine_tag.name) =" in sql
+    assert sql.count("ilike") == 1
     assert "st_dwithin" not in sql  # radius not required for a name search
     assert "geom is not null" not in sql  # un-geocoded restaurants stay findable
 
