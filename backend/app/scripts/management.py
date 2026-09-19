@@ -130,6 +130,29 @@ def _run_seed_random_phones(event: dict) -> dict:
     return {"ok": True, "command": "seed_random_phones", **counts}
 
 
+@_command("dev_unclaim_restaurants")
+def _run_dev_unclaim_restaurants(event: dict) -> dict:
+    """DEV-ONLY: un-assign chosen restaurants to test the claim flow. See
+    app/scripts/dev_unclaim.py.
+
+    Event payload shape: {"_management_command": "dev_unclaim_restaurants"}
+    Optional: "slugs": ["some-brand-slug", ...] (defaults to two).
+    """
+    from app.db.session import dispose_engine
+    from app.scripts.dev_unclaim import run_dev_unclaim
+
+    slugs = event.get("slugs")
+
+    # Same same-loop-disposal reasoning as _run_seed_dev_data above.
+    async def _run_and_dispose() -> dict:
+        try:
+            return await run_dev_unclaim(slugs)
+        finally:
+            await dispose_engine()
+
+    return {"ok": True, "command": "dev_unclaim_restaurants", **asyncio.run(_run_and_dispose())}
+
+
 @_command("bulk_import_restaurants")
 def _run_bulk_import_restaurants(event: dict) -> dict:
     """One-off/reusable restaurant basic-detail bulk import, run the same

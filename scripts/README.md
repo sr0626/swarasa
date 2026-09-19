@@ -62,3 +62,14 @@ NAT Gateway, so no route to the public internet at all).
 python3 scripts/bulk_import_restaurants_csv.py --csv-file restaurants.csv
 python3 scripts/bulk_import_restaurants_csv.py --csv-file restaurants.csv --dry-run
 ```
+
+### `dev_unclaim_restaurants.py`
+Un-assigns restaurants (owner removed, marked unclaimed) so the public
+"Claim this restaurant" flow can be tested. Defaults to two searchable
+seeded restaurants; pass `--slugs` for others, `--dry-run` to preview.
+Dev database only. Reversible via an approved claim or a re-import.
+
+```bash
+python3 scripts/dev_unclaim_restaurants.py
+python3 scripts/dev_unclaim_restaurants.py --slugs dera-grill taj-chaat-house
+```
