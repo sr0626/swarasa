@@ -18,7 +18,10 @@ ListUsers`, filtered to this one user pool:
     throttling, etc.) rather than raising, since this is a display-only
     field (root CLAUDE.md "NEVER expose internal stack details").
 
-IAM (root CLAUDE.md "AWS Best Practices" — least privilege): this needs
+`add_user_to_group` (claim approval -> `owner` group) additionally needs
+`cognito-idp:AdminAddUserToGroup` — see its docstring.
+
+IAM (root CLAUDE.md "AWS Best Practices" — least privilege): the lookups need
 exactly one new action, `cognito-idp:ListUsers`, scoped to exactly one
 resource — this app's single user pool ARN. No write actions
 (AdminCreateUser, AdminDeleteUser, …), no access to any other pool. If the
@@ -37,6 +40,8 @@ import os
 
 import boto3
 from botocore.exceptions import ClientError
+
+OWNER_GROUP = "owner"
 
 _cognito_client = None
 
@@ -110,3 +115,20 @@ def find_email_by_sub(sub: str) -> str | None:
         if attr.get("Name") == "email":
             return attr.get("Value")
     return None
+
+
+def add_user_to_group(username: str, group_name: str) -> None:
+    """`AdminAddUserToGroup` against this app's one user pool. Idempotent
+    on the AWS side (adding an existing member is a no-op success).
+
+    Raises `RuntimeError` when `COGNITO_USER_POOL_ID` is unset and
+    `botocore` `ClientError`/`BotoCoreError` on AWS failures — the caller
+    decides how to degrade (see `claim_service.approve_claim`).
+
+    IAM: needs `cognito-idp:AdminAddUserToGroup` on this pool's ARN only
+    (granted by a separate Infra change; the same action the post-
+    confirmation Lambda already uses).
+    """
+    _get_client().admin_add_user_to_group(
+        UserPoolId=_user_pool_id(), Username=username, GroupName=group_name
+    )

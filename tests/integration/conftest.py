@@ -241,3 +241,14 @@ def as_anonymous(client: AsyncClient) -> None:
     JWKS client — see app/dependencies/auth.py::get_current_user).
     """
     app_main.app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.fixture(autouse=True)
+def _block_real_cognito_group_calls(monkeypatch):
+    """Claim approval calls `cognito_service.add_user_to_group` (best-effort,
+    after commit). Tests set COGNITO_USER_POOL_ID, so without this an approve
+    test would build a real boto3 client. Default it to a no-op; tests that
+    care re-patch it or the boto3 client."""
+    from app.services import cognito_service
+
+    monkeypatch.setattr(cognito_service, "add_user_to_group", lambda username, group_name: None)

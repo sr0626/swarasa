@@ -1196,7 +1196,31 @@ Effect: sets `restaurant_brand.owner_id = <claimant>`,
 `is_claimed = true`, `claimed_at = now()`. Audit: `audit_log` row
 (`table_name="restaurant_brand"`, `action="update"`).
 
-Response: `200`, updated claim shape (`status: "approved"`).
+Cognito group elevation: after the approval is committed, the claimant
+is added to the Cognito `owner` pool group (`AdminAddUserToGroup`,
+`Username` = the claimant's JWT `sub`; retried once with the claimant's
+email if Cognito answers `UserNotFoundException`). Adding an existing
+member is a no-op success. Reject never touches Cognito.
+
+Response: `200`, updated claim shape (`status: "approved"`) plus an
+additive field:
+
+| `owner_group_granted` | Meaning |
+|---|---|
+| `true` | claimant is in the `owner` group (newly added or already a member) |
+| `false` | the Cognito call was attempted and failed (e.g. `AccessDenied`, network error, `COGNITO_USER_POOL_ID` unset) |
+| `null` | not applicable (every response other than approve) |
+
+Failure semantics: the group call runs AFTER the DB commit and is
+best-effort. Any Cognito failure is logged as a warning (error code only,
+no stack trace in the response) and NEVER rolls back or blocks the
+approval — brand ownership, `is_claimed`, the audit row and the claim
+status all persist, and the response is still `200`. Until the Infra
+grant for `cognito-idp:AdminAddUserToGroup` is applied to the API
+Lambda's role, expect `owner_group_granted: false`; the human can add the
+claimant manually:
+`aws cognito-idp admin-add-user-to-group --user-pool-id <pool-id> --username <claimant sub or email> --group-name owner`.
+The claimant must sign in again (fresh token) to see the group.
 
 ### POST /claim/{id}/reject
 
