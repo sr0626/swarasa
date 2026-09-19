@@ -12,26 +12,14 @@
 // already carries the live counts.
 import type { ReactNode } from "react";
 import { requireSession } from "@/lib/auth/guards";
-import { getCurrentUser } from "@/lib/api/auth";
+import { loadConsoleIdentity } from "@/lib/auth/consoleIdentity";
 import AdminShell from "@/components/admin/AdminShell";
-import type { AuthMe } from "@/types/auth";
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
   const session = await requireSession(["admin"]);
 
-  // Banner identity is best-effort: fall back to the session's own claims so
-  // a failed GET /auth/me never takes the admin pages down.
-  let me: AuthMe;
-  try {
-    me = await getCurrentUser(session.accessToken);
-  } catch {
-    me = {
-      cognito_sub: session.cognitoSub,
-      role: session.role,
-      email: session.email,
-      owner_account: null,
-    };
-  }
+  // Banner identity is best-effort (falls back to the session claims).
+  const me = await loadConsoleIdentity(session);
 
   return <AdminShell me={me}>{children}</AdminShell>;
 }

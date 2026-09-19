@@ -1,19 +1,22 @@
-// Dark "Admin console" identity band (avatar, name, email, role badge) shown
-// above the admin sidebar + panel on every admin screen. Moved verbatim out
-// of AdminAccountView so /account and /admin/* share it via AdminShell.
+// Dark identity band (avatar, name, email, role badge) shown above the left
+// menu + panel of every role console (admin, owner; manager later). Generalised
+// from the admin banner -- `label` is the gold eyebrow ("Admin console",
+// "Business account"), everything else is identical.
 //
-// `nameAs`: the admin's name is the page <h1> on /account (Profile); on
-// /admin/* pages the panel owns the <h1> ("Claims Review", ...), so the name
-// renders as a plain <p> there to keep exactly one <h1> per page.
+// `nameAs`: on profile-style pages the user's name is the page <h1>; on pages
+// where the panel owns the <h1> ("Claims Review", "My restaurants", ...) the
+// name renders as a plain <p> so there is exactly one <h1> per page.
 import AccountAvatar from "@/components/account/AccountAvatar";
 import { ROLE_LABEL, displayNameFor } from "@/components/account/accountShared";
 import type { AuthMe } from "@/types/auth";
 
-export default function AdminBanner({
+export default function ConsoleBanner({
   me,
+  label,
   nameAs = "p",
 }: {
   me: AuthMe;
+  label: string;
   nameAs?: "h1" | "p";
 }) {
   const Name = nameAs;
@@ -23,7 +26,7 @@ export default function AdminBanner({
         <AccountAvatar me={me} size="sm" className="border-brand-ink" />
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold uppercase tracking-wide text-brand-accent-gold">
-            Admin console
+            {label}
           </p>
           <Name className="mt-0.5 break-words font-display text-2xl font-bold sm:text-3xl">
             {displayNameFor(me)}

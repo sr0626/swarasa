@@ -9,9 +9,10 @@
 // is loaded and `LocationTierBadge`/`LocationStatusBadge`/
 // `LocationManagersSummary` for the flagged contract gaps on tier/status.
 // Server Component — no interactivity here, just links into the location
-// editor (`/portal/locations/{id}`).
+// editor (`/portal/locations/{id}`) and the brand's public page.
 import Link from "next/link";
-import { LocationPinIcon, PencilIcon, StoreIcon } from "@/components/ui/icons";
+import { EyeIcon, LocationPinIcon, PencilIcon, StoreIcon } from "@/components/ui/icons";
+import { secondaryLinkClass } from "@/components/account/accountShared";
 import OpenStatusBadge from "@/components/ui/OpenStatusBadge";
 import LocationTierBadge from "@/components/portal/LocationTierBadge";
 import LocationStatusBadge from "@/components/portal/LocationStatusBadge";
@@ -54,11 +55,21 @@ export default function BrandCard({
             )}
           </div>
         </div>
-        {!brand.is_claimed && (
-          <span className="rounded-brand-pill bg-brand-bg px-2.5 py-1 text-xs font-semibold text-brand-ink-subtle">
-            Unclaimed
-          </span>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {!brand.is_claimed && (
+            <span className="rounded-brand-pill bg-brand-bg px-2.5 py-1 text-xs font-semibold text-brand-ink-subtle">
+              Unclaimed
+            </span>
+          )}
+          <Link
+            href={`/restaurant/${brand.slug}`}
+            aria-label={`View public page for ${brand.name}`}
+            className={secondaryLinkClass}
+          >
+            <EyeIcon className="h-4 w-4" />
+            View public page
+          </Link>
+        </div>
       </div>
 
       <div className="mt-4 border-t border-brand-border pt-4">
