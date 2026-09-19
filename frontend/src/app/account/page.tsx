@@ -34,6 +34,8 @@ import ProfileEditForm from "@/components/account/ProfileEditForm";
 import FollowedRestaurantsList from "@/components/account/FollowedRestaurantsList";
 import ManagedLocationsList from "@/components/account/ManagedLocationsList";
 import OwnerRestaurantsList from "@/components/account/OwnerRestaurantsList";
+import AccountSummaryCard from "@/components/account/AccountSummaryCard";
+import AccountDetailsCard from "@/components/account/AccountDetailsCard";
 import DataPrivacySection from "@/components/account/DataPrivacySection";
 import InfoPanel from "@/components/ui/InfoPanel";
 import type { AuthMe } from "@/types/auth";
@@ -44,13 +46,6 @@ import type { RestaurantBrand } from "@/types/restaurant";
 
 export const metadata: Metadata = {
   title: "My Account",
-};
-
-const ROLE_LABEL: Record<AuthMe["role"], string> = {
-  owner: "Owner",
-  manager: "Manager",
-  admin: "Admin",
-  registered_user: "Registered user",
 };
 
 export default async function AccountPage() {
@@ -128,43 +123,43 @@ export default async function AccountPage() {
   return (
     <main className="min-h-screen bg-brand-bg">
       <TopBar />
-      <section className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
-        <h1 className="font-display text-2xl font-bold text-brand-ink sm:text-3xl">My Account</h1>
-        <p className="mt-2 text-sm text-brand-ink-muted">
-          Your profile, {me?.role === "owner" ? "your restaurants, " : ""}
-          {me?.role === "registered_user" ? "followed restaurants, " : ""}
-          {me?.role === "manager" ? "assigned locations, " : ""}
-          and data privacy settings.
-        </p>
+      <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+        <header>
+          <h1 className="font-display text-3xl font-bold text-brand-ink sm:text-4xl">
+            My Account
+          </h1>
+          <p className="mt-2 text-sm text-brand-ink-muted">
+            Your profile, {me?.role === "owner" ? "your restaurants, " : ""}
+            {me?.role === "registered_user" ? "followed restaurants, " : ""}
+            {me?.role === "manager" ? "assigned locations, " : ""}
+            and data privacy settings.
+          </p>
+        </header>
 
-        <div className="mt-6 flex flex-col gap-5">
-          {meError && <InfoPanel title="Couldn't load your account" body={meError} />}
+        {meError && (
+          <div className="mt-6">
+            <InfoPanel title="Couldn't load your account" body={meError} />
+          </div>
+        )}
 
-          {me && (
-            <>
-              <section className="rounded-brand-card border border-brand-border bg-white p-5 shadow-brand-card sm:p-6">
-                <h2 className="font-display text-xl font-bold text-brand-ink">
-                  {me.owner_account?.full_name ?? me.email}
-                </h2>
-                <p className="mt-1 text-sm text-brand-ink-muted">{me.email}</p>
-                <span className="mt-2 inline-flex items-center rounded-brand-pill bg-brand-chip px-2.5 py-1 text-xs font-semibold text-brand-chip-ink">
-                  {ROLE_LABEL[me.role]}
-                </span>
-              </section>
+        {me && (
+          // Two columns from lg up (summary card left, sections right); a
+          // single column below that. DOM order is the mobile order: the
+          // summary card first, then the sections.
+          <div className="mt-6 flex flex-col gap-8 lg:grid lg:grid-cols-[22rem_minmax(0,1fr)] lg:items-start lg:gap-x-10">
+            <aside aria-label="Account summary" className="lg:sticky lg:top-6">
+              <AccountSummaryCard me={me} />
+            </aside>
 
-              {me.role === "owner" && me.owner_account && (
+            <div className="flex min-w-0 flex-col gap-5">
+              {me.role === "owner" && me.owner_account ? (
                 <ProfileEditForm ownerAccount={me.owner_account} />
+              ) : (
+                <AccountDetailsCard me={me} />
               )}
 
               {me.role === "owner" && (
                 <OwnerRestaurantsList brands={ownedBrands} loadError={ownedBrandsError} />
-              )}
-
-              {me.role !== "owner" && (
-                <InfoPanel
-                  title="Profile editing isn't available for this role yet"
-                  body="Name/email changes are currently owner-only. Contact support if your details need to change."
-                />
               )}
 
               {me.role === "registered_user" && (
@@ -178,27 +173,29 @@ export default async function AccountPage() {
                 />
               )}
 
-              {/* Minimal admin entry point for the report triage queue
-                  (/admin/reports). AccountMenu has no role awareness and
-                  TopBarShell is owned elsewhere, so this is the reachable
-                  spot until a header link is added. */}
-              {me.role === "admin" && (
-                <section className="rounded-brand-card border border-brand-border bg-white p-5 shadow-brand-card sm:p-6">
-                  <h2 className="font-display text-lg font-bold text-brand-ink">Admin</h2>
-                  <Link
-                    href="/admin/reports"
-                    className="mt-3 inline-flex min-h-[44px] items-center rounded-brand-pill border border-brand-ink px-5 text-sm font-semibold text-brand-ink transition hover:bg-brand-chip"
-                  >
-                    Reports
-                  </Link>
-                </section>
-              )}
+              <section
+                aria-labelledby="security-heading"
+                className="flex flex-col items-start gap-3 rounded-brand-card border border-brand-border bg-white p-5 shadow-brand-card sm:flex-row sm:items-center sm:justify-between sm:p-6"
+              >
+                <div>
+                  <h2 id="security-heading" className="font-display text-xl font-bold text-brand-ink">
+                    Security
+                  </h2>
+                  <p className="mt-1 text-sm text-brand-ink-muted">Change your account password.</p>
+                </div>
+                <Link
+                  href="/account/security"
+                  className="flex min-h-[44px] shrink-0 items-center whitespace-nowrap rounded-brand-pill border border-brand-ink px-5 text-sm font-semibold text-brand-ink transition hover:bg-brand-chip focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent"
+                >
+                  Change password
+                </Link>
+              </section>
 
               <DataPrivacySection latestDeletionRequest={latestDeletionRequest} />
-            </>
-          )}
-        </div>
-      </section>
+            </div>
+          </div>
+        )}
+      </div>
     </main>
   );
 }
