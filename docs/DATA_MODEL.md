@@ -11,6 +11,9 @@ Dev's typed API client. Backed by:
     — follow-up adding `restaurant_photo` and `claim_request` (see
     those sections below and "Open items" at the bottom, which this
     migration closes)
+  - `backend/migrations/versions/20260918_0006_listing_report.py`
+    — new `listing_report` table for the public "report a problem" flow
+    (see below)
   - `backend/migrations/versions/20260916_0004_data_deletion_request.py`
     — CCPA follow-up: new `data_deletion_request` table (see below) plus
     a nullable `owner_account.personal_data_deleted_at` column (see the
@@ -321,6 +324,43 @@ picking one. `location_id` records which location's public phone was
 (or will be) used. `docs/API_CONTRACTS.md`'s `/claim` section is
 updated alongside this to add it as an optional request field. Confirm
 this before Backend Dev implements the `phone_verification` path.
+
+---
+
+## listing_report
+
+Added `20260918_0006_listing_report.py`. Backs the public "Report a
+problem / suggest an update" flow (`docs/API_CONTRACTS.md` "Listing
+reports (`/reports`)"). Modeled on `claim_request` (submission +
+`reviewed_by`/`reviewed_at`/`reviewer_notes` admin triage), except the
+submitter may be anonymous.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | bigint PK | |
+| brand_id | bigint FK -> restaurant_brand, not null | `ON DELETE CASCADE` |
+| location_id | bigint FK -> restaurant_location, nullable | `ON DELETE SET NULL`. Optional — which location of a multi-location brand the report is about; must belong to `brand_id` (enforced in the service layer) |
+| category | varchar(32), not null | `address_incorrect` \| `hours_incorrect` \| `phone_incorrect` \| `price_incorrect` \| `menu_incorrect` \| `permanently_closed` \| `other`. Validated at the API boundary, stored as plain text (no DB enum) so a new category needs no migration |
+| details | text, not null | 1-2000 chars, enforced by the request schema |
+| reporter_email | varchar(254), nullable | Optional, for admin follow-up only; never returned by a public endpoint |
+| reporter_user_id | varchar(36), nullable | Cognito `sub`, set only when the caller sent a valid token (same "no local identity table" pattern as `claim_request.claimant_user_id`) |
+| status | varchar(16), not null, default `new` | `new` \| `resolved` \| `dismissed` |
+| submitted_at | timestamptz, not null | |
+| reviewed_by | varchar(64), nullable | Admin Cognito `sub` |
+| reviewed_at | timestamptz, nullable | |
+| reviewer_notes | text, nullable | |
+| created_at | timestamptz, not null | |
+| updated_at | timestamptz, not null | |
+
+Indexes:
+- `ix_listing_report_brand_id` on `brand_id`
+- `ix_listing_report_reporter_user_id` on `reporter_user_id`
+- `ix_listing_report_status_submitted` on (`status`, `submitted_at`) — cheap ordered scan for the admin triage queue
+
+Judgment calls (flagged for review):
+- **No partial-unique "one open report per brand"** (unlike `claim_request`): many visitors can legitimately report the same listing; duplicates are cheap to close and de-duplicating would silently drop corroborating reports.
+- **No `audit_log` entry**: not on root `CLAUDE.md`'s audit-required table list, same treatment `claim_request` gets for its own status transitions. A report never changes listing data.
+- **CCPA gap (follow-up, not in this change):** `reporter_user_id` and `reporter_email` are personal data. `privacy_service` (`/auth/me/data-export` and data-deletion approval) does not yet include or redact `listing_report` rows; it should redact both columns for a matching `sub` (and export them) the same way it handles `claim_request.claimant_user_id`.
 
 ---
 

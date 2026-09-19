@@ -19,6 +19,7 @@
 // building an edit form that would just 403 for those roles would be
 // worse than not having one.
 import type { Metadata } from "next";
+import Link from "next/link";
 import { requireSession } from "@/lib/auth/guards";
 import TopBar from "@/components/home/TopBar";
 import { ApiError } from "@/lib/api/client";
@@ -175,6 +176,22 @@ export default async function AccountPage() {
                   locations={managedLocations}
                   loadError={managedLocationsError}
                 />
+              )}
+
+              {/* Minimal admin entry point for the report triage queue
+                  (/admin/reports). AccountMenu has no role awareness and
+                  TopBarShell is owned elsewhere, so this is the reachable
+                  spot until a header link is added. */}
+              {me.role === "admin" && (
+                <section className="rounded-brand-card border border-brand-border bg-white p-5 shadow-brand-card sm:p-6">
+                  <h2 className="font-display text-lg font-bold text-brand-ink">Admin</h2>
+                  <Link
+                    href="/admin/reports"
+                    className="mt-3 inline-flex min-h-[44px] items-center rounded-brand-pill border border-brand-ink px-5 text-sm font-semibold text-brand-ink transition hover:bg-brand-chip"
+                  >
+                    Reports
+                  </Link>
+                </section>
               )}
 
               <DataPrivacySection latestDeletionRequest={latestDeletionRequest} />

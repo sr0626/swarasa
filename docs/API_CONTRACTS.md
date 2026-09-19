@@ -10,7 +10,8 @@ Scope: `/search`, `/restaurants` (CRUD), `/locations` (CRUD), `/claim`,
 **Auth model reference** (backend/CLAUDE.md "Public Routes"): only
 `GET /health`, `GET /search`, `GET /restaurants/{id}`,
 `GET /restaurants/{id}/locations`, and `GET /locations/{id}` are
-public. Every other route below requires a valid Cognito JWT
+public (plus `POST /reports`, the anonymous report-a-problem
+submission — see "Listing reports" below). Every other route below requires a valid Cognito JWT
 (`owner` / `manager` / `admin` / `registered_user` pool group), and
 every write additionally re-validates ownership/assignment server-side
 per root CLAUDE.md "Permission model" — never trust the JWT claims
@@ -1142,6 +1143,110 @@ Auth: admin
 Body: `{ "reviewer_notes": "Document did not match listing address." }`
 
 Response: `200`, updated claim shape (`status: "rejected"`).
+
+---
+
+## Listing reports (`/reports`)
+
+A public "Report a problem / suggest an update" flow so any visitor can
+flag wrong listing info (wrong address, closed, wrong hours, ...). Backed
+by `listing_report` (`docs/DATA_MODEL.md` "listing_report", migration
+`20260918_0006_listing_report.py`). A report never edits listing data —
+it lands in an admin triage queue and an admin fixes the listing through
+the normal, audited endpoints.
+
+### POST /reports
+
+Auth: **PUBLIC** — no token required (one of the few public routes; see
+`backend/CLAUDE.md` "Public Routes"). If a valid Cognito token is sent,
+the report is attributed to that `sub` (`reporter_user_id`); a
+present-but-invalid token still returns `401`, same as every other
+optional-auth route.
+
+Body:
+```json
+{
+  "brand_id": 123,
+  "location_id": 456,
+  "category": "address_incorrect",
+  "details": "They moved across the street to 123 Main St.",
+  "reporter_email": "visitor@example.com",
+  "website": ""
+}
+```
+- `category`: `address_incorrect` | `hours_incorrect` | `phone_incorrect`
+  | `price_incorrect` | `menu_incorrect` | `permanently_closed` | `other`.
+- `details`: required, trimmed, 1-2000 chars.
+- `location_id`: optional; must belong to `brand_id` (else `400`
+  `invalid_location`).
+- `reporter_email`: optional, max 254 chars, simple `a@b.c` shape check
+  (blank string is treated as omitted). Used only for a manual admin
+  follow-up; never shown publicly.
+- `website`: **honeypot** — the UI renders it hidden; real users leave it
+  empty. Any non-empty value returns the normal `201` below but stores
+  nothing.
+
+Response: `201`
+```json
+{ "status": "received" }
+```
+Deliberately minimal and identical for a stored report and a discarded
+honeypot hit (no id, no echo). Errors: `404 not_found` (unknown
+`brand_id`), `400 invalid_location`, `422 validation_error` (bad
+category, blank/oversized `details`, malformed email).
+
+**Anti-abuse — what exists and what does not:** honeypot + strict
+length limits only, on top of API Gateway's stage-level throttling.
+Per-IP rate limiting and CAPTCHA are **not built** (flagged decision —
+add if spam appears; the blast radius is admin-queue noise, not
+corrupted listings).
+
+### GET /reports
+
+Auth: admin only. Query: `status` (optional; `new` | `resolved` |
+`dismissed`, else `422`), `page`, `page_size` (default 20, max 100).
+
+Ordering: `status=new` is **oldest-first** (triage queue); every other
+view (no filter, `resolved`, `dismissed`) is newest-first.
+
+Response: `200`
+```json
+{
+  "results": [
+    {
+      "report_id": 1,
+      "brand_id": 123,
+      "brand_name": "Spice Route",
+      "brand_slug": "spice-route",
+      "location_id": 456,
+      "location_address": "100 Main St, Irving, TX 75038",
+      "category": "address_incorrect",
+      "details": "They moved across the street.",
+      "reporter_email": "visitor@example.com",
+      "reporter_user_id": null,
+      "status": "new",
+      "submitted_at": "2026-09-18T10:00:00Z",
+      "reviewed_by": null,
+      "reviewed_at": null,
+      "reviewer_notes": null
+    }
+  ],
+  "page": 1,
+  "page_size": 20,
+  "total": 1
+}
+```
+
+### PATCH /reports/{id}
+
+Auth: admin only.
+
+Body: `{ "status": "resolved", "reviewer_notes": "Updated the address." }`
+— `status` required (`new` | `resolved` | `dismissed`), `reviewer_notes`
+optional (max 2000; omitted = unchanged). Moving to `resolved`/`dismissed`
+stamps `reviewed_by`/`reviewed_at`; moving back to `new` clears them.
+
+Response: `200`, the report shape above. `404` for an unknown id.
 
 ---
 

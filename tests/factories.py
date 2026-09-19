@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.claim_request import ClaimRequest
 from app.models.cuisine_tag import CuisineTag
 from app.models.data_deletion_request import DataDeletionRequest
+from app.models.listing_report import ListingReport
 from app.models.location_manager import LocationManager
 from app.models.owner_account import OwnerAccount
 from app.models.restaurant_brand import RestaurantBrand
@@ -139,6 +140,22 @@ class ClaimRequestFactory(factory.Factory):
     reviewer_notes = None
 
 
+class ListingReportFactory(factory.Factory):
+    class Meta:
+        model = ListingReport
+
+    brand_id = factory.Sequence(lambda n: n + 1)
+    location_id = None
+    category = "address_incorrect"
+    details = FactoryFaker("sentence")
+    reporter_email = None
+    reporter_user_id = None
+    status = "new"
+    reviewed_by = None
+    reviewed_at = None
+    reviewer_notes = None
+
+
 class DataDeletionRequestFactory(factory.Factory):
     class Meta:
         model = DataDeletionRequest
@@ -228,6 +245,13 @@ async def create_claim(db: AsyncSession, **overrides) -> ClaimRequest:
     db.add(claim)
     await db.flush()
     return claim
+
+
+async def create_listing_report(db: AsyncSession, **overrides) -> ListingReport:
+    report = ListingReportFactory(**overrides)
+    db.add(report)
+    await db.flush()
+    return report
 
 
 async def create_photo(db: AsyncSession, **overrides) -> RestaurantPhoto:
