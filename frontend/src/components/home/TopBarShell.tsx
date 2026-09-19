@@ -58,15 +58,15 @@ export default function TopBarShell({
           </span>
         </Link>
 
-        {/* HEADER ORDER (swapped 2026-09-19, user request): "Add Your
-            Restaurant" is now the plain link in the middle and "Sign In" is
-            the prominent pill at the far right (where the account menu also
-            lives once signed in) -- previously the other way round.
+        {/* HEADER LAYOUT (user requests 2026-09-19): "Add Your Restaurant"
+            sits in the middle and carries the dark pill (the header's one
+            call to action); "Sign In" is a plain link at the far right,
+            where the account menu also lives once signed in.
 
             MOBILE OVERFLOW (frontend/CLAUDE.md "No horizontal scroll on
-            mobile"; 375px): wordmark + this link + the Sign In pill do not
-            fit together, so "Add Your Restaurant" steps aside below `sm:`.
-            Sign In (a short pill) now shows at every width -- it was hidden
+            mobile"; 375px): wordmark + the Add Your Restaurant pill + Sign
+            In do not fit together, so "Add Your Restaurant" steps aside below
+            `sm:`. Sign In (short) now shows at every width -- it was hidden
             on mobile before, leaving signed-out phone visitors with no
             sign-in link at all.
 
@@ -82,7 +82,7 @@ export default function TopBarShell({
           {(!greetingName || role === "owner") && (
             <Link
               href={greetingName ? "/portal/brands/new" : "/login?next=/portal/brands/new"}
-              className="hidden whitespace-nowrap transition hover:text-brand-ink sm:inline"
+              className="hidden min-h-[44px] items-center whitespace-nowrap rounded-brand-pill bg-brand-ink px-5 text-sm font-semibold text-brand-bg transition hover:bg-brand-ink/90 sm:flex"
             >
               Add Your Restaurant
             </Link>
@@ -94,7 +94,7 @@ export default function TopBarShell({
         ) : (
           <Link
             href="/login"
-            className="flex min-h-[44px] items-center whitespace-nowrap rounded-brand-pill bg-brand-ink px-5 text-sm font-semibold text-brand-bg transition hover:bg-brand-ink/90"
+            className="flex min-h-[44px] items-center whitespace-nowrap px-1 text-sm font-medium text-brand-ink-muted transition hover:text-brand-ink"
           >
             Sign In
           </Link>
