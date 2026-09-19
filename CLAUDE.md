@@ -259,13 +259,16 @@ work — it's bookkeeping:
   attention) for changes that are actually worth reviewing on their own:
   a feature, a fix, a schema/contract change, a real process/decision
   change — not routine bookkeeping.
-- **`docs/CMD_LOG.md` is the one exception to "fold it into the current
-  branch"** — see "ALWAYS — Command Log" below. Riding a CMD_LOG entry
-  along on a feature branch is exactly what caused a merge conflict on
-  nearly every PR this session (every branch appending to the same last
-  line of the same file). CMD_LOG entries never go on a feature/fix/docs
-  branch at all now — the orchestrator batches them separately, directly,
-  after work lands.
+- **`docs/CMD_LOG.md`, `docs/PROJECT_PLAN.csv` and `docs/STATUS.md` are the
+  exceptions to "fold it into the current branch"** (CMD_LOG since
+  2026-09-13; PROJECT_PLAN.csv and STATUS.md added 2026-09-19, user
+  instruction: "you need to do the same as CMD_LOG for all the docs").
+  Riding a row/entry along on a feature branch is exactly what caused a
+  merge conflict on nearly every PR (every branch appending to the same
+  last lines of the same file — repeatedly, even for one-line changes).
+  These three files never go on a feature/fix/docs branch at all — agents
+  report what changed in their final report, and the orchestrator applies
+  it to all three in ONE dedicated docs PR per wave of merged work.
 
 ## Universal Guardrails (apply to ALL agents)
 
@@ -368,11 +371,17 @@ indirectly and must follow the same principles:
   same change that creates a new one. Only clean up the oldest once a 4th
   version file would otherwise exist.
 - ALWAYS update `docs/STATUS.md` when a PR merges or a feature/layer's state
-  changes (added 2026-09-13) — keep it short, bullets only, not verbose.
+  changes (added 2026-09-13) — but NOT on the feature branch: the
+  orchestrator batches it with PROJECT_PLAN.csv and CMD_LOG.md in one
+  dedicated docs PR per wave (see "Merge Hygiene"). Keep it short, bullets
+  only, not verbose.
   Same as BRD: still needs a PR (branch protection), but skips Architect
   review for a fast human merge — it's a status snapshot, not code.
-- ALWAYS update `docs/PROJECT_PLAN.csv` in the same change whenever a
-  feature/task's status changes (added 2026-09-13) — same trigger as the
+- ALWAYS keep `docs/PROJECT_PLAN.csv` current whenever a feature/task's
+  status changes (added 2026-09-13; amended 2026-09-19 — batched by the
+  orchestrator in the wave's docs PR, NEVER edited on a feature branch,
+  same as CMD_LOG; agents put the proposed row/status change in their final
+  report instead) — same trigger as the
   `docs/STATUS.md` rule directly above, so both get touched together as one
   effort, not as separate PRs: bump the row's `Status` column and its
   `PR/Reference` column (add the merged PR number). `docs/PROJECT_PLAN.csv`
