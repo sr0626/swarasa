@@ -117,3 +117,25 @@ def test_defaults_match_other_scripts():
     )
     assert gml.NOMINATIM_RATE_LIMIT_SECONDS >= 1.0
     assert "swarasa" in gml.NOMINATIM_USER_AGENT
+
+
+def test_census_hit_short_circuits_nominatim():
+    calls = []
+    result = gml.geocode_location(
+        LOC,
+        fetch=lambda params: calls.append(params) or [],
+        sleep=lambda s: None,
+        census=lambda loc: (32.9, -96.9),
+    )
+    assert result == {"method": gml.METHOD_CENSUS, "latitude": 32.9, "longitude": -96.9}
+    assert calls == []  # Nominatim never called
+
+
+def test_census_miss_falls_back_to_nominatim():
+    result = gml.geocode_location(
+        LOC,
+        fetch=lambda params: [{"lat": "32.8", "lon": "-96.7"}],
+        sleep=lambda s: None,
+        census=lambda loc: None,
+    )
+    assert result["method"] == gml.METHOD_FULL and result["latitude"] == 32.8
