@@ -117,6 +117,11 @@ export default function ClaimForm({ brandId, brandName, locations }: ClaimFormPr
       } else {
         setSubmitError(outcome.error);
       }
+    } catch {
+      // The Server Action itself rejected (network drop, deploy skew, a
+      // framework-level 5xx) -- previously unhandled, so the button just
+      // reset and nothing at all was shown.
+      setSubmitError("Something went wrong submitting your claim. Please try again.");
     } finally {
       setSubmitting(false);
     }
