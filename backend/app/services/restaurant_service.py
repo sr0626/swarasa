@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
 from app.dependencies.pagination import Pagination
+from app.models.claim_request import ClaimRequest
 from app.models.restaurant_brand import RestaurantBrand
 from app.models.restaurant_location import RestaurantLocation
 from app.schemas.cuisine import CuisineTagOut
@@ -48,6 +49,12 @@ async def _brand_to_out(db: AsyncSession, brand: RestaurantBrand) -> RestaurantO
         .where(RestaurantLocation.brand_id == brand.id, RestaurantLocation.is_active == True)  # noqa: E712
     )
     location_count = count_result.scalar_one()
+    pending_result = await db.execute(
+        select(ClaimRequest.id)
+        .where(ClaimRequest.brand_id == brand.id, ClaimRequest.status == "pending_review")
+        .limit(1)
+    )
+    has_pending_claim = pending_result.scalar_one_or_none() is not None
     return RestaurantOut(
         id=brand.id,
         name=brand.name,
@@ -55,6 +62,7 @@ async def _brand_to_out(db: AsyncSession, brand: RestaurantBrand) -> RestaurantO
         description=brand.description,
         website=brand.website,
         is_claimed=brand.is_claimed,
+        has_pending_claim=has_pending_claim,
         owner_id=brand.owner_id,
         cuisine_tags=[CuisineTagOut.model_validate(t) for t in tags],
         location_count=location_count,

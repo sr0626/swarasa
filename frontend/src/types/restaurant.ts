@@ -17,6 +17,8 @@ export interface RestaurantBrand {
   /** Restaurant's own site (brand-level, nullable) — already returned by GET /restaurants/{id}. */
   website: string | null;
   is_claimed: boolean;
+  /** A claim for this listing is awaiting admin review. */
+  has_pending_claim: boolean;
   /** null for unclaimed listings — frontend renders a "Claim this listing" CTA. */
   owner_id: number | null;
   cuisine_tags: CuisineTag[];

@@ -17,6 +17,11 @@ class RestaurantOut(BaseModel):
     description: str | None
     website: str | None
     is_claimed: bool
+    # True while a claim_request for this brand is pending review. Public,
+    # boolean-only (no claimant detail): the site hides the "Claim this
+    # restaurant" CTA from everyone while a claim is in review, and shows
+    # admins a "Claim pending" marker.
+    has_pending_claim: bool = False
     owner_id: int | None
     cuisine_tags: list[CuisineTagOut]
     location_count: int

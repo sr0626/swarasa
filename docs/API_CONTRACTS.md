@@ -269,6 +269,7 @@ Response:
   "description": "Hyderabadi biryani specialists since 2010.",
   "website": "https://spiceroute.example.com",
   "is_claimed": true,
+  "has_pending_claim": false,
   "owner_id": 55,
   "cuisine_tags": [
     { "id": 7, "name": "hyderabadi", "display_name": "Hyderabadi", "category": "regional" }
@@ -281,6 +282,9 @@ feature (docs/DATA_MODEL.md "restaurant_brand" judgment call: brand-level,
 not location-level). `owner_id` is `null` for unclaimed listings (still visible, per
 DECISIONS.md "Claim flow" — the frontend renders a "Claim this
 listing" CTA when `is_claimed` is `false`).
+`has_pending_claim` is `true` while a `claim_request` for the brand is in
+`pending_review` (boolean only, no claimant detail). The frontend then hides the
+claim CTA from everyone and shows admins a "Claim pending review" marker.
 
 ### GET /restaurants/{id}/locations
 
