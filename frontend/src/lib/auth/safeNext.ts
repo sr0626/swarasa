@@ -6,6 +6,7 @@
 // so it is attacker-controllable input. Only same-origin absolute PATHS are
 // accepted -- anything else (full URLs, protocol-relative `//evil.com`,
 // backslash tricks) is dropped, so this can never become an open redirect.
+import type { UserRole } from "@/types/auth";
 
 /** Returns `raw` if it is a safe same-site path, otherwise `null`. */
 export function safeNextPath(raw: string | string[] | undefined | null): string | null {
@@ -22,4 +23,19 @@ export function safeNextPath(raw: string | string[] | undefined | null): string 
 export function withNext(href: string, next: string | null | undefined): string {
   if (!next) return href;
   return `${href}${href.includes("?") ? "&" : "?"}next=${encodeURIComponent(next)}`;
+}
+
+/**
+ * Whether `role` can actually use `path` -- so a diner who signs in from a
+ * link meant for owners lands on the normal homepage instead of being
+ * bounced by the destination's own guard straight back to /login. Mirrors
+ * the `requireSession([...])` guards: /portal/brands/new is owner-only,
+ * other /portal/* is owner/manager, /admin/* is admin; everything else
+ * (e.g. /claim) is open to any signed-in role.
+ */
+export function pathAllowedForRole(path: string, role: UserRole): boolean {
+  if (path.startsWith("/portal/brands/new")) return role === "owner";
+  if (path.startsWith("/portal")) return role === "owner" || role === "manager";
+  if (path.startsWith("/admin")) return role === "admin";
+  return true;
 }

@@ -12,7 +12,8 @@
 // "Sign In" pill on the far right (the account menu takes that spot once
 // signed in). Swapped 2026-09-19 at the user's request; the separate "For
 // Owners" link was removed earlier. Signed-out "Add Your Restaurant" goes to
-// `/signup?role=owner`, "Sign In" to `/login`. See TopBarShell.tsx.
+// `/login?next=/portal/brands/new` (sign in, then land on the add-restaurant
+// page), "Sign In" to `/login`. See TopBarShell.tsx.
 //
 // SESSION-AWARE, ASYNC SERVER COMPONENT (docs/PROJECT_PLAN.csv "Signed-in
 // account dropdown in site header" — flagged in this PR's description):

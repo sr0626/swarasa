@@ -70,16 +70,18 @@ export default function TopBarShell({
             on mobile before, leaving signed-out phone visitors with no
             sign-in link at all.
 
-            ROUTING: signed-out -> `/signup?role=owner` (a prospective owner
-            has most likely no account yet; that page pre-selects Owner and
-            links "Already have an account? Sign in"). Signed-in owner ->
+            ROUTING: signed-out -> `/login?next=/portal/brands/new` (user
+            request 2026-09-19: sign in first, then land on the add-restaurant
+            page; `next` survives the "Create an account" -> confirm -> login
+            round trip, and sign-up defaults to Owner for /portal paths).
+            Signed-in owner ->
             `/portal/brands/new` (`POST /restaurants` is owner-only,
             docs/API_CONTRACTS.md). Signed-in manager/admin/registered_user
             never see it -- it would just 403. */}
         <nav className="flex items-center text-sm font-medium text-brand-ink-muted">
           {(!greetingName || role === "owner") && (
             <Link
-              href={greetingName ? "/portal/brands/new" : "/signup?role=owner"}
+              href={greetingName ? "/portal/brands/new" : "/login?next=/portal/brands/new"}
               className="hidden whitespace-nowrap transition hover:text-brand-ink sm:inline"
             >
               Add Your Restaurant
