@@ -55,6 +55,8 @@ async def test_claim_submit_then_admin_approve(client, db_session, as_user):
     approve_resp = await client.post(f"/claim/{claim_id}/approve", json={"reviewer_notes": "GBP matched"})
     assert approve_resp.status_code == 200, approve_resp.text
     assert approve_resp.json()["status"] == "approved"
+    # Cognito call is stubbed to a no-op by tests/integration/conftest.py.
+    assert approve_resp.json()["owner_group_granted"] is True
 
     await db_session.refresh(brand)
     assert brand.owner_id == owner_row.id

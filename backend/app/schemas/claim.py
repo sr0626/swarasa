@@ -34,6 +34,10 @@ class ClaimOut(BaseModel):
     sla_due_at: datetime
     reviewed_at: datetime | None = None
     reviewer_notes: str | None = None
+    # Only ever set on the `POST /claim/{id}/approve` response: True = claimant
+    # added to the Cognito `owner` group, False = attempted and failed
+    # (approval itself still committed), None = not applicable/not attempted.
+    owner_group_granted: bool | None = None
 
 
 ClaimStatus = Literal["pending_review", "approved", "rejected"]

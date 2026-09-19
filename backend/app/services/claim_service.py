@@ -17,11 +17,21 @@ approval is NOT implemented here — that needs `cognito-idp:
 AdminAddUserToGroup`, a permission this task has no Infra-granted scope
 for (root CLAUDE.md "AWS Best Practices" — ask Infra for a specific grant
 rather than assuming one); left as a follow-up, noted in the final report.
+
+UPDATE: group elevation is now implemented as a best-effort step AFTER the
+approval commit (`_grant_owner_group`). The `AdminAddUserToGroup` IAM grant
+ships in a separate Infra PR and may not be applied yet, so a Cognito
+failure (AccessDenied, network, pool id unset) must never undo or block the
+approval: it is logged as a warning and reported as
+`owner_group_granted: false` on the approve response; an admin can add the
+group by hand (docs/API_CONTRACTS.md).
 """
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 
+from botocore.exceptions import BotoCoreError, ClientError
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,7 +44,9 @@ from app.models.owner_account import OwnerAccount
 from app.models.restaurant_brand import RestaurantBrand
 from app.models.restaurant_location import RestaurantLocation
 from app.schemas.claim import ClaimCreate, ClaimListResponse, ClaimOut, ClaimQueueItem
-from app.services import audit_service, auth_service
+from app.services import audit_service, auth_service, cognito_service
+
+logger = logging.getLogger(__name__)
 
 _SLA_BUSINESS_DAYS = 2
 
@@ -193,9 +205,40 @@ async def _get_pending_claim_or_404(db: AsyncSession, claim_id: int) -> ClaimReq
     return claim
 
 
+def _grant_owner_group(claimant_sub: str, claimant_email: str | None) -> bool:
+    """Best-effort: add the claimant to the Cognito `owner` group. Returns
+    True on success (including already-a-member), False on any failure.
+    Never raises, never logs credentials or stack traces.
+
+    Username is the JWT `sub`; if Cognito rejects it with
+    `UserNotFoundException` (pool configured with email as username) retry
+    once with the claimant's email.
+    """
+    try:
+        try:
+            cognito_service.add_user_to_group(claimant_sub, cognito_service.OWNER_GROUP)
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") != "UserNotFoundException" or not claimant_email:
+                raise
+            cognito_service.add_user_to_group(claimant_email, cognito_service.OWNER_GROUP)
+        return True
+    except ClientError as exc:
+        logger.warning(
+            "Claim approved but adding claimant to owner group failed: %s",
+            exc.response.get("Error", {}).get("Code", "ClientError"),
+        )
+    except (BotoCoreError, RuntimeError) as exc:
+        logger.warning(
+            "Claim approved but adding claimant to owner group failed: %s", type(exc).__name__
+        )
+    return False
+
+
 async def approve_claim(
     db: AsyncSession, claim_id: int, admin_sub: str, reviewer_notes: str | None
-) -> ClaimRequest:
+) -> tuple[ClaimRequest, bool]:
+    """Approve a pending claim. Returns `(claim, owner_group_granted)`; the
+    DB changes are committed before the (best-effort) Cognito call."""
     claim = await _get_pending_claim_or_404(db, claim_id)
 
     owner = await auth_service.get_owner_account_by_sub(db, claim.claimant_user_id)
@@ -213,6 +256,9 @@ async def approve_claim(
     if brand is None:
         raise AppError(404, "Restaurant not found", "not_found")
 
+    # Captured before commit — the ORM row is expired afterwards.
+    claimant_email = owner.email
+    claimant_sub = claim.claimant_user_id
     old_val = {"owner_id": brand.owner_id, "is_claimed": brand.is_claimed}
     brand.owner_id = owner.id
     brand.is_claimed = True
@@ -235,7 +281,12 @@ async def approve_claim(
     )
     await db.commit()
     await db.refresh(claim)
-    return claim
+
+    # After the commit: a Cognito failure must not roll back the approval.
+    # Blocking boto3 called directly, same posture as cognito_service's
+    # other callers.
+    granted = _grant_owner_group(claimant_sub, claimant_email)
+    return claim, granted
 
 
 async def reject_claim(

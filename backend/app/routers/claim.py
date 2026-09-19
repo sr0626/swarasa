@@ -58,8 +58,12 @@ async def approve_claim(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(require_admin),
 ) -> ClaimOut:
-    claim = await claim_service.approve_claim(db, claim_id, current_user.cognito_sub, body.reviewer_notes)
-    return claim_service.to_claim_out(claim)
+    claim, owner_group_granted = await claim_service.approve_claim(
+        db, claim_id, current_user.cognito_sub, body.reviewer_notes
+    )
+    out = claim_service.to_claim_out(claim)
+    out.owner_group_granted = owner_group_granted
+    return out
 
 
 @router.post("/{claim_id}/reject", response_model=ClaimOut)
