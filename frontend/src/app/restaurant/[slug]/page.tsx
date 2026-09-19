@@ -165,6 +165,8 @@ export default async function RestaurantPage({ params }: RestaurantPageProps) {
   }
   const { restaurant, location } = data;
   const canEdit = await canEditListing(location);
+  const session = await getServerSession();
+  const isAdmin = session?.role === "admin";
 
   return (
     <>
@@ -194,7 +196,17 @@ export default async function RestaurantPage({ params }: RestaurantPageProps) {
               aria-label="Restaurant information"
               className="flex flex-col gap-5 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:sticky lg:top-6 lg:self-start"
             >
-              {!restaurant.is_claimed && <ClaimCTA brandId={restaurant.id} />}
+              {!restaurant.is_claimed && !restaurant.has_pending_claim && (
+                <ClaimCTA brandId={restaurant.id} />
+              )}
+              {!restaurant.is_claimed && restaurant.has_pending_claim && isAdmin && (
+                <Link
+                  href="/admin/claims"
+                  className="inline-flex items-center self-start rounded-brand-pill bg-brand-chip px-3 py-1.5 text-xs font-semibold text-brand-ink"
+                >
+                  Claim pending review
+                </Link>
+              )}
               <RestaurantInfoCard location={location} website={restaurant.website} />
             </aside>
 

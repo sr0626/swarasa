@@ -1,6 +1,6 @@
 // Compact weekly hours list for the sidebar info card, rendered from
 // `LocationDetail.hours` (docs/API_CONTRACTS.md "GET /locations/{id}" —
-// day_of_week 0=Monday..6=Sunday). Seven short rows, today highlighted.
+// day_of_week 0=Monday..6=Sunday). Seven short rows, today first and highlighted, then the following days in order.
 // A day that is missing or `is_closed: null` is "hours unknown" and is
 // simply left out rather than guessed or shown as a placeholder (same
 // "never a Hours-unknown label" stance as OpenStatusBadge); if no day has
@@ -36,11 +36,16 @@ export default function RestaurantHours({
   /** 0=Monday..6=Sunday in the location's timezone, or null. */
   todayIndex: number | null;
 }) {
-  const rows = DAYS.map((day, index) => ({
-    day,
-    index,
-    label: describeDay(hours.find((h) => h.day_of_week === index)),
-  })).filter((row) => row.label !== null);
+  // Today always leads: rotate Mon..Sun so the list starts at today's row.
+  const start = todayIndex ?? 0;
+  const rows = DAYS.map((_, offset) => {
+    const index = (start + offset) % 7;
+    return {
+      day: DAYS[index]!,
+      index,
+      label: describeDay(hours.find((h) => h.day_of_week === index)),
+    };
+  }).filter((row) => row.label !== null);
 
   if (rows.length === 0) return null;
 
