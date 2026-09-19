@@ -1,32 +1,22 @@
 "use client";
 
-// Admin claim review UI.
-//
-// FLAGGED CONTRACT GAP (see PR description): docs/API_CONTRACTS.md's
-// "Claim flow (`/claim`)" section only documents `GET /claim/{id}` — a
-// single claim by id, readable by its claimant or an admin. There is no
-// `GET /claim` (list) or `GET /claim?status=pending_review` endpoint, so
-// there is no real data source for "the admin queue" as a list. Rather
-// than fabricate a list from nothing, this is a lookup-by-id tool: an
-// admin enters a claim id (e.g. from the id a claimant would see on their
-// own pending-review confirmation, or from a support request) and reviews/
-// approves/rejects that one claim. Claims looked up in a session are kept
-// in local state below so an admin working through several ids in one
-// sitting doesn't lose earlier results — that's a client-side convenience
-// list of what *this admin already fetched*, not a fabricated server list.
-// A real queue needs a new backend endpoint (e.g. `GET /claim?status=
-// pending_review`) — flagged for Architect/Backend Dev, not built here.
+// Admin claims queue (docs/API_CONTRACTS.md "Claim flow" — `GET /claim`).
+// The page loads the list server-side and passes it in; this component owns
+// per-card review actions only (approve / reject with reviewer notes). The
+// status filter and pagination live on the page as real links.
 import { useState } from "react";
-import {
-  approveClaimAction,
-  lookupClaimAction,
-  rejectClaimAction,
-} from "@/app/admin/claims/actions";
+import Link from "next/link";
+import { approveClaimAction, rejectClaimAction } from "@/app/admin/claims/actions";
 import ClaimStatusBadge from "@/components/claim/ClaimStatusBadge";
 import { CheckIcon, XIcon } from "@/components/ui/icons";
-import type { ClaimResponse } from "@/types/claim";
+import type { ClaimQueueItem, ClaimResponse, ClaimStatus } from "@/types/claim";
 
-type ReviewedClaim = ClaimResponse & { _reviewedAt: number };
+interface ClaimReviewPanelProps {
+  initialClaims: ClaimQueueItem[];
+  /** Active status filter; a card that no longer matches after an action
+   * is dropped from the list. */
+  statusFilter: ClaimStatus;
+}
 
 function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString("en-US", {
@@ -38,137 +28,100 @@ function formatDateTime(iso: string): string {
   });
 }
 
-export default function ClaimReviewPanel() {
-  const [claimIdInput, setClaimIdInput] = useState("");
-  const [lookupError, setLookupError] = useState<string | null>(null);
-  const [looking, setLooking] = useState(false);
-  const [claims, setClaims] = useState<ReviewedClaim[]>([]);
-  const [activeClaimId, setActiveClaimId] = useState<number | null>(null);
+function isHttpUrl(value: string): boolean {
+  return /^https?:\/\//i.test(value);
+}
 
-  const activeClaim = claims.find((c) => c.claim_id === activeClaimId) ?? null;
+export default function ClaimReviewPanel({
+  initialClaims,
+  statusFilter,
+}: ClaimReviewPanelProps) {
+  const [claims, setClaims] = useState<ClaimQueueItem[]>(initialClaims);
 
-  function upsertClaim(claim: ClaimResponse) {
-    setClaims((prev) => {
-      const withoutExisting = prev.filter((c) => c.claim_id !== claim.claim_id);
-      return [{ ...claim, _reviewedAt: Date.now() }, ...withoutExisting];
-    });
-    setActiveClaimId(claim.claim_id);
+  function handleResolved(updated: ClaimResponse) {
+    setClaims((prev) =>
+      prev.flatMap((c) => {
+        if (c.claim_id !== updated.claim_id) return [c];
+        // Drop the card once it no longer matches the active filter.
+        if (updated.status !== statusFilter) return [];
+        return [
+          {
+            ...c,
+            status: updated.status,
+            reviewed_at: updated.reviewed_at ?? null,
+            reviewer_notes: updated.reviewer_notes ?? null,
+          },
+        ];
+      })
+    );
   }
 
-  async function handleLookup(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setLookupError(null);
-    const claimId = Number.parseInt(claimIdInput, 10);
-    if (!Number.isFinite(claimId) || claimId <= 0) {
-      setLookupError("Enter a valid claim id.");
-      return;
-    }
-
-    setLooking(true);
-    try {
-      const result = await lookupClaimAction(claimId);
-      if (result.ok) {
-        upsertClaim(result.claim);
-        setClaimIdInput("");
-      } else {
-        setLookupError(result.error);
-      }
-    } finally {
-      setLooking(false);
-    }
+  if (claims.length === 0) {
+    return (
+      <div className="rounded-brand-card border border-dashed border-brand-border bg-white px-6 py-12 text-center">
+        <p className="font-display text-base font-semibold text-brand-ink">Nothing here</p>
+        <p className="mx-auto mt-2 max-w-md text-sm text-brand-ink-muted">
+          No claims match this filter.
+        </p>
+      </div>
+    );
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="rounded-brand-card border border-dashed border-brand-border bg-white p-5">
-        <p className="font-display text-sm font-semibold text-brand-ink">
-          No list-all-pending endpoint exists yet
-        </p>
-        <p className="mt-1 text-sm text-brand-ink-muted">
-          The current <code className="text-brand-ink">/claim</code> contract only supports
-          looking up one claim by id — there is no endpoint to list every pending claim.
-          Look up claims by id below (e.g. the id a claimant sees on their submission
-          confirmation). See this PR&apos;s description for the flagged gap and the
-          suggested endpoint to close it.
-        </p>
-      </div>
-
-      <form onSubmit={handleLookup} className="flex flex-col gap-2 sm:flex-row sm:items-end">
-        <div className="flex-1">
-          <label htmlFor="claim_id" className="text-sm font-semibold text-brand-ink">
-            Claim ID
-          </label>
-          <input
-            id="claim_id"
-            type="number"
-            min={1}
-            value={claimIdInput}
-            onChange={(e) => setClaimIdInput(e.target.value)}
-            placeholder="e.g. 789"
-            className="mt-2 w-full rounded-brand-control border border-brand-border bg-white px-3 py-2.5 text-sm text-brand-ink placeholder:text-brand-placeholder focus:border-brand-accent focus:outline-none"
-          />
-        </div>
-        <button
-          type="submit"
-          disabled={looking}
-          className="flex min-h-[44px] items-center justify-center rounded-brand-control bg-brand-ink px-6 text-sm font-semibold text-brand-bg transition hover:bg-brand-ink/90 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {looking ? "Looking up..." : "Look up claim"}
-        </button>
-      </form>
-      {lookupError && (
-        <p className="rounded-brand-control bg-brand-closed-bg px-3 py-2.5 text-sm text-brand-closed">
-          {lookupError}
-        </p>
-      )}
-
-      {claims.length > 0 && (
-        <div className="flex flex-col gap-3">
-          <p className="text-sm font-semibold text-brand-ink-subtle">
-            Looked up this session
-          </p>
-          <ul className="flex flex-col gap-2">
-            {claims.map((claim) => (
-              <li key={claim.claim_id}>
-                <button
-                  type="button"
-                  onClick={() => setActiveClaimId(claim.claim_id)}
-                  className={
-                    claim.claim_id === activeClaimId
-                      ? "flex w-full items-center justify-between rounded-brand-control border-2 border-brand-accent bg-brand-bg px-4 py-3 text-left"
-                      : "flex w-full items-center justify-between rounded-brand-control border border-brand-border bg-white px-4 py-3 text-left transition hover:border-brand-ink-subtle"
-                  }
-                >
-                  <span className="text-sm font-medium text-brand-ink">
-                    Claim #{claim.claim_id} — brand #{claim.brand_id}
-                  </span>
-                  <ClaimStatusBadge status={claim.status} />
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {activeClaim && (
-        <ClaimDetailCard
-          claim={activeClaim}
-          onApprove={(updated) => upsertClaim(updated)}
-          onReject={(updated) => upsertClaim(updated)}
-        />
-      )}
-    </div>
+    <ul className="flex flex-col gap-4">
+      {claims.map((claim) => (
+        <li key={claim.claim_id}>
+          <ClaimCard claim={claim} onResolved={handleResolved} />
+        </li>
+      ))}
+    </ul>
   );
 }
 
-function ClaimDetailCard({
+function ProofLink({ claim }: { claim: ClaimQueueItem }) {
+  const linkClass = "break-all font-medium text-brand-accent underline underline-offset-2";
+
+  if (claim.proof_method === "google_business_profile") {
+    const url = claim.google_business_profile_url;
+    if (!url) return <span className="font-medium text-brand-ink">Not provided</span>;
+    return isHttpUrl(url) ? (
+      <a href={url} target="_blank" rel="noopener noreferrer" className={linkClass}>
+        Google Business Profile
+      </a>
+    ) : (
+      <span className="break-all font-medium text-brand-ink">{url}</span>
+    );
+  }
+
+  if (claim.proof_method === "document_upload") {
+    const doc = claim.supporting_document_url;
+    if (!doc) return <span className="font-medium text-brand-ink">Not provided</span>;
+    // The API returns the stored key only (no presigned read URL), so it is
+    // only a clickable link when the claimant supplied a full http(s) URL.
+    return isHttpUrl(doc) ? (
+      <a href={doc} target="_blank" rel="noopener noreferrer" className={linkClass}>
+        Supporting document
+      </a>
+    ) : (
+      <span className="break-all font-medium text-brand-ink" title="Stored S3 key">
+        Document key: {doc}
+      </span>
+    );
+  }
+
+  return (
+    <span className="font-medium text-brand-ink">
+      Phone call to the number on the listing
+    </span>
+  );
+}
+
+function ClaimCard({
   claim,
-  onApprove,
-  onReject,
+  onResolved,
 }: {
-  claim: ClaimResponse;
-  onApprove: (claim: ClaimResponse) => void;
-  onReject: (claim: ClaimResponse) => void;
+  claim: ClaimQueueItem;
+  onResolved: (claim: ClaimResponse) => void;
 }) {
   const [approveNotes, setApproveNotes] = useState("");
   const [rejectNotes, setRejectNotes] = useState("");
@@ -177,6 +130,8 @@ function ClaimDetailCard({
   const [pendingAction, setPendingAction] = useState<"approve" | "reject" | null>(null);
 
   const isPending = claim.status === "pending_review";
+  const approveId = `approve-notes-${claim.claim_id}`;
+  const rejectId = `reject-notes-${claim.claim_id}`;
 
   async function handleApprove() {
     setActionError(null);
@@ -184,10 +139,12 @@ function ClaimDetailCard({
     try {
       const result = await approveClaimAction(claim.claim_id, approveNotes.trim());
       if (result.ok) {
-        onApprove(result.claim);
+        onResolved(result.claim);
       } else {
         setActionError(result.error);
       }
+    } catch {
+      setActionError("Something went wrong. Please try again.");
     } finally {
       setPendingAction(null);
     }
@@ -207,52 +164,73 @@ function ClaimDetailCard({
     try {
       const result = await rejectClaimAction(claim.claim_id, rejectNotes.trim());
       if (result.ok) {
-        onReject(result.claim);
+        onResolved(result.claim);
         setConfirmingReject(false);
       } else {
         setActionError(result.error);
       }
+    } catch {
+      setActionError("Something went wrong. Please try again.");
     } finally {
       setPendingAction(null);
     }
   }
 
   return (
-    <div className="rounded-brand-card border border-brand-border bg-white p-6 shadow-brand-card">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-display text-lg font-bold text-brand-ink">
-          Claim #{claim.claim_id}
-        </h2>
+    <article className="rounded-brand-card border border-brand-border bg-white p-5 shadow-brand-card sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h2 className="font-display text-lg font-bold text-brand-ink">
+            <Link
+              href={`/restaurant/${claim.brand_slug}`}
+              className="underline-offset-2 hover:underline"
+            >
+              {claim.brand_name}
+            </Link>
+          </h2>
+          {claim.location_address && (
+            <p className="mt-0.5 text-sm text-brand-ink-muted">{claim.location_address}</p>
+          )}
+          <p className="mt-0.5 text-xs text-brand-ink-subtle">Claim #{claim.claim_id}</p>
+        </div>
         <ClaimStatusBadge status={claim.status} />
       </div>
 
       <dl className="mt-4 grid grid-cols-1 gap-3 rounded-brand-control bg-brand-bg p-4 text-sm sm:grid-cols-2">
         <div>
-          <dt className="text-brand-ink-subtle">Brand ID</dt>
-          <dd className="mt-1 font-medium text-brand-ink">#{claim.brand_id}</dd>
+          <dt className="text-brand-ink-subtle">Claimant</dt>
+          <dd className="mt-0.5 break-all font-medium text-brand-ink">
+            {claim.claimant_email ?? "Email unavailable"}
+          </dd>
         </div>
         <div>
           <dt className="text-brand-ink-subtle">Proof method</dt>
-          <dd className="mt-1 font-medium text-brand-ink">
+          <dd className="mt-0.5 font-medium capitalize text-brand-ink">
             {claim.proof_method.replace(/_/g, " ")}
+          </dd>
+        </div>
+        <div className="sm:col-span-2">
+          <dt className="text-brand-ink-subtle">Proof</dt>
+          <dd className="mt-0.5">
+            <ProofLink claim={claim} />
           </dd>
         </div>
         <div>
           <dt className="text-brand-ink-subtle">Submitted</dt>
-          <dd className="mt-1 font-medium text-brand-ink">
+          <dd className="mt-0.5 font-medium text-brand-ink">
             {formatDateTime(claim.submitted_at)}
           </dd>
         </div>
         <div>
           <dt className="text-brand-ink-subtle">SLA due</dt>
-          <dd className="mt-1 font-medium text-brand-ink">
+          <dd className="mt-0.5 font-medium text-brand-ink">
             {formatDateTime(claim.sla_due_at)}
           </dd>
         </div>
         {claim.reviewed_at && (
           <div>
             <dt className="text-brand-ink-subtle">Reviewed</dt>
-            <dd className="mt-1 font-medium text-brand-ink">
+            <dd className="mt-0.5 font-medium text-brand-ink">
               {formatDateTime(claim.reviewed_at)}
             </dd>
           </div>
@@ -260,25 +238,30 @@ function ClaimDetailCard({
         {claim.reviewer_notes && (
           <div className="sm:col-span-2">
             <dt className="text-brand-ink-subtle">Reviewer notes</dt>
-            <dd className="mt-1 font-medium text-brand-ink">{claim.reviewer_notes}</dd>
+            <dd className="mt-0.5 whitespace-pre-wrap break-words font-medium text-brand-ink">
+              {claim.reviewer_notes}
+            </dd>
           </div>
         )}
       </dl>
 
       {actionError && (
-        <p className="mt-4 rounded-brand-control bg-brand-closed-bg px-3 py-2.5 text-sm text-brand-closed">
+        <p
+          role="alert"
+          className="mt-4 rounded-brand-control bg-brand-closed-bg px-3 py-2.5 text-sm text-brand-closed"
+        >
           {actionError}
         </p>
       )}
 
       {isPending && (
-        <div className="mt-6 flex flex-col gap-4 border-t border-brand-border pt-5 sm:flex-row">
+        <div className="mt-5 flex flex-col gap-4 border-t border-brand-border pt-5 sm:flex-row">
           <div className="flex-1">
-            <label htmlFor="approve_notes" className="text-sm font-semibold text-brand-ink">
+            <label htmlFor={approveId} className="text-sm font-semibold text-brand-ink">
               Approve
             </label>
             <input
-              id="approve_notes"
+              id={approveId}
               type="text"
               value={approveNotes}
               onChange={(e) => setApproveNotes(e.target.value)}
@@ -297,11 +280,11 @@ function ClaimDetailCard({
           </div>
 
           <div className="flex-1">
-            <label htmlFor="reject_notes" className="text-sm font-semibold text-brand-ink">
+            <label htmlFor={rejectId} className="text-sm font-semibold text-brand-ink">
               Reject
             </label>
             <input
-              id="reject_notes"
+              id={rejectId}
               type="text"
               value={rejectNotes}
               onChange={(e) => setRejectNotes(e.target.value)}
@@ -337,6 +320,6 @@ function ClaimDetailCard({
           </div>
         </div>
       )}
-    </div>
+    </article>
   );
 }

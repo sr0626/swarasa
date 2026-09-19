@@ -36,6 +36,30 @@ export interface ClaimResponse {
   reviewer_notes?: string | null;
 }
 
+/**
+ * Row of GET /claim (admin claims queue). `supporting_document_url` is the
+ * stored S3 key as-is — the API mints no presigned read URL.
+ */
+export interface ClaimQueueItem {
+  claim_id: number;
+  brand_id: number;
+  brand_name: string;
+  brand_slug: string;
+  location_id: number | null;
+  location_address: string | null;
+  claimant_user_id: string;
+  /** null when no owner_account row matches the claimant. */
+  claimant_email: string | null;
+  proof_method: ClaimProofMethod;
+  google_business_profile_url: string | null;
+  supporting_document_url: string | null;
+  status: ClaimStatus;
+  submitted_at: string;
+  sla_due_at: string;
+  reviewed_at: string | null;
+  reviewer_notes: string | null;
+}
+
 /** Body for POST /claim/{id}/approve. Every field optional. */
 export interface ApproveClaimInput {
   reviewer_notes?: string;

@@ -36,6 +36,38 @@ class ClaimOut(BaseModel):
     reviewer_notes: str | None = None
 
 
+ClaimStatus = Literal["pending_review", "approved", "rejected"]
+
+
+class ClaimQueueItem(BaseModel):
+    """Admin-facing claim row (`GET /claim`). `supporting_document_url` is
+    the stored S3 key (no presigned read URL is minted here)."""
+
+    claim_id: int
+    brand_id: int
+    brand_name: str
+    brand_slug: str
+    location_id: int | None = None
+    location_address: str | None = None
+    claimant_user_id: str
+    claimant_email: str | None = None
+    proof_method: str
+    google_business_profile_url: str | None = None
+    supporting_document_url: str | None = None
+    status: str
+    submitted_at: datetime
+    sla_due_at: datetime
+    reviewed_at: datetime | None = None
+    reviewer_notes: str | None = None
+
+
+class ClaimListResponse(BaseModel):
+    results: list[ClaimQueueItem]
+    page: int
+    page_size: int
+    total: int
+
+
 class ClaimApproveRequest(BaseModel):
     reviewer_notes: str | None = None
 
