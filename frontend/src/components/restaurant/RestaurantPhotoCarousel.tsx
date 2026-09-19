@@ -100,6 +100,7 @@ export default function RestaurantPhotoCarousel({
     >
       <div
         ref={trackRef}
+        role="region"
         tabIndex={0}
         onScroll={handleScroll}
         onKeyDown={handleKeyDown}
