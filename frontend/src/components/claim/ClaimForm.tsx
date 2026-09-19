@@ -22,6 +22,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { submitClaimAction } from "@/app/claim/actions";
 import { createClaimSchema } from "@/lib/validation/claim";
+import { formatPhone } from "@/lib/formatPhone";
 import { UploadIcon, PhoneIcon, ClipboardCheckIcon } from "@/components/ui/icons";
 import ClaimStatusBadge from "@/components/claim/ClaimStatusBadge";
 import type { ClaimProofMethod, ClaimResponse } from "@/types/claim";
@@ -268,7 +269,8 @@ export default function ClaimForm({ brandId, brandName, locations }: ClaimFormPr
                   </option>
                   {locations.map((loc) => (
                     <option key={loc.id} value={loc.id}>
-                      {loc.address_line1}, {loc.city}, {loc.state} — {loc.phone}
+                      {loc.address_line1}, {loc.city}, {loc.state}
+                      {loc.phone ? ` — ${formatPhone(loc.phone)}` : ""}
                     </option>
                   ))}
                 </select>
