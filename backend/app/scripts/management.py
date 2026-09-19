@@ -63,6 +63,31 @@ def _run_seed_dev_data(event: dict) -> dict:
     return {"ok": True, "command": "seed_dev_data", "counts": counts}
 
 
+@_command("seed_taxonomy")
+def _run_seed_taxonomy(event: dict) -> dict:
+    """Seeds the full docs/TAXONOMY.md taxonomy into `cuisine_tag`
+    (idempotent, insert-if-missing by name). See
+    app/scripts/seed_taxonomy.py's module docstring.
+
+    Event payload shape: {"_management_command": "seed_taxonomy"}
+    """
+    from app.db.session import dispose_engine
+    from app.scripts.seed_taxonomy import TaxonomyDataError, run_seed_taxonomy
+
+    # Same same-loop-disposal reasoning as _run_seed_dev_data above.
+    async def _run_and_dispose() -> dict:
+        try:
+            return await run_seed_taxonomy()
+        finally:
+            await dispose_engine()
+
+    try:
+        counts = asyncio.run(_run_and_dispose())
+    except TaxonomyDataError as exc:
+        return {"ok": False, "command": "seed_taxonomy", "error": str(exc)}
+    return {"ok": True, "command": "seed_taxonomy", **counts}
+
+
 @_command("bulk_import_restaurants")
 def _run_bulk_import_restaurants(event: dict) -> dict:
     """One-off/reusable restaurant basic-detail bulk import, run the same

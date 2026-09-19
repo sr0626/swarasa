@@ -1,0 +1,317 @@
+[
+  {
+    "name": "andhra",
+    "display_name": "Andhra",
+    "category": "regional"
+  },
+  {
+    "name": "telangana",
+    "display_name": "Telangana",
+    "category": "regional"
+  },
+  {
+    "name": "tamil",
+    "display_name": "Tamil Nadu",
+    "category": "regional"
+  },
+  {
+    "name": "chettinad",
+    "display_name": "Chettinad",
+    "category": "regional"
+  },
+  {
+    "name": "kerala",
+    "display_name": "Kerala",
+    "category": "regional"
+  },
+  {
+    "name": "karnataka",
+    "display_name": "Karnataka",
+    "category": "regional"
+  },
+  {
+    "name": "north_indian",
+    "display_name": "North Indian",
+    "category": "regional"
+  },
+  {
+    "name": "punjabi",
+    "display_name": "Punjabi",
+    "category": "regional"
+  },
+  {
+    "name": "gujarati",
+    "display_name": "Gujarati",
+    "category": "regional"
+  },
+  {
+    "name": "rajasthani",
+    "display_name": "Rajasthani",
+    "category": "regional"
+  },
+  {
+    "name": "mughlai",
+    "display_name": "Mughlai",
+    "category": "regional"
+  },
+  {
+    "name": "hyderabadi",
+    "display_name": "Hyderabadi",
+    "category": "regional"
+  },
+  {
+    "name": "bengali",
+    "display_name": "Bengali",
+    "category": "regional"
+  },
+  {
+    "name": "maharashtrian",
+    "display_name": "Maharashtrian",
+    "category": "regional"
+  },
+  {
+    "name": "goan",
+    "display_name": "Goan",
+    "category": "regional"
+  },
+  {
+    "name": "bihari",
+    "display_name": "Bihari",
+    "category": "regional"
+  },
+  {
+    "name": "odia",
+    "display_name": "Odia",
+    "category": "regional"
+  },
+  {
+    "name": "kashmiri",
+    "display_name": "Kashmiri",
+    "category": "regional"
+  },
+  {
+    "name": "indo_chinese",
+    "display_name": "Indo-Chinese",
+    "category": "regional"
+  },
+  {
+    "name": "south_indian",
+    "display_name": "South Indian",
+    "category": "regional"
+  },
+  {
+    "name": "street_food",
+    "display_name": "Street Food",
+    "category": "regional"
+  },
+  {
+    "name": "vegetarian",
+    "display_name": "Vegetarian",
+    "category": "dietary"
+  },
+  {
+    "name": "vegan",
+    "display_name": "Vegan",
+    "category": "dietary"
+  },
+  {
+    "name": "jain",
+    "display_name": "Jain",
+    "category": "dietary"
+  },
+  {
+    "name": "halal",
+    "display_name": "Halal",
+    "category": "dietary"
+  },
+  {
+    "name": "gluten_free",
+    "display_name": "Gluten Free",
+    "category": "dietary"
+  },
+  {
+    "name": "nut_free",
+    "display_name": "Nut Free",
+    "category": "dietary"
+  },
+  {
+    "name": "dine_in",
+    "display_name": "Dine-in",
+    "category": "type"
+  },
+  {
+    "name": "takeout",
+    "display_name": "Takeout",
+    "category": "type"
+  },
+  {
+    "name": "delivery",
+    "display_name": "Delivery",
+    "category": "type"
+  },
+  {
+    "name": "buffet",
+    "display_name": "Buffet",
+    "category": "type"
+  },
+  {
+    "name": "food_truck",
+    "display_name": "Food Truck",
+    "category": "type"
+  },
+  {
+    "name": "fast_casual",
+    "display_name": "Fast Casual",
+    "category": "type"
+  },
+  {
+    "name": "fine_dining",
+    "display_name": "Fine Dining",
+    "category": "type"
+  },
+  {
+    "name": "catering",
+    "display_name": "Catering",
+    "category": "type"
+  },
+  {
+    "name": "cloud_kitchen",
+    "display_name": "Cloud Kitchen",
+    "category": "type"
+  },
+  {
+    "name": "dhaba",
+    "display_name": "Dhaba",
+    "category": "type"
+  },
+  {
+    "name": "biryani",
+    "display_name": "Biryani",
+    "category": "signature"
+  },
+  {
+    "name": "dosa",
+    "display_name": "Dosa",
+    "category": "signature"
+  },
+  {
+    "name": "idli",
+    "display_name": "Idli",
+    "category": "signature"
+  },
+  {
+    "name": "chai",
+    "display_name": "Chai",
+    "category": "signature"
+  },
+  {
+    "name": "chaat",
+    "display_name": "Chaat",
+    "category": "signature"
+  },
+  {
+    "name": "tandoor",
+    "display_name": "Tandoor",
+    "category": "signature"
+  },
+  {
+    "name": "curry",
+    "display_name": "Curry",
+    "category": "signature"
+  },
+  {
+    "name": "thali",
+    "display_name": "Thali",
+    "category": "signature"
+  },
+  {
+    "name": "kebab",
+    "display_name": "Kebab",
+    "category": "signature"
+  },
+  {
+    "name": "haleem",
+    "display_name": "Haleem",
+    "category": "signature"
+  },
+  {
+    "name": "pav",
+    "display_name": "Pav",
+    "category": "signature"
+  },
+  {
+    "name": "seafood",
+    "display_name": "Seafood",
+    "category": "signature"
+  },
+  {
+    "name": "sweets",
+    "display_name": "Indian Sweets",
+    "category": "signature"
+  },
+  {
+    "name": "breakfast_menu",
+    "display_name": "Breakfast Menu",
+    "category": "signature"
+  },
+  {
+    "name": "lunch_buffet",
+    "display_name": "Lunch Buffet",
+    "category": "signature"
+  },
+  {
+    "name": "lassi",
+    "display_name": "Lassi",
+    "category": "signature"
+  },
+  {
+    "name": "paratha",
+    "display_name": "Paratha",
+    "category": "signature"
+  },
+  {
+    "name": "uttapam",
+    "display_name": "Uttapam",
+    "category": "signature"
+  },
+  {
+    "name": "appam",
+    "display_name": "Appam",
+    "category": "signature"
+  },
+  {
+    "name": "chole",
+    "display_name": "Chole Bhature",
+    "category": "signature"
+  },
+  {
+    "name": "breakfast",
+    "display_name": "Breakfast",
+    "category": "dining_time"
+  },
+  {
+    "name": "lunch",
+    "display_name": "Lunch",
+    "category": "dining_time"
+  },
+  {
+    "name": "dinner",
+    "display_name": "Dinner",
+    "category": "dining_time"
+  },
+  {
+    "name": "late_night",
+    "display_name": "Late Night",
+    "category": "dining_time"
+  },
+  {
+    "name": "brunch",
+    "display_name": "Brunch",
+    "category": "dining_time"
+  },
+  {
+    "name": "open_24h",
+    "display_name": "Open 24 Hours",
+    "category": "dining_time"
+  }
+]

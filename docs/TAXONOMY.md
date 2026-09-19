@@ -86,7 +86,7 @@ Used for craving-based search ("I want Biryani") and filter chips.
 | pav | Pav | Vada pav, pav bhaji, misal pav |
 | seafood | Seafood | Fish, prawn, crab specialties |
 | sweets | Indian Sweets | Gulab jamun, rasgulla, barfi, ladoo |
-| breakfast | Breakfast | Morning-specific menu items |
+| breakfast_menu | Breakfast Menu | Morning-specific menu items (named `breakfast_menu`, not `breakfast`, because `cuisine_tag.name` is globally unique and the `dining_time` tag below already owns `breakfast`) |
 | lunch_buffet | Lunch Buffet | Midday buffet service specifically |
 | lassi | Lassi | Sweet or salted yoghurt drink |
 | paratha | Paratha | Stuffed or plain flatbreads |
@@ -120,3 +120,9 @@ When seeding the database from this file:
 - Order: insert `regional` first, then `dietary`, `type`, `signature`, `dining_time`
 - These are platform-controlled tags — no public API to create them
 - Only admin users can add, rename, or deactivate tags via the admin panel
+- **Tag names are globally unique** across categories (`cuisine_tag.name` has a single unique constraint), so no two sections may share a Tag Name (this is why the signature tag is `breakfast_menu`, not `breakfast`)
+
+### How the seed is implemented and run
+- The `seed_taxonomy` management command (`backend/app/scripts/seed_taxonomy.py`) reads `backend/app/scripts/taxonomy.json` — a copy of the tables above baked into the Lambda image (`docs/` is not in the image). Insert-if-missing by `name`; existing rows are never overwritten.
+- **When you edit this file, regenerate `taxonomy.json` from the tables** (don't hand-edit); `tests/unit/test_seed_taxonomy.py` fails if they drift.
+- Run (after the backend image containing the command is deployed): `aws lambda invoke --function-name <backend-lambda-name> --cli-binary-format raw-in-base64-out --payload '{"_management_command": "seed_taxonomy"}' /dev/stdout` — returns `{"ok": true, "command": "seed_taxonomy", "inserted": N, "already_present": M}`.
