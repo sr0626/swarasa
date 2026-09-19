@@ -10,13 +10,14 @@
 // already loaded each brand's locations (same N+1-but-bounded-by-page-size
 // pattern as `portal/dashboard/page.tsx`), so expand/collapse below is
 // pure client-side UI state, no extra network round trip.
+import Link from "next/link";
 import { useState } from "react";
 import {
   deactivateLocationAction,
   deleteRestaurantAction,
 } from "@/app/admin/listings/actions";
 import OpenStatusBadge from "@/components/ui/OpenStatusBadge";
-import { TrashIcon } from "@/components/ui/icons";
+import { PencilIcon, TrashIcon } from "@/components/ui/icons";
 import type { LocationSummary } from "@/types/location";
 import type { RestaurantBrand } from "@/types/restaurant";
 
@@ -291,6 +292,13 @@ function LocationRow({
       </div>
 
       <div className="flex items-center gap-2">
+        <Link
+          href={`/portal/locations/${location.id}`}
+          className="flex min-h-[36px] items-center gap-1.5 rounded-brand-control border border-brand-border px-3 text-xs font-semibold text-brand-ink transition hover:bg-brand-chip"
+        >
+          <PencilIcon className="h-3.5 w-3.5" />
+          Edit
+        </Link>
         <button
           type="button"
           onClick={handleDeactivate}
