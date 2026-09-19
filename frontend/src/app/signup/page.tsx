@@ -11,8 +11,8 @@ export const metadata: Metadata = {
   title: "Create an Account",
 };
 
-// `?role=owner` (linked from the header's "For Owners" / "Add Your
-// Restaurant") pre-selects the Owner account type. Validated against the
+// `?role=owner` (linked from the header's "Add Your Restaurant" CTA)
+// pre-selects the Owner account type. Validated against the
 // allowed value; anything else (missing, repeated, unknown) falls back to
 // the default (diner).
 export default function SignUpPage({

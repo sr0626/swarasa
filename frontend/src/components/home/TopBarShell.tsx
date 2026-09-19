@@ -62,17 +62,9 @@ export default function TopBarShell({
           {greetingName ? (
             <AccountMenu greetingName={greetingName} />
           ) : (
-            <>
-              <Link
-                href="/signup?role=owner"
-                className="hidden transition hover:text-brand-ink sm:inline"
-              >
-                For Owners
-              </Link>
-              <Link href="/login" className="hidden transition hover:text-brand-ink sm:inline">
-                Sign In
-              </Link>
-            </>
+            <Link href="/login" className="hidden transition hover:text-brand-ink sm:inline">
+              Sign In
+            </Link>
           )}
         </nav>
 
@@ -101,8 +93,7 @@ export default function TopBarShell({
             prospective owner who most likely has no account yet, so a
             sign-in page is a dead end for them; the sign-up page
             pre-selects the Owner role and still links "Already have an
-            account? Sign in" for returning owners. Same target as the
-            "For Owners" nav link. */}
+            account? Sign in" for returning owners. */}
         {(!greetingName || role === "owner") && (
           <Link
             href={greetingName ? "/portal/brands/new" : "/signup?role=owner"}
