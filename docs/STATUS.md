@@ -28,21 +28,39 @@ fully satisfied and asked to stop iterating for now, with an explicit intent
 to revisit later, not a final sign-off.
 
 ## Open PRs
-- #84 (draft, Architect self-review pending) — Cognito post-confirmation
-  Lambda (`infra/modules/cognito` + `backend/app/lambda_handlers/
-  cognito_post_confirmation.py`): assigns a newly-confirmed sign-up to its
-  `custom:role` pool group, closing the gap left by PR #79's sign-up flow.
-  Not yet applied to real AWS.
-- #88 (draft, Architect self-review pending) — signed-in account dropdown
-  in the site header (Hello, {name}; Profile/Security/Logout), new
-  `DELETE /api/auth/session` (logout) and `/account/security`
-  (change-password) — closes the `docs/PROJECT_PLAN.csv` gap tracked
-  2026-09-17.
-- #93 (draft, Architect self-review pending) — CSV bulk restaurant import:
-  new `restaurant_brand.website` column, per-row `owner_email` resolution,
-  free-text cuisine matching, and `scripts/bulk_import_restaurants_csv.py`
-  (geocodes via Nominatim on the human's machine, not inside the Lambda).
-  Not yet applied to real AWS.
+- #135 (ready for review) — search page tag filters moved into a Filters dropdown
+  with active-filter chips.
+- #136 (ready for review) — admin console layout with a left sidebar menu
+  (Profile / Claims / Reports / Listings).
+
+## Recently landed (2026-09-17 → 2026-09-19, PRs #64–#134)
+- Auth: sign-up / forgot-password / remember-me, post-confirmation role Lambda,
+  account dropdown + logout, password reveal toggle, session uses the Cognito ID
+  token (#79–#88, #97).
+- Owner/admin: owner dashboard (tier + managers), manager discovery, admin
+  parity, CSV bulk import, create-restaurant flow, CCPA export/delete (#70,
+  #77–#78, #93–#94, #99).
+- Reliability: Lambda management commands no longer reuse a stale DB engine,
+  Aurora pool sizing + dashboard fetch cap (#100–#102, #114).
+- Public site: sticky header (Add Your Restaurant middle / Sign In right),
+  default coffee-cup image everywhere, redesigned restaurant profile (carousel,
+  info card, hours starting today, about/specialties), report-a-problem,
+  fine-grained tag filter, paid-first sort, search by restaurant name (#103–#113,
+  #117, #122–#127, #133–#134).
+- Claims: claim flow test setup (`dev_unclaim`), claim CTA hidden while a claim
+  is pending, admin pending-claims queue `GET /claim` (#121, #128–#129, #133).
+- Admin/account: notifications bell (`GET /admin/notifications`), account page
+  redesign + role-specific layouts (#130–#132).
+- Dev data: taxonomy, random hours, fictional phones seeded on dev (#109,
+  #115, #118).
+- BRD v3.7 (admin capabilities) (#111).
+
+## Known gaps (2026-09-19)
+- Approving a claim does not add the claimant to the Cognito `owner` group
+  (needs Infra IAM grant).
+- 15 of 26 imported restaurants have no coordinates (invisible to non-text search).
+- Admin new-user feed covers owner accounts only (no local diner user table).
+- Deals engine, refunds mechanism, social login not started.
 
 ## Architect (schema + contracts)
 - [x] 13 entities modeled, 2 migrations written (never run)

@@ -256,3 +256,231 @@ gh pr create --draft --base main --head feature/phase1-s3-image-resize-pipeline 
 gh pr ready 63   # claude  (Architect self-review approved PR #63)
 terraform init -backend=false   # claude  (infra/, unintentional — made a real HeadObject call against swarasa-tfstate-sr0626 before being caught and stopped; see PR #63's Architect review comment)
 ```
+
+<!-- Catch-up 2026-09-19 (orchestrator): entries for 2026-09-17..19 reconstructed from
+PR/branch history (push, PR create, ready per PR #65-#135). User-run AWS commands on
+09-17/09-18 were not captured at the time except where listed; 09-19 is complete for
+this session. -->
+
+## 2026-09-17
+```bash
+git push -u origin docs/project-plan-resync   # claude
+gh pr create --base main --head docs/project-plan-resync   # claude  (PR #65)
+git push -u origin feature/phase1-user-follow-api   # claude
+gh pr create --draft --base main --head feature/phase1-user-follow-api   # claude  (PR #66)
+gh pr ready 66   # claude  (Architect approved PR #66)
+git push -u origin feature/phase1-lighthouse-ci   # claude
+gh pr create --draft --base main --head feature/phase1-lighthouse-ci   # claude  (PR #67)
+gh pr ready 67   # claude  (Architect approved PR #67)
+git push -u origin docs/lighthouse-project-plan-update   # claude
+gh pr create --base main --head docs/lighthouse-project-plan-update   # claude  (PR #68)
+git push -u origin fix/frontend-package-lock-sync   # claude
+gh pr create --draft --base main --head fix/frontend-package-lock-sync   # claude  (PR #69)
+gh pr ready 69   # claude  (Architect approved PR #69)
+git push -u origin feature/phase1-ccpa-data-export-deletion   # claude
+gh pr create --draft --base main --head feature/phase1-ccpa-data-export-deletion   # claude  (PR #70)
+gh pr ready 70   # claude  (Architect approved PR #70)
+git push -u origin fix/frontend-amplify-tokenprovider-not-wired   # claude
+gh pr create --draft --base main --head fix/frontend-amplify-tokenprovider-not-wired   # claude  (PR #71)
+gh pr ready 71   # claude  (Architect approved PR #71)
+git push -u origin feature/about-contact-legal-pages   # claude
+gh pr create --draft --base main --head feature/about-contact-legal-pages   # claude  (PR #72)
+gh pr ready 72   # claude  (Architect approved PR #72)
+git push -u origin fix/frontend-dashboard-ssr-hang-apifetch-timeout   # claude
+gh pr create --draft --base main --head fix/frontend-dashboard-ssr-hang-apifetch-timeout   # claude  (PR #73)
+gh pr ready 73   # claude  (Architect approved PR #73)
+git push -u origin feature/restaurant-bulk-import   # claude
+gh pr create --draft --base main --head feature/restaurant-bulk-import   # claude  (PR #74)
+gh pr ready 74   # claude  (Architect approved PR #74)
+git push -u origin fix/frontend-cold-start-timeout   # claude
+gh pr create --draft --base main --head fix/frontend-cold-start-timeout   # claude  (PR #75)
+gh pr ready 75   # claude  (Architect approved PR #75)
+git push -u origin docs/backlog-auth-owner-manager-admin-gaps   # claude
+gh pr create --base main --head docs/backlog-auth-owner-manager-admin-gaps   # claude  (PR #76)
+git push -u origin feature/owner-dashboard-tier-status-managers   # claude
+gh pr create --draft --base main --head feature/owner-dashboard-tier-status-managers   # claude  (PR #77)
+gh pr ready 77   # claude  (Architect approved PR #77)
+git push -u origin feature/manager-location-discovery-admin-parity   # claude
+gh pr create --draft --base main --head feature/manager-location-discovery-admin-parity   # claude  (PR #78)
+gh pr ready 78   # claude  (Architect approved PR #78)
+git push -u origin feature/auth-signup-forgot-password-remember-me   # claude
+gh pr create --draft --base main --head feature/auth-signup-forgot-password-remember-me   # claude  (PR #79)
+gh pr ready 79   # claude  (Architect approved PR #79)
+git push -u origin feature/user-profile-page   # claude
+gh pr create --draft --base main --head feature/user-profile-page   # claude  (PR #80)
+gh pr ready 80   # claude  (Architect approved PR #80)
+git push -u origin docs/backlog-signup-lambda-patch-me-scope   # claude
+gh pr create --base main --head docs/backlog-signup-lambda-patch-me-scope   # claude  (PR #81)
+git push -u origin docs/backlog-account-dropdown-logout   # claude
+gh pr create --base main --head docs/backlog-account-dropdown-logout   # claude  (PR #82)
+git push -u origin fix/patch-auth-me-role-scope   # claude
+gh pr create --draft --base main --head fix/patch-auth-me-role-scope   # claude  (PR #83)
+gh pr ready 83   # claude  (Architect approved PR #83)
+git push -u origin infra/cognito-post-confirmation-role-lambda   # claude
+gh pr create --draft --base main --head infra/cognito-post-confirmation-role-lambda   # claude  (PR #84)
+gh pr ready 84   # claude  (Architect approved PR #84)
+git push -u origin docs/backlog-password-toggle-verification-email   # claude
+gh pr create --base main --head docs/backlog-password-toggle-verification-email   # claude  (PR #85)
+git push -u origin feature/password-reveal-toggle   # claude
+gh pr create --draft --base main --head feature/password-reveal-toggle   # claude  (PR #86)
+gh pr ready 86   # claude  (Architect approved PR #86)
+git push -u origin feature/delete-test-user-script   # claude
+gh pr create --draft --base main --head feature/delete-test-user-script   # claude  (PR #87)
+gh pr ready 87   # claude  (Architect approved PR #87)
+git push -u origin feature/account-dropdown-logout   # claude
+gh pr create --draft --base main --head feature/account-dropdown-logout   # claude  (PR #88)
+gh pr ready 88   # claude  (Architect approved PR #88)
+git push -u origin docs/bump-password-toggle-status   # claude
+gh pr create --base main --head docs/bump-password-toggle-status   # claude  (PR #89)
+git push -u origin docs/fix-stale-status-rows   # claude
+gh pr create --base main --head docs/fix-stale-status-rows   # claude  (PR #90)
+git push -u origin docs/defer-cognito-email-decision   # claude
+gh pr create --base main --head docs/defer-cognito-email-decision   # claude  (PR #91)
+git push -u origin fix/serialize-location-paid-status   # claude
+gh pr create --draft --base main --head fix/serialize-location-paid-status   # claude  (PR #92)
+gh pr ready 92   # claude  (Architect approved PR #92)
+```
+
+## 2026-09-18
+```bash
+git push -u origin feature/csv-bulk-import   # claude
+gh pr create --draft --base main --head feature/csv-bulk-import   # claude  (PR #93)
+gh pr ready 93   # claude  (Architect approved PR #93)
+git push -u origin feature/owner-profile-phone-and-restaurants   # claude
+gh pr create --draft --base main --head feature/owner-profile-phone-and-restaurants   # claude  (PR #94)
+gh pr ready 94   # claude  (Architect approved PR #94)
+git push -u origin infra/cognito-vpc-endpoint   # claude
+gh pr create --draft --base main --head infra/cognito-vpc-endpoint   # claude  (PR #95)
+gh pr ready 95   # claude  (Architect approved PR #95)
+git push -u origin fix/cognito-vpc-endpoint-az-support   # claude
+gh pr create --draft --base main --head fix/cognito-vpc-endpoint-az-support   # claude  (PR #96)
+gh pr ready 96   # claude  (Architect approved PR #96)
+git push -u origin fix/session-uses-id-token-not-access-token   # claude
+gh pr create --draft --base main --head fix/session-uses-id-token-not-access-token   # claude  (PR #97)
+gh pr ready 97   # claude  (Architect approved PR #97)
+git push -u origin feature/add-header-to-authenticated-pages   # claude
+gh pr create --draft --base main --head feature/add-header-to-authenticated-pages   # claude  (PR #98)
+gh pr ready 98   # claude  (Architect approved PR #98)
+git push -u origin feature/create-restaurant-brand-flow   # claude
+gh pr create --draft --base main --head feature/create-restaurant-brand-flow   # claude  (PR #99)
+gh pr ready 99   # claude  (Architect approved PR #99)
+git push -u origin fix/async-engine-cross-loop-reuse   # claude
+gh pr create --draft --base main --head fix/async-engine-cross-loop-reuse   # claude  (PR #100)
+gh pr ready 100   # claude  (Architect approved PR #100)
+git push -u origin fix/db-pool-exhaustion-and-brand-name   # claude
+gh pr create --draft --base main --head fix/db-pool-exhaustion-and-brand-name   # claude  (PR #101)
+gh pr ready 101   # claude  (Architect approved PR #101)
+git push -u origin fix/dashboard-fetch-burst-and-homepage-copy   # claude
+gh pr create --draft --base main --head fix/dashboard-fetch-burst-and-homepage-copy   # claude  (PR #102)
+gh pr ready 102   # claude  (Architect approved PR #102)
+git push -u origin feature/search-card-cover-photo-and-address   # claude
+gh pr create --draft --base main --head feature/search-card-cover-photo-and-address   # claude  (PR #103)
+gh pr ready 103   # claude  (Architect approved PR #103)
+git push -u origin docs/homepage-backlog-paid-sort-deals-filters   # claude
+gh pr create --base main --head docs/homepage-backlog-paid-sort-deals-filters   # claude  (PR #104)
+git push -u origin fix/search-card-default-icon   # claude
+gh pr create --draft --base main --head fix/search-card-default-icon   # claude  (PR #105)
+gh pr ready 105   # claude  (Architect approved PR #105)
+git push -u origin fix/search-card-branded-placeholder   # claude
+gh pr create --draft --base main --head fix/search-card-branded-placeholder   # claude  (PR #106)
+gh pr ready 106   # claude  (Architect approved PR #106)
+git push -u origin fix/restaurant-page-null-description   # claude
+gh pr create --draft --base main --head fix/restaurant-page-null-description   # claude  (PR #107)
+gh pr ready 107   # claude  (Architect approved PR #107)
+git push -u origin feature/topbar-sticky-owners-link   # claude
+gh pr create --draft --base main --head feature/topbar-sticky-owners-link   # claude  (PR #108)
+gh pr ready 108   # claude  (Architect approved PR #108)
+git push -u origin feature/seed-taxonomy-command   # claude
+gh pr create --draft --base main --head feature/seed-taxonomy-command   # claude  (PR #109)
+gh pr ready 109   # claude  (Architect approved PR #109)
+git push -u origin feature/tile-hours-icon-paid-sort   # claude
+gh pr create --draft --base main --head feature/tile-hours-icon-paid-sort   # claude  (PR #110)
+gh pr ready 110   # claude  (Architect approved PR #110)
+git push -u origin docs/brd-v37-admin-discovery   # claude
+gh pr create --base main --head docs/brd-v37-admin-discovery   # claude  (PR #111)
+git push -u origin feature/fine-grained-tag-filter   # claude
+gh pr create --draft --base main --head feature/fine-grained-tag-filter   # claude  (PR #112)
+gh pr ready 112   # claude  (Architect approved PR #112)
+git push -u origin feature/report-a-problem   # claude
+gh pr create --draft --base main --head feature/report-a-problem   # claude  (PR #113)
+gh pr ready 113   # claude  (Architect approved PR #113)
+```
+
+## 2026-09-19
+```bash
+git push -u origin fix/management-command-discard-stale-engine   # claude
+gh pr create --draft --base main --head fix/management-command-discard-stale-engine   # claude  (PR #114)
+gh pr ready 114   # claude  (Architect approved PR #114)
+git push -u origin feature/seed-random-hours-command   # claude
+gh pr create --draft --base main --head feature/seed-random-hours-command   # claude  (PR #115)
+gh pr ready 115   # claude  (Architect approved PR #115)
+git push -u origin fix/remove-for-owners-link   # claude
+gh pr create --draft --base main --head fix/remove-for-owners-link   # claude  (PR #116)
+gh pr ready 116   # claude  (Architect approved PR #116)
+git push -u origin fix/default-image-hero-and-shared-component   # claude
+gh pr create --draft --base main --head fix/default-image-hero-and-shared-component   # claude  (PR #117)
+gh pr ready 117   # claude  (Architect approved PR #117)
+git push -u origin feature/seed-random-phones-command   # claude
+gh pr create --draft --base main --head feature/seed-random-phones-command   # claude  (PR #118)
+gh pr ready 118   # claude  (Architect approved PR #118)
+git push -u origin feature/edit-link-for-editors   # claude
+gh pr create --draft --base main --head feature/edit-link-for-editors   # claude  (PR #119)
+gh pr ready 119   # claude  (Architect approved PR #119)
+git push -u origin docs/tracker-batched-like-cmd-log   # claude
+gh pr create --base main --head docs/tracker-batched-like-cmd-log   # claude  (PR #120)
+git push -u origin feature/dev-unclaim-restaurants   # claude
+gh pr create --draft --base main --head feature/dev-unclaim-restaurants   # claude  (PR #121)
+gh pr ready 121   # claude  (Architect approved PR #121)
+git push -u origin feature/location-about-specialties   # claude
+gh pr create --draft --base main --head feature/location-about-specialties   # claude  (PR #122)
+gh pr ready 122   # claude  (Architect approved PR #122)
+git push -u origin fix/topbar-swap-signin-and-add-restaurant   # claude
+gh pr create --draft --base main --head fix/topbar-swap-signin-and-add-restaurant   # claude  (PR #123)
+gh pr ready 123   # claude  (Architect approved PR #123)
+git push -u origin feature/restaurant-profile-redesign   # claude
+gh pr create --draft --base main --head feature/restaurant-profile-redesign   # claude  (PR #124)
+gh pr ready 124   # claude  (Architect approved PR #124)
+git push -u origin fix/add-restaurant-signin-redirect   # claude
+gh pr create --draft --base main --head fix/add-restaurant-signin-redirect   # claude  (PR #125)
+gh pr ready 125   # claude  (Architect approved PR #125)
+git push -u origin fix/topbar-dark-pill-on-add-restaurant   # claude
+gh pr create --draft --base main --head fix/topbar-dark-pill-on-add-restaurant   # claude  (PR #126)
+gh pr ready 126   # claude  (Architect approved PR #126)
+git push -u origin feature/search-by-name   # claude
+gh pr create --draft --base main --head feature/search-by-name   # claude  (PR #127)
+gh pr ready 127   # claude  (Architect approved PR #127)
+git push -u origin fix/claim-submit-unhandled-error   # claude
+gh pr create --draft --base main --head fix/claim-submit-unhandled-error   # claude  (PR #128)
+gh pr ready 128   # claude  (Architect approved PR #128)
+git push -u origin feature/admin-claims-queue   # claude
+gh pr create --draft --base main --head feature/admin-claims-queue   # claude  (PR #129)
+gh pr ready 129   # claude  (Architect approved PR #129)
+git push -u origin feature/account-profile-redesign   # claude
+gh pr create --draft --base main --head feature/account-profile-redesign   # claude  (PR #130)
+gh pr ready 130   # claude  (Architect approved PR #130)
+git push -u origin feature/admin-notifications   # claude
+gh pr create --draft --base main --head feature/admin-notifications   # claude  (PR #131)
+gh pr ready 131   # claude  (Architect approved PR #131)
+git push -u origin feature/role-based-account-pages   # claude
+gh pr create --draft --base main --head feature/role-based-account-pages   # claude  (PR #132)
+gh pr ready 132   # claude  (Architect approved PR #132)
+git push -u origin feature/pending-claim-and-hours-order   # claude
+gh pr create --draft --base main --head feature/pending-claim-and-hours-order   # claude  (PR #133)
+gh pr ready 133   # claude  (Architect approved PR #133)
+git push -u origin fix/search-name-precision   # claude
+gh pr create --draft --base main --head fix/search-name-precision   # claude  (PR #134)
+gh pr ready 134   # claude  (Architect approved PR #134)
+git push -u origin feature/search-filters-dropdown   # claude
+gh pr create --draft --base main --head feature/search-filters-dropdown   # claude  (PR #135)
+gh pr ready 135   # claude  (Architect approved PR #135)
+git push -u origin feature/admin-sidebar-layout   # claude
+gh pr create --draft --base main --head feature/admin-sidebar-layout   # claude  (PR #136)
+gh pr ready 136   # claude  (Architect approved PR #136)
+aws sso login --profile swarasa-dev   # user  (expired session, x2)
+aws lambda invoke --function-name swarasa-api-dev ... '{"_management_command": "alembic_upgrade"}' --profile swarasa-dev --region us-east-1   # user  (0007 about/specialties)
+aws lambda invoke --function-name swarasa-api-dev ... '{"_management_command": "seed_taxonomy"}' --profile swarasa-dev --region us-east-1   # user  (failed once on cross-loop engine bug, fixed by #114, then inserted 0 / already_present 63)
+aws lambda invoke --function-name swarasa-api-dev ... '{"_management_command": "seed_random_hours"}' --profile swarasa-dev --region us-east-1   # user
+aws lambda get-function --function-name swarasa-api-dev --profile swarasa-dev --region us-east-1   # user  (read deployed ImageUri)
+python3 scripts/dev_unclaim_restaurants.py   # user  (aws lambda invoke dev_unclaim_restaurants: dera-grill, masala-wok-indian-asian-fare)
+aws logs tail /aws/lambda/swarasa-api-dev --profile swarasa-dev --region us-east-1 --since 15m   # user  (claim-submit investigation; no errors)
+```
