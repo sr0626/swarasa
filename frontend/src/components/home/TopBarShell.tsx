@@ -58,50 +58,43 @@ export default function TopBarShell({
           </span>
         </Link>
 
-        <nav className="flex items-center gap-3 text-sm font-medium text-brand-ink-muted sm:gap-6">
-          {greetingName ? (
-            <AccountMenu greetingName={greetingName} />
-          ) : (
-            <Link href="/login" className="hidden transition hover:text-brand-ink sm:inline">
-              Sign In
+        {/* HEADER ORDER (swapped 2026-09-19, user request): "Add Your
+            Restaurant" is now the plain link in the middle and "Sign In" is
+            the prominent pill at the far right (where the account menu also
+            lives once signed in) -- previously the other way round.
+
+            MOBILE OVERFLOW (frontend/CLAUDE.md "No horizontal scroll on
+            mobile"; 375px): wordmark + this link + the Sign In pill do not
+            fit together, so "Add Your Restaurant" steps aside below `sm:`.
+            Sign In (a short pill) now shows at every width -- it was hidden
+            on mobile before, leaving signed-out phone visitors with no
+            sign-in link at all.
+
+            ROUTING: signed-out -> `/signup?role=owner` (a prospective owner
+            has most likely no account yet; that page pre-selects Owner and
+            links "Already have an account? Sign in"). Signed-in owner ->
+            `/portal/brands/new` (`POST /restaurants` is owner-only,
+            docs/API_CONTRACTS.md). Signed-in manager/admin/registered_user
+            never see it -- it would just 403. */}
+        <nav className="flex items-center text-sm font-medium text-brand-ink-muted">
+          {(!greetingName || role === "owner") && (
+            <Link
+              href={greetingName ? "/portal/brands/new" : "/signup?role=owner"}
+              className="hidden whitespace-nowrap transition hover:text-brand-ink sm:inline"
+            >
+              Add Your Restaurant
             </Link>
           )}
         </nav>
 
-        {/* MOBILE OVERFLOW FIX (flagged in a prior PR's description): at
-            375px, wordmark + account menu + this CTA together overflowed
-            the viewport (measured 489px of content in a 375px viewport —
-            frontend/CLAUDE.md "No horizontal scroll on mobile" / "Design
-            for 375px viewport first"). The account menu already gives a
-            signed-in visitor their own way into the app, so this
-            acquisition CTA steps aside below `sm:` for that case only.
-            Signed-out mobile layout is unchanged: shown at all widths.
-
-            ROUTING (bug fix, flagged in this PR's description): this
-            previously always linked to `/login`, including for an
-            already-signed-in visitor — clicking it while signed in bounced
-            them back to the sign-in page. Only an owner can actually
-            create a restaurant (`POST /restaurants` is "Auth: owner",
-            docs/API_CONTRACTS.md), so a signed-in owner now goes straight
-            to the create-brand form and a signed-in manager/admin/
-            registered_user — for whom this CTA doesn't apply — don't see
-            it at all, rather than clicking into a page that would just
-            403.
-
-            SIGNED-OUT TARGET: `/signup?role=owner` (was `/login`). A
-            visitor clicking "Add Your Restaurant" is by definition a
-            prospective owner who most likely has no account yet, so a
-            sign-in page is a dead end for them; the sign-up page
-            pre-selects the Owner role and still links "Already have an
-            account? Sign in" for returning owners. */}
-        {(!greetingName || role === "owner") && (
+        {greetingName ? (
+          <AccountMenu greetingName={greetingName} />
+        ) : (
           <Link
-            href={greetingName ? "/portal/brands/new" : "/signup?role=owner"}
-            className={`min-h-[44px] items-center whitespace-nowrap rounded-brand-pill bg-brand-ink px-4 text-sm font-semibold text-brand-bg transition hover:bg-brand-ink/90 sm:px-5 ${
-              greetingName ? "hidden sm:flex" : "flex"
-            }`}
+            href="/login"
+            className="flex min-h-[44px] items-center whitespace-nowrap rounded-brand-pill bg-brand-ink px-5 text-sm font-semibold text-brand-bg transition hover:bg-brand-ink/90"
           >
-            Add Your Restaurant
+            Sign In
           </Link>
         )}
       </div>
