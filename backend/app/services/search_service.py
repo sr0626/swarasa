@@ -25,7 +25,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from geoalchemy2.functions import ST_DWithin, ST_Distance, ST_MakePoint, ST_SetSRID
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.restaurant_brand import RestaurantBrand
@@ -103,12 +103,14 @@ async def _fetch_candidates(
         .where(RestaurantLocation.is_active == True)  # noqa: E712
     )
     if q:
-        # Text search (restaurant name, or a cuisine tag's name) deliberately
+        # Text search (restaurant name; or a cuisine tag whose name EXACTLY
+        # equals the text, e.g. "hyderabadi") deliberately
         # does NOT require coordinates or a radius: someone typing a
         # restaurant's name expects to find it wherever it is, and a
         # location that failed geocoding would otherwise be unfindable even
         # by its exact name. Such rows come back with distance_mi = NULL.
-        pattern = "%" + _escape_like(q.strip()) + "%"
+        needle = q.strip()
+        pattern = "%" + _escape_like(needle) + "%"
         matching_brands = select(RestaurantBrand.id).where(
             RestaurantBrand.name.ilike(pattern, escape="\\")
         )
@@ -117,8 +119,8 @@ async def _fetch_candidates(
             .join(CuisineTag, CuisineTag.id == RestaurantCuisine.cuisine_tag_id)
             .where(
                 or_(
-                    CuisineTag.display_name.ilike(pattern, escape="\\"),
-                    CuisineTag.name.ilike(pattern, escape="\\"),
+                    func.lower(CuisineTag.display_name) == needle.lower(),
+                    func.lower(CuisineTag.name) == needle.lower(),
                 )
             )
         )

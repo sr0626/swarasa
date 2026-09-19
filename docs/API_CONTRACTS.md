@@ -57,7 +57,7 @@ Query params:
 | cuisine[] | string[], optional | `cuisine_tag.name` values, category=`regional` (also usable for `signature`/`dining_time` slugs) |
 | dietary[] | string[], optional | `cuisine_tag.name` values, category=`dietary` |
 | type[] | string[], optional | `cuisine_tag.name` values, category=`type` |
-| q | string, optional, max 100 | Free-text search: case-insensitive substring match on the restaurant (brand) **name** or a cuisine tag's name/display name. **Added 2026-09-19** (user request: search should match restaurant names). When `q` is present the radius and coordinates are NOT required -- a name search finds the restaurant wherever it is, including locations that failed geocoding; those come back with `nearest_location.distance_mi: null` and sort after located results. Still combinable with `cuisine[]`/`dietary[]`/`type[]` (AND). |
+| q | string, optional, max 100 | Free-text search: case-insensitive substring match on the restaurant (brand) **name**, or a cuisine tag whose name/display name **exactly** equals the text (case-insensitive; never a tag substring, to keep results precise). **Added 2026-09-19** (user request: search should match restaurant names). When `q` is present the radius and coordinates are NOT required -- a name search finds the restaurant wherever it is, including locations that failed geocoding; those come back with `nearest_location.distance_mi: null` and sort after located results. Still combinable with `cuisine[]`/`dietary[]`/`type[]` (AND). |
 | page | int, optional, default 1 | |
 | page_size | int, optional, default 20, max 100 | |
 
