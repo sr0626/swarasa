@@ -57,6 +57,7 @@ import json
 import subprocess
 import sys
 import tempfile
+import re
 import time
 import urllib.error
 import urllib.parse
@@ -74,6 +75,21 @@ NOMINATIM_USER_AGENT = "swarasa-restaurant-directory-geocode-backfill/1.0 (dev t
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 NOMINATIM_RATE_LIMIT_SECONDS = 1.0  # policy max: 1 request/second
 
+# Unit designators ("Ste 150", "Suite 190", "#135", "Unit 4", ...) and a
+# trailing lone letter ("Shady Grove Rd A") make Nominatim return NO match
+# even when the building itself is mapped (verified live 2026-09-19: "7447 N
+# MacArthur Blvd Ste 150" -> [], "7447 N MacArthur Blvd" -> hit), so they are
+# stripped before geocoding.
+_UNIT_RE = re.compile(r"[,\s]+(?:(?:ste|suite|unit|apt|apartment|bldg|building|fl|floor|rm|room)\b\.?|#).*$", re.IGNORECASE)
+_TRAILING_LETTER_RE = re.compile(r"\s+[A-Za-z]$")
+
+
+def clean_street(street: str) -> str:
+    cleaned = _UNIT_RE.sub("", street.strip())
+    cleaned = _TRAILING_LETTER_RE.sub("", cleaned)
+    return cleaned.strip(" ,")
+
+
 METHOD_FULL = "full-address"
 METHOD_STREET = "street+city+state"
 METHOD_POSTAL = "zip-approx"
@@ -85,7 +101,7 @@ Fetch = Callable[[Params], "list[dict] | None"]  # None = request failed (as opp
 def build_queries(loc: dict, include_postal_fallback: bool = True) -> list[tuple[str, Params]]:
     """Ordered (method, Nominatim structured-search params) attempts."""
     base: Params = {"format": "json", "limit": "1", "country": "US"}
-    street = (loc.get("address_line1") or "").strip()
+    street = clean_street(loc.get("address_line1") or "")
     city = (loc.get("city") or "").strip()
     state = (loc.get("state") or "").strip()
     postal = (loc.get("postal_code") or "").strip()
@@ -96,7 +112,9 @@ def build_queries(loc: dict, include_postal_fallback: bool = True) -> list[tuple
         if postal:  # otherwise identical to the query above
             queries.append((METHOD_STREET, {**base, "street": street, "city": city, "state": state}))
     if include_postal_fallback and postal and state:
-        queries.append((METHOD_POSTAL, {**base, "postalcode": postal, "state": state}))
+        # `postalcode` alone: adding the 2-letter `state` makes Nominatim's
+        # structured search return nothing (verified live 2026-09-19).
+        queries.append((METHOD_POSTAL, {**base, "postalcode": postal}))
     # Drop empty params (e.g. postalcode="") so Nominatim doesn't see blanks.
     return [(m, {k: v for k, v in p.items() if v != ""}) for m, p in queries]
 

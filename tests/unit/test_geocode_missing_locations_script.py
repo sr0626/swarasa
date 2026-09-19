@@ -25,9 +25,28 @@ def test_query_order_is_full_then_street_then_postal():
     queries = dict(gml.build_queries(LOC))
     assert queries[gml.METHOD_FULL]["postalcode"] == "75038"
     assert "postalcode" not in queries[gml.METHOD_STREET]
+    # postalcode only: adding `state` makes Nominatim's structured search return nothing.
     assert queries[gml.METHOD_POSTAL] == {
-        "format": "json", "limit": "1", "country": "US", "postalcode": "75038", "state": "TX",
+        "format": "json", "limit": "1", "country": "US", "postalcode": "75038",
     }
+
+
+@pytest.mark.parametrize("raw,expected", [
+    ("7447 N MacArthur Blvd Ste 150", "7447 N MacArthur Blvd"),
+    ("7750 N MacArthur Blvd #135", "7750 N MacArthur Blvd"),
+    ("3311 Regent Blvd Suite 121", "3311 Regent Blvd"),
+    ("5250 N O'Connor Blvd Ste 146", "5250 N O'Connor Blvd"),
+    ("833 E Shady Grove Rd A", "833 E Shady Grove Rd"),
+    ("100 Main St, Unit 4", "100 Main St"),
+    ("1001 MacArthur Park Dr", "1001 MacArthur Park Dr"),
+])
+def test_clean_street_strips_unit_designators(raw, expected):
+    assert gml.clean_street(raw) == expected
+
+
+def test_queries_use_the_cleaned_street():
+    loc = {**LOC, "address_line1": "7447 N MacArthur Blvd Ste 150"}
+    assert dict(gml.build_queries(loc))[gml.METHOD_FULL]["street"] == "7447 N MacArthur Blvd"
 
 
 def test_postal_fallback_can_be_disabled_and_missing_postal_skips_redundant_query():
