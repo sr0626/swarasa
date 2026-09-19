@@ -36,6 +36,7 @@ import {
 } from "@/lib/api/auth";
 import { getMyRestaurants, getRestaurantLocations } from "@/lib/api/restaurants";
 import { mapWithConcurrency } from "@/lib/concurrency";
+import AdminShell from "@/components/admin/AdminShell";
 import AdminAccountView from "@/components/account/AdminAccountView";
 import DinerAccountView from "@/components/account/DinerAccountView";
 import ManagerAccountView from "@/components/account/ManagerAccountView";
@@ -152,6 +153,16 @@ export default async function AccountPage() {
     }
   }
 
+  // Admins get the admin console frame (banner + left menu, Profile active)
+  // -- the same AdminShell app/admin/layout.tsx uses for the other sections.
+  if (me?.role === "admin") {
+    return (
+      <AdminShell me={me} profile>
+        <AdminAccountView me={me} latestDeletionRequest={latestDeletionRequest} />
+      </AdminShell>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-brand-bg">
       <TopBar />
@@ -192,10 +203,6 @@ export default async function AccountPage() {
             locationsError={managedLocationsError}
             latestDeletionRequest={latestDeletionRequest}
           />
-        )}
-
-        {me?.role === "admin" && (
-          <AdminAccountView me={me} latestDeletionRequest={latestDeletionRequest} />
         )}
       </div>
     </main>
