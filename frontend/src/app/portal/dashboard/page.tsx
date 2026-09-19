@@ -16,6 +16,10 @@
 // display only — no Stripe billing management (upgrade/downgrade) UI,
 // which is Phase 2 scope.
 //
+// LAYOUT (2026-09-19): the owner branch renders inside the business console
+// frame (components/portal/OwnerShell.tsx: banner + left menu) with
+// OwnerDashboardPanel as the right-hand panel; this file only fetches.
+//
 // FLAGGED CONTRACT GAP (see this PR's description): `GET /restaurants` is
 // "Auth: owner or admin" only — there is no manager path at all, and no
 // other endpoint lets a manager discover which locations they're assigned
@@ -36,7 +40,11 @@ import { ApiError } from "@/lib/api/client";
 import { getMyRestaurants, getRestaurantLocations } from "@/lib/api/restaurants";
 import { getLocationManagers } from "@/lib/api/locations";
 import { mapWithConcurrency } from "@/lib/concurrency";
-import BrandCard from "@/components/portal/BrandCard";
+import OwnerDashboardPanel, {
+  type BrandWithLocations,
+} from "@/components/portal/OwnerDashboardPanel";
+import OwnerShell from "@/components/portal/OwnerShell";
+import { loadConsoleIdentity } from "@/lib/auth/consoleIdentity";
 import InfoPanel from "@/components/ui/InfoPanel";
 import type { LocationSummary, LocationWithManagers } from "@/types/location";
 import type { RestaurantBrand } from "@/types/restaurant";
@@ -44,12 +52,6 @@ import type { RestaurantBrand } from "@/types/restaurant";
 export const metadata: Metadata = {
   title: "Owner Dashboard",
 };
-
-interface BrandWithLocations {
-  brand: RestaurantBrand;
-  locations: LocationWithManagers[];
-  locationsError: string | null;
-}
 
 // Caps how many brands' locations are fetched in parallel — see
 // lib/concurrency.ts's header comment for why (DB connection-pool storm,
@@ -162,48 +164,12 @@ export default async function DashboardPage() {
         loadLocationsForBrand(brand, session.accessToken)
       );
 
+  // Banner identity is best-effort (falls back to the session claims).
+  const me = await loadConsoleIdentity(session);
+
   return (
-    <main className="min-h-screen bg-brand-bg">
-      <TopBar />
-      <section className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
-        <h1 className="font-display text-2xl font-bold text-brand-ink sm:text-3xl">Dashboard</h1>
-        <p className="mt-2 text-sm text-brand-ink-muted">
-          Your restaurant brands and locations. Select a location to edit its details, hours,
-          photos, and managers.
-        </p>
-
-        <div className="mt-6">
-          {loadError && <InfoPanel title="Couldn't load your restaurants" body={loadError} />}
-
-          {!loadError && brands.length === 0 && (
-            <div className="flex flex-col items-center gap-4">
-              <InfoPanel
-                title="No restaurants found"
-                body="You don't have any restaurant brands yet. Claim an existing unclaimed listing from its public page, or create a new brand, to get started."
-              />
-              <Link
-                href="/portal/brands/new"
-                className="flex min-h-[44px] items-center justify-center rounded-brand-control bg-brand-accent px-6 text-sm font-semibold text-white transition hover:bg-brand-accent-hover"
-              >
-                Add your restaurant
-              </Link>
-            </div>
-          )}
-
-          {!loadError && brandsWithLocations.length > 0 && (
-            <div className="flex flex-col gap-5">
-              {brandsWithLocations.map(({ brand, locations, locationsError }) => (
-                <BrandCard
-                  key={brand.id}
-                  brand={brand}
-                  locations={locations}
-                  locationsError={locationsError}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
-    </main>
+    <OwnerShell me={me}>
+      <OwnerDashboardPanel brands={brandsWithLocations} loadError={loadError} />
+    </OwnerShell>
   );
 }

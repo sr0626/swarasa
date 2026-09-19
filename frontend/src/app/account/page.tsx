@@ -22,7 +22,9 @@
 // ROLE LAYOUTS (2026-09-19): the page only fetches data and picks a view —
 // each role has its own layout under components/account/ (DinerAccountView,
 // OwnerAccountView, ManagerAccountView, AdminAccountView), sharing the
-// summary/details/security/privacy pieces. All data-fetching, the server
+// summary/details/security/privacy pieces. Admin and owner views render
+// inside their console shell (banner + left menu); the owner's restaurant
+// list lives on /portal/dashboard, not here. All data-fetching, the server
 // actions (app/account/actions.ts) and the role gating are unchanged.
 import type { Metadata } from "next";
 import { requireSession } from "@/lib/auth/guards";
@@ -34,44 +36,17 @@ import {
   getMyFollows,
   getMyManagedLocations,
 } from "@/lib/api/auth";
-import { getMyRestaurants, getRestaurantLocations } from "@/lib/api/restaurants";
-import { mapWithConcurrency } from "@/lib/concurrency";
 import AdminShell from "@/components/admin/AdminShell";
+import OwnerShell from "@/components/portal/OwnerShell";
 import AdminAccountView from "@/components/account/AdminAccountView";
 import DinerAccountView from "@/components/account/DinerAccountView";
 import ManagerAccountView from "@/components/account/ManagerAccountView";
 import OwnerAccountView from "@/components/account/OwnerAccountView";
-import type { OwnerBrandSummary } from "@/components/account/OwnerRestaurantsPanel";
 import InfoPanel from "@/components/ui/InfoPanel";
 import type { AuthMe } from "@/types/auth";
 import type { FollowedBrand } from "@/types/follow";
 import type { ManagedLocation } from "@/types/location";
 import type { DataDeletionRequest } from "@/types/privacy";
-import type { RestaurantBrand } from "@/types/restaurant";
-
-// Same cap the owner dashboard uses for its per-brand locations fan-out
-// (see lib/concurrency.ts and app/portal/dashboard/page.tsx).
-const LOCATIONS_FETCH_CONCURRENCY = 5;
-
-/** Public `GET /restaurants/{id}/locations` for one brand; a failure is scoped to that brand. */
-async function loadOwnerBrand(brand: RestaurantBrand): Promise<OwnerBrandSummary> {
-  if (brand.location_count === 0) {
-    return { brand, locations: [], locationsError: null };
-  }
-  try {
-    const page = await getRestaurantLocations(brand.id, { page: 1, page_size: 100 });
-    return { brand, locations: page.results, locationsError: null };
-  } catch (error) {
-    return {
-      brand,
-      locations: [],
-      locationsError:
-        error instanceof ApiError
-          ? error.message
-          : "Could not load this restaurant's locations. Please try again.",
-    };
-  }
-}
 
 export const metadata: Metadata = {
   title: "My Account",
@@ -102,24 +77,6 @@ export default async function AccountPage() {
         error instanceof ApiError
           ? error.message
           : "Could not load your followed restaurants. Please try again.";
-    }
-  }
-
-  let ownedBrands: OwnerBrandSummary[] = [];
-  let ownedBrandsError: string | null = null;
-  if (me && me.role === "owner") {
-    try {
-      const page = await getMyRestaurants({ page: 1, page_size: 50 }, session.accessToken);
-      ownedBrands = await mapWithConcurrency(
-        page.results,
-        LOCATIONS_FETCH_CONCURRENCY,
-        loadOwnerBrand
-      );
-    } catch (error) {
-      ownedBrandsError =
-        error instanceof ApiError
-          ? error.message
-          : "Could not load your restaurants. Please try again.";
     }
   }
 
@@ -163,6 +120,16 @@ export default async function AccountPage() {
     );
   }
 
+  // Owners get the business console frame (banner + left menu, "Profile &
+  // account" active) -- the same OwnerShell the owner dashboard uses.
+  if (me?.role === "owner") {
+    return (
+      <OwnerShell me={me} profile>
+        <OwnerAccountView me={me} latestDeletionRequest={latestDeletionRequest} />
+      </OwnerShell>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-brand-bg">
       <TopBar />
@@ -183,15 +150,6 @@ export default async function AccountPage() {
             me={me}
             follows={follows}
             followsError={followsError}
-            latestDeletionRequest={latestDeletionRequest}
-          />
-        )}
-
-        {me?.role === "owner" && (
-          <OwnerAccountView
-            me={me}
-            brands={ownedBrands}
-            brandsError={ownedBrandsError}
             latestDeletionRequest={latestDeletionRequest}
           />
         )}

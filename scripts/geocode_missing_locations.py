@@ -57,6 +57,7 @@ import json
 import subprocess
 import sys
 import tempfile
+import re
 import time
 import urllib.error
 import urllib.parse
@@ -72,8 +73,30 @@ DEFAULT_FUNCTION_NAME = "swarasa-api-dev"
 # (Nominatim policy requires a descriptive, application-specific User-Agent).
 NOMINATIM_USER_AGENT = "swarasa-restaurant-directory-geocode-backfill/1.0 (dev tooling; contact via repo owner)"
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
+# US Census Geocoder: free, no key, US addresses only. PRIMARY provider: it
+# resolved every dev address (suite tokens included) that Nominatim missed,
+# and it does not throttle a small batch the way Nominatim's 1 req/sec policy
+# does (the first version of this script got the human's IP 429'd).
+CENSUS_URL = "https://geocoding.geo.census.gov/geocoder/locations/onelineaddress"
+CENSUS_DELAY_SECONDS = 0.3
 NOMINATIM_RATE_LIMIT_SECONDS = 1.0  # policy max: 1 request/second
 
+# Unit designators ("Ste 150", "Suite 190", "#135", "Unit 4", ...) and a
+# trailing lone letter ("Shady Grove Rd A") make Nominatim return NO match
+# even when the building itself is mapped (verified live 2026-09-19: "7447 N
+# MacArthur Blvd Ste 150" -> [], "7447 N MacArthur Blvd" -> hit), so they are
+# stripped before geocoding.
+_UNIT_RE = re.compile(r"[,\s]+(?:(?:ste|suite|unit|apt|apartment|bldg|building|fl|floor|rm|room)\b\.?|#).*$", re.IGNORECASE)
+_TRAILING_LETTER_RE = re.compile(r"\s+[A-Za-z]$")
+
+
+def clean_street(street: str) -> str:
+    cleaned = _UNIT_RE.sub("", street.strip())
+    cleaned = _TRAILING_LETTER_RE.sub("", cleaned)
+    return cleaned.strip(" ,")
+
+
+METHOD_CENSUS = "census"
 METHOD_FULL = "full-address"
 METHOD_STREET = "street+city+state"
 METHOD_POSTAL = "zip-approx"
@@ -85,7 +108,7 @@ Fetch = Callable[[Params], "list[dict] | None"]  # None = request failed (as opp
 def build_queries(loc: dict, include_postal_fallback: bool = True) -> list[tuple[str, Params]]:
     """Ordered (method, Nominatim structured-search params) attempts."""
     base: Params = {"format": "json", "limit": "1", "country": "US"}
-    street = (loc.get("address_line1") or "").strip()
+    street = clean_street(loc.get("address_line1") or "")
     city = (loc.get("city") or "").strip()
     state = (loc.get("state") or "").strip()
     postal = (loc.get("postal_code") or "").strip()
@@ -96,19 +119,54 @@ def build_queries(loc: dict, include_postal_fallback: bool = True) -> list[tuple
         if postal:  # otherwise identical to the query above
             queries.append((METHOD_STREET, {**base, "street": street, "city": city, "state": state}))
     if include_postal_fallback and postal and state:
-        queries.append((METHOD_POSTAL, {**base, "postalcode": postal, "state": state}))
+        # `postalcode` alone: adding the 2-letter `state` makes Nominatim's
+        # structured search return nothing (verified live 2026-09-19).
+        queries.append((METHOD_POSTAL, {**base, "postalcode": postal}))
     # Drop empty params (e.g. postalcode="") so Nominatim doesn't see blanks.
     return [(m, {k: v for k, v in p.items() if v != ""}) for m, p in queries]
 
 
+# Once Nominatim answers 429 stop calling it for the rest of the run instead
+# of hammering a throttled endpoint (3 requests per location added up fast).
+_nominatim_throttled = False
+
+
+def census_fetch(loc: dict) -> "tuple[float, float] | None":
+    """(latitude, longitude) from the US Census one-line-address geocoder, or
+    None (no match / request failed)."""
+    street = clean_street(loc.get("address_line1") or "")
+    parts = [street, (loc.get("city") or "").strip(), f"{(loc.get('state') or '').strip()} {(loc.get('postal_code') or '').strip()}".strip()]
+    address = ", ".join(p for p in parts if p)
+    if not street or not address:
+        return None
+    query = urllib.parse.urlencode({"address": address, "benchmark": "Public_AR_Current", "format": "json"})
+    request = urllib.request.Request(f"{CENSUS_URL}?{query}", headers={"User-Agent": NOMINATIM_USER_AGENT})
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            matches = json.loads(response.read().decode("utf-8")).get("result", {}).get("addressMatches", [])
+        if matches:
+            coords = matches[0]["coordinates"]
+            return float(coords["y"]), float(coords["x"])
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError, ValueError, TypeError) as exc:
+        print(f"  ! Census geocoder request failed: {exc}", file=sys.stderr)
+    return None
+
+
 def nominatim_fetch(params: Params) -> "list[dict] | None":
+    global _nominatim_throttled
+    if _nominatim_throttled:
+        return None
     url = f"{NOMINATIM_URL}?{urllib.parse.urlencode(params)}"
     request = urllib.request.Request(url, headers={"User-Agent": NOMINATIM_USER_AGENT})
     try:
         with urllib.request.urlopen(request, timeout=10) as response:
             return json.loads(response.read().decode("utf-8"))
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
-        print(f"  ! Nominatim request failed: {exc}", file=sys.stderr)
+        if getattr(exc, "code", None) == 429:
+            _nominatim_throttled = True
+            print("  ! Nominatim returned 429 (rate limited) -- skipping Nominatim for the rest of this run.", file=sys.stderr)
+        else:
+            print(f"  ! Nominatim request failed: {exc}", file=sys.stderr)
         return None
 
 
@@ -117,11 +175,17 @@ def geocode_location(
     include_postal_fallback: bool = True,
     fetch: Fetch = nominatim_fetch,
     sleep: Callable[[float], None] = time.sleep,
+    census: "Callable[[dict], tuple[float, float] | None] | None" = None,
 ) -> dict:
     """Tries each query in order; returns {"method", "latitude", "longitude"}
     on the first hit, else {"method": None, ...None}. Sleeps
     NOMINATIM_RATE_LIMIT_SECONDS after EVERY request so the 1 req/sec policy
     holds across locations and fallbacks alike."""
+    if census is not None:
+        hit = census(loc)
+        sleep(CENSUS_DELAY_SECONDS)
+        if hit:
+            return {"method": METHOD_CENSUS, "latitude": hit[0], "longitude": hit[1]}
     for method, params in build_queries(loc, include_postal_fallback):
         results = fetch(params)
         sleep(NOMINATIM_RATE_LIMIT_SECONDS)
@@ -208,7 +272,7 @@ def main() -> None:
     print(f"\n{len(locations)} location(s) to geocode via Nominatim (~1 request/second, up to 3 requests each)...")
     rows = []
     for loc in locations:
-        result = geocode_location(loc, include_postal_fallback=not args.no_postal_fallback)
+        result = geocode_location(loc, include_postal_fallback=not args.no_postal_fallback, census=census_fetch)
         rows.append({**loc, **result})
         print(f"  - [{loc['id']}] {loc.get('brand_name')}: {result['method'] or 'no match'}")
 

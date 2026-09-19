@@ -147,6 +147,12 @@ export async function apiFetch<TResponse>(
       ...init,
       headers,
       signal: timeoutController.signal,
+      // Authenticated responses are per-user and change on writes (a claim
+      // approval, an edit): never serve them from Next's data cache. Seen
+      // live 2026-09-19: an owner's dashboard didn't list a restaurant whose
+      // claim had just been approved. Public GETs keep default caching /
+      // their explicit revalidate window.
+      ...(options.accessToken ? { cache: "no-store" as const } : {}),
       next:
         options.revalidateSeconds !== undefined
           ? { revalidate: options.revalidateSeconds }
