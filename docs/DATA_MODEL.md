@@ -110,6 +110,8 @@ convention for a URL column in this schema.
 | postal_code | varchar(10), not null | |
 | country | varchar(2) default 'US', not null | |
 | phone | varchar(20), nullable | |
+| about | text, nullable | Owner/manager-authored free text ("we specialize in ..."), max 1000 chars (enforced by the API schema). Location-level, not brand-level, so an assigned manager can edit it — root CLAUDE.md "Permission model". Free tier. Added by migration 0007 |
+| specialties | json, nullable | JSON list of short strings, max 8 items, each 1-40 chars, trimmed and case-insensitively de-duplicated by the API schema; NULL = none. Plain `JSON` (not JSONB) so the SQLite test DB works. Added by migration 0007 |
 | timezone | varchar(64) default 'America/Chicago', not null | IANA tz name — needed to compute open/closed display status from `restaurant_hours` (DECISIONS.md "Restaurant hours") |
 | latitude | numeric(9,6), nullable | Plain value for display/serialization |
 | longitude | numeric(9,6), nullable | Plain value for display/serialization |

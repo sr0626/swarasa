@@ -18,8 +18,10 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
+    JSON,
     Numeric,
     String,
+    Text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -55,6 +57,17 @@ class RestaurantLocation(TimestampMixin, Base):
     country: Mapped[str] = mapped_column(String(2), default="US", nullable=False)
 
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+    # Owner/manager-authored public profile content (free tier). Lives on
+    # the location, not the brand, so an assigned manager can edit it
+    # (root CLAUDE.md "Permission model" — managers write only
+    # location-level fields). `about` is free text ("we specialize in
+    # ..."), max 1000 chars enforced by the API schema; `specialties` is a
+    # JSON list of short strings (max 8, each 1-40 chars, normalised by
+    # the API schema). Plain `JSON` (not JSONB) so the SQLite test DB
+    # works; both NULL until an owner/manager sets them.
+    about: Mapped[str | None] = mapped_column(Text, nullable=True)
+    specialties: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
 
     # IANA tz name — required for computing display open/closed status
     # from restaurant_hours (DECISIONS.md "Restaurant hours": "per-row
