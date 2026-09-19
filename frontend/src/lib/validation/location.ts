@@ -25,6 +25,32 @@ export const updateLocationSchema = createLocationSchema.omit({ brand_id: true }
 
 export type UpdateLocationFormValues = z.infer<typeof updateLocationSchema>;
 
+// Mirrors backend/app/schemas/location.py LocationUpdate.about/specialties
+// limits (docs/API_CONTRACTS.md "PATCH /locations/{id}").
+export const ABOUT_MAX_LENGTH = 1000;
+export const SPECIALTIES_MAX_ITEMS = 8;
+export const SPECIALTY_MAX_LENGTH = 40;
+
+export const updateLocationAboutSchema = z.object({
+  about: z
+    .string()
+    .trim()
+    .max(ABOUT_MAX_LENGTH, `About text must be at most ${ABOUT_MAX_LENGTH} characters`)
+    .nullable(),
+  specialties: z
+    .array(
+      z
+        .string()
+        .trim()
+        .min(1)
+        .max(SPECIALTY_MAX_LENGTH, `Each specialty must be at most ${SPECIALTY_MAX_LENGTH} characters`)
+    )
+    .max(SPECIALTIES_MAX_ITEMS, `Add at most ${SPECIALTIES_MAX_ITEMS} specialties`)
+    .nullable(),
+});
+
+export type UpdateLocationAboutFormValues = z.infer<typeof updateLocationAboutSchema>;
+
 const dayHourSchema = z
   .object({
     day_of_week: z.number().int().min(0).max(6),

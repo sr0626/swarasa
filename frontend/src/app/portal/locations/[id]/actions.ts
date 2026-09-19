@@ -28,6 +28,7 @@ import {
   assignLocationManagerSchema,
   createPhotoSchema,
   photoUploadUrlSchema,
+  updateLocationAboutSchema,
   updateLocationHoursSchema,
   updateLocationSchema,
 } from "@/lib/validation/location";
@@ -82,6 +83,34 @@ export async function updateLocationInfoAction(
     return { ok: true, data: location };
   } catch (error) {
     return { ok: false, error: messageFor(error, "Something went wrong saving these details.") };
+  }
+}
+
+/**
+ * PATCH /locations/{id} — the "About & specialties" public-profile fields
+ * only. Sending null (or an empty list/string, which the backend
+ * normalises to null) clears the stored value.
+ */
+export async function updateLocationAboutAction(
+  locationId: number,
+  input: unknown
+): Promise<ActionResult<LocationDetail>> {
+  const auth = await requireLocationSession();
+  if (!auth.ok) return auth;
+
+  const parsed = updateLocationAboutSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Please check the form and try again.",
+    };
+  }
+
+  try {
+    const location = await updateLocation(locationId, parsed.data, auth.accessToken);
+    return { ok: true, data: location };
+  } catch (error) {
+    return { ok: false, error: messageFor(error, "Something went wrong saving this section.") };
   }
 }
 

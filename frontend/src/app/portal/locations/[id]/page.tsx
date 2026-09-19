@@ -16,6 +16,7 @@ import { requireSession } from "@/lib/auth/guards";
 import TopBar from "@/components/home/TopBar";
 import { getLocationById, getLocationManagers } from "@/lib/api/locations";
 import LocationInfoForm from "@/components/portal/LocationInfoForm";
+import LocationAboutForm from "@/components/portal/LocationAboutForm";
 import LocationHoursEditor from "@/components/portal/LocationHoursEditor";
 import LocationPhotoManager from "@/components/portal/LocationPhotoManager";
 import LocationManagerAssignment from "@/components/portal/LocationManagerAssignment";
@@ -98,6 +99,7 @@ export default async function PortalLocationPage({ params }: LocationPageProps) 
 
         <div className="mt-6 flex flex-col gap-6">
           <LocationInfoForm location={location} />
+          <LocationAboutForm locationId={location.id} about={location.about} specialties={location.specialties} />
           <LocationHoursEditor locationId={location.id} hours={location.hours} />
           <LocationPhotoManager
             locationId={location.id}
