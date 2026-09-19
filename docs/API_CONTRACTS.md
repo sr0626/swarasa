@@ -1546,6 +1546,61 @@ own router, since it doesn't act on one existing `restaurant_brand`/
 doc do (`DELETE /restaurants/{id}`, `POST /claim/{id}/approve`, etc.) —
 it creates many new brand/location rows in one call instead.
 
+### GET /admin/notifications
+
+Auth: admin only. Read-only aggregate behind the admin bell in the top
+bar; computed per request (no push/polling infrastructure). Each section
+is one COUNT plus a `LIMIT 5` select.
+
+Response: `200`
+```json
+{
+  "claims": {
+    "count": 7,
+    "items": [
+      { "claim_id": 12, "brand_id": 88, "brand_name": "Spice Route", "submitted_at": "2026-09-18T10:00:00Z" }
+    ]
+  },
+  "reports": {
+    "count": 2,
+    "items": [
+      { "report_id": 3, "brand_id": 88, "brand_name": "Spice Route", "category": "hours_incorrect", "submitted_at": "2026-09-19T08:30:00Z" }
+    ]
+  },
+  "new_users": {
+    "count": 1,
+    "items": [
+      { "owner_id": 5, "display": "Asha Rao", "email": "asha@example.com", "role": "owner", "created_at": "2026-09-19T09:00:00Z" }
+    ]
+  },
+  "total": 9,
+  "new_users_window_days": 7
+}
+```
+
+- `claims`: `claim_request.status = 'pending_review'`, **oldest first**
+  (SLA order). `count` is the full pending total, `items` at most 5.
+- `reports`: `listing_report.status = 'new'`, **oldest first** (same as
+  `GET /reports?status=new`). `count` is the full total, `items` at most 5.
+- `new_users`: `owner_account` rows created in the last 7 days, **newest
+  first**; `display` is `full_name` or else `email`. `role` is always
+  `"owner"` (see limitation).
+- `total` = `claims.count + reports.count` — the badge number. New
+  sign-ups are informational and excluded, since they can never be
+  "cleared" and would keep the badge lit for a week.
+
+**Known limitation — `new_users`.** The database has no table of all
+signed-up users; identity lives in Cognito, and the only local per-user
+row is `owner_account`, created lazily on an owner's first `GET /auth/me`
+or claim submission. So `new_users` covers **owner** accounts that have
+used the app at least once — not diner (`registered_user`) sign-ups,
+managers or admins. CCPA-redacted rows (`personal_data_deleted_at` set)
+are excluded. Closing the gap needs an Infra grant (`cognito-idp:ListUsers`
+on the user pool) or a post-confirmation hook that writes a local row;
+neither is part of this endpoint.
+
+Errors: `403 forbidden` for any non-admin caller.
+
 ### POST /admin/restaurants/bulk-import
 
 Auth: admin

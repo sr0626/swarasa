@@ -20,11 +20,14 @@
 import Link from "next/link";
 import SwarasaMark from "@/components/icons/SwarasaMark";
 import AccountMenu from "./AccountMenu";
+import AdminNotificationsBell from "./AdminNotificationsBell";
+import type { AdminNotifications } from "@/types/adminNotifications";
 import type { UserRole } from "@/types/auth";
 
 export default function TopBarShell({
   greetingName,
   role = null,
+  notifications = null,
 }: {
   greetingName: string | null;
   /**
@@ -34,6 +37,12 @@ export default function TopBarShell({
    * its signed-out `/login` form regardless of this default.
    */
   role?: UserRole | null;
+  /**
+   * Admin bell data from `GET /admin/notifications`, resolved by TopBar.tsx.
+   * `null` = the fetch failed (bell still renders, in an "unavailable"
+   * state). Ignored unless `role === "admin"`; app/error.tsx omits it.
+   */
+  notifications?: AdminNotifications | null;
 }) {
   return (
     // STICKY: stays visible on scroll. `sticky` (not `fixed`) keeps the bar
@@ -78,7 +87,12 @@ export default function TopBarShell({
             `/portal/brands/new` (`POST /restaurants` is owner-only,
             docs/API_CONTRACTS.md). Signed-in manager/admin/registered_user
             never see it -- it would just 403. */}
-        <nav className="flex items-center text-sm font-medium text-brand-ink-muted">
+        {/* `empty:hidden`: for admin/manager/registered_user (and every signed-in
+            phone view) this nav renders no children, and an empty flex item
+            still costs a full `gap-4` on each side -- which, with the admin
+            bell added, pushed the account menu past the header's right padding
+            at 375px. */}
+        <nav className="flex items-center text-sm font-medium text-brand-ink-muted empty:hidden">
           {(!greetingName || role === "owner") && (
             <Link
               href={greetingName ? "/portal/brands/new" : "/login?next=/portal/brands/new"}
@@ -90,7 +104,14 @@ export default function TopBarShell({
         </nav>
 
         {greetingName ? (
-          <AccountMenu greetingName={greetingName} />
+          <div className="flex items-center gap-2">
+            {/* Admin bell: only when the session role is admin. `notifications`
+                is fetched by TopBar.tsx (null = fetch failed). The wrapper is
+                deliberately NOT positioned so the bell's dropdown can anchor
+                to the header on mobile (see AdminNotificationsBell.tsx). */}
+            {role === "admin" && <AdminNotificationsBell data={notifications} />}
+            <AccountMenu greetingName={greetingName} />
+          </div>
         ) : (
           <Link
             href="/login"

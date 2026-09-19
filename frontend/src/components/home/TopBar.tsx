@@ -42,6 +42,8 @@
 import TopBarShell from "./TopBarShell";
 import { getServerSession } from "@/lib/auth/session";
 import { getCurrentUser } from "@/lib/api/auth";
+import { getAdminNotifications } from "@/lib/api/adminNotifications";
+import type { AdminNotifications } from "@/types/adminNotifications";
 
 /**
  * Best-effort greeting name for a signed-in session: `owner_account.full_name`
@@ -63,11 +65,36 @@ async function resolveGreetingName(accessToken: string, fallbackEmail: string): 
   }
 }
 
+/**
+ * Admin bell data (`GET /admin/notifications`). Runs on every TopBar render,
+ * i.e. on each page load/navigation -- no polling. Best-effort: a failure
+ * returns `null` (the bell shows an "unavailable" state) and never breaks
+ * the header or the page.
+ */
+async function resolveNotifications(accessToken: string): Promise<AdminNotifications | null> {
+  try {
+    return await getAdminNotifications(accessToken);
+  } catch {
+    return null;
+  }
+}
+
 export default async function TopBar() {
   const session = await getServerSession();
-  const greetingName = session
-    ? await resolveGreetingName(session.accessToken, session.email)
-    : null;
+  // Run the two independent backend calls concurrently; the admin fetch is
+  // skipped entirely for every other role.
+  const [greetingName, notifications] = session
+    ? await Promise.all([
+        resolveGreetingName(session.accessToken, session.email),
+        session.role === "admin" ? resolveNotifications(session.accessToken) : null,
+      ])
+    : [null, null];
 
-  return <TopBarShell greetingName={greetingName} role={session?.role ?? null} />;
+  return (
+    <TopBarShell
+      greetingName={greetingName}
+      role={session?.role ?? null}
+      notifications={notifications}
+    />
+  );
 }

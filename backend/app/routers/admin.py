@@ -14,14 +14,28 @@ from app.core.errors import AppError
 from app.dependencies.auth import CurrentUser, require_admin
 from app.dependencies.db import get_db
 from app.models.owner_account import OwnerAccount
+from app.schemas.admin_notifications import AdminNotificationsResponse
 from app.schemas.restaurant_bulk_import import (
     BulkImportRequest,
     BulkImportResponse,
     BulkImportRowOut,
 )
+from app.services.admin_notification_service import get_admin_notifications
 from app.services.restaurant_bulk_import_service import BulkImportError, bulk_import_restaurants
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+@router.get("/notifications", response_model=AdminNotificationsResponse)
+async def admin_notifications_endpoint(
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_admin),
+) -> AdminNotificationsResponse:
+    """Auth: admin only. Counts + latest items for the top-bar bell: pending
+    claims, new listing reports, owner sign-ups in the last 7 days. Read-only
+    aggregate computed per request (see docs/API_CONTRACTS.md "Admin
+    notifications" for the new-users limitation)."""
+    return await get_admin_notifications(db)
 
 
 @router.post("/restaurants/bulk-import", response_model=BulkImportResponse)
