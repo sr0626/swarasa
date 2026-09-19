@@ -29,6 +29,7 @@ export interface RestaurantBrand {
 export interface CreateRestaurantInput {
   name: string;
   description: string;
+  website?: string | null;
   cuisine_tag_ids: number[];
 }
 
