@@ -6,12 +6,13 @@ import { searchRestaurants } from "@/lib/api/search";
 import RestaurantCard from "@/components/listing/RestaurantCard";
 import InfoPanel from "@/components/ui/InfoPanel";
 import Pagination from "@/components/search/Pagination";
+import { countFilters, type SearchFilters } from "@/lib/search/filters";
 
 /** Matches docs/API_CONTRACTS.md "GET /search" default page_size. */
 export const SEARCH_PAGE_SIZE = 20;
 
 interface SearchResultsProps {
-  cuisine: string | null;
+  filters: SearchFilters;
   page: number;
   /** Carried through to pagination links only — see SearchFilterBar's
    * note on why these aren't sent to the API itself. */
@@ -19,11 +20,14 @@ interface SearchResultsProps {
   query: string;
 }
 
-export default async function SearchResults({ cuisine, page, location, query }: SearchResultsProps) {
+export default async function SearchResults({ filters, page, location, query }: SearchResultsProps) {
   let data;
   try {
     data = await searchRestaurants({
-      cuisine: cuisine ? [cuisine] : undefined,
+      // Empty facets are omitted entirely (never sent as `cuisine[]=`).
+      cuisine: filters.cuisine.length ? filters.cuisine : undefined,
+      dietary: filters.dietary.length ? filters.dietary : undefined,
+      type: filters.type.length ? filters.type : undefined,
       page,
       page_size: SEARCH_PAGE_SIZE,
     });
@@ -40,7 +44,11 @@ export default async function SearchResults({ cuisine, page, location, query }: 
     return (
       <InfoPanel
         title="No restaurants match your search"
-        body="Try a different cuisine filter, or clear your filters to see everything nearby."
+        body={
+          countFilters(filters) > 0
+            ? "No restaurants have all of these tags yet. Try removing a filter, or use Clear all to see everything nearby."
+            : "No restaurants are listed here yet. Check back soon."
+        }
       />
     );
   }
@@ -61,7 +69,9 @@ export default async function SearchResults({ cuisine, page, location, query }: 
         page={data.page}
         pageSize={data.page_size}
         total={data.total}
-        extraParams={{ location, q: query, cuisine }}
+        location={location}
+        query={query}
+        filters={filters}
       />
     </div>
   );

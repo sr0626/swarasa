@@ -10,25 +10,33 @@
 // The badge deliberately carries no restaurant count — there's no cheap way
 // to get a real live number on the homepage without an extra fetch, and the
 // task is explicit: never show a fabricated number as if it were real.
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { CUISINE_FILTER_CHIPS } from "@/lib/constants/cuisineFilters";
 import { LocationPinIcon, SearchIcon } from "@/components/ui/icons";
+import {
+  buildSearchHref,
+  countFilters,
+  EMPTY_FILTERS,
+  isSelected,
+  paramForCategory,
+  toggleFilter,
+  type SearchFilters,
+} from "@/lib/search/filters";
 
 export default function Hero() {
   const router = useRouter();
   const [location, setLocation] = useState("");
   const [query, setQuery] = useState("");
-  const [selectedCuisine, setSelectedCuisine] = useState<string | null>(null);
+  // Quick filters are multi-select and hand off to /search as repeated
+  // URL params (lib/search/filters.ts); the full grouped tag list lives on
+  // /search itself, reached via the "More filters" link below.
+  const [filters, setFilters] = useState<SearchFilters>(EMPTY_FILTERS);
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const params = new URLSearchParams();
-    if (location.trim()) params.set("location", location.trim());
-    if (query.trim()) params.set("q", query.trim());
-    if (selectedCuisine) params.set("cuisine", selectedCuisine);
-    const qs = params.toString();
-    router.push(qs ? `/search?${qs}` : "/search");
+    router.push(buildSearchHref({ location, query, filters }));
   }
 
   return (
@@ -88,25 +96,39 @@ export default function Hero() {
           className="mx-auto mt-5 flex max-w-3xl flex-wrap justify-center gap-2"
         >
           {CUISINE_FILTER_CHIPS.map((chip) => {
-            const isSelected =
-              chip.name === selectedCuisine ||
-              (chip.name === null && selectedCuisine === null);
+            const param = chip.category ? paramForCategory(chip.category) : null;
+            const isSelectedChip =
+              chip.name === null
+                ? countFilters(filters) === 0
+                : param !== null && isSelected(filters, param, chip.name);
             return (
               <button
                 key={chip.display_name}
                 type="button"
-                aria-pressed={isSelected}
-                onClick={() => setSelectedCuisine(chip.name)}
+                aria-pressed={isSelectedChip}
+                onClick={() =>
+                  setFilters((prev) =>
+                    chip.name === null || param === null
+                      ? EMPTY_FILTERS
+                      : toggleFilter(prev, param, chip.name)
+                  )
+                }
                 className={
-                  isSelected
-                    ? "min-h-[36px] rounded-brand-pill bg-brand-ink px-4 text-sm font-medium text-brand-bg transition"
-                    : "min-h-[36px] rounded-brand-pill bg-brand-chip px-4 text-sm font-medium text-brand-chip-ink transition hover:bg-brand-chip/80"
+                  isSelectedChip
+                    ? "min-h-[44px] rounded-brand-pill bg-brand-ink px-4 text-sm font-medium text-brand-bg transition sm:min-h-[36px]"
+                    : "min-h-[44px] rounded-brand-pill bg-brand-chip px-4 text-sm font-medium text-brand-chip-ink transition hover:bg-brand-chip/80 sm:min-h-[36px]"
                 }
               >
                 {chip.display_name}
               </button>
             );
           })}
+          <Link
+            href={buildSearchHref({ location, query, filters })}
+            className="flex min-h-[44px] items-center rounded-brand-pill px-3 text-sm font-semibold text-brand-accent underline-offset-2 hover:underline sm:min-h-[36px]"
+          >
+            More filters &rarr;
+          </Link>
         </div>
       </div>
     </section>

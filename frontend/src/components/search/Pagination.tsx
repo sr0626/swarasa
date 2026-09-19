@@ -4,23 +4,20 @@
 // page is its own real, crawlable, SSR'd URL — consistent with
 // frontend/CLAUDE.md "ALWAYS SSR ... search pages".
 import Link from "next/link";
+import { buildSearchHref, type SearchFilters } from "@/lib/search/filters";
 
 interface PaginationProps {
   page: number;
   pageSize: number;
   total: number;
-  /** Non-page filters to carry across page links (location, q, cuisine). */
-  extraParams: Record<string, string | null | undefined>;
+  /** Non-page state to carry across page links (location, q, tag filters). */
+  location: string;
+  query: string;
+  filters: SearchFilters;
 }
 
-function hrefForPage(pageNum: number, extraParams: PaginationProps["extraParams"]): string {
-  const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(extraParams)) {
-    if (value) params.set(key, value);
-  }
-  if (pageNum > 1) params.set("page", String(pageNum));
-  const qs = params.toString();
-  return qs ? `/search?${qs}` : "/search";
+function hrefForPage(pageNum: number, base: Omit<PaginationProps, "page" | "pageSize" | "total">): string {
+  return buildSearchHref({ ...base, page: pageNum });
 }
 
 /** Page numbers to render: first, last, and a window around the current
@@ -39,7 +36,8 @@ function buildPageList(current: number, totalPages: number): (number | null)[] {
   return result;
 }
 
-export default function Pagination({ page, pageSize, total, extraParams }: PaginationProps) {
+export default function Pagination({ page, pageSize, total, location, query, filters }: PaginationProps) {
+  const base = { location, query, filters };
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   if (totalPages <= 1) return null;
 
@@ -48,7 +46,7 @@ export default function Pagination({ page, pageSize, total, extraParams }: Pagin
   return (
     <nav aria-label="Search results pages" className="mt-8 flex items-center justify-center gap-1.5">
       <Link
-        href={hrefForPage(Math.max(1, page - 1), extraParams)}
+        href={hrefForPage(Math.max(1, page - 1), base)}
         aria-disabled={page <= 1}
         aria-label="Previous page"
         className={
@@ -68,7 +66,7 @@ export default function Pagination({ page, pageSize, total, extraParams }: Pagin
         ) : (
           <Link
             key={p}
-            href={hrefForPage(p, extraParams)}
+            href={hrefForPage(p, base)}
             aria-current={p === page ? "page" : undefined}
             className={
               p === page
@@ -82,7 +80,7 @@ export default function Pagination({ page, pageSize, total, extraParams }: Pagin
       )}
 
       <Link
-        href={hrefForPage(Math.min(totalPages, page + 1), extraParams)}
+        href={hrefForPage(Math.min(totalPages, page + 1), base)}
         aria-disabled={page >= totalPages}
         aria-label="Next page"
         className={

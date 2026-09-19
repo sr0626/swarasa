@@ -3,7 +3,13 @@
 // Search results page filter bar — same visual form as the homepage
 // Hero's search bar (location + cuisine/dish/restaurant text, "Spice
 // Market" tokens) but wired to actually drive this page's results instead
-// of just navigating to it.
+// of just navigating to it, plus the fine-grained multi-select tag filter
+// (TagFilterPanel) below it.
+//
+// Filter state lives in the URL (repeated params, see lib/search/filters.ts)
+// — the `filters` prop is parsed server-side from `searchParams`, this
+// component is the only place that navigates. Every filter change pushes
+// a new URL WITHOUT `page`, i.e. resets pagination to page 1.
 //
 // FLAGGED GAP (see PR description): `docs/API_CONTRACTS.md`'s `GET
 // /search` only documents `lat`/`lng`/`radius`/`cuisine[]`/`dietary[]`/
@@ -13,55 +19,61 @@
 // contract — the fields round-trip and stay visible) and kept in local
 // state so the inputs work, but they are deliberately NOT sent to
 // `searchRestaurants()` in `SearchResults` — there is nothing real to send
-// them as. Only `cuisine` (which Hero already puts on the URL and which
-// maps directly to the real `cuisine[]` param) actually filters results.
+// them as. Only the tag filters (which map directly to the real
+// `cuisine[]`/`dietary[]`/`type[]` params) actually filter results.
 // This is a UI-completeness vs. fabricated-behavior tradeoff, not a bug:
 // the fields don't silently do nothing forever, they're wired the moment
 // a geocoding/text-search endpoint exists.
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { CUISINE_FILTER_CHIPS } from "@/lib/constants/cuisineFilters";
+import { useState, useTransition } from "react";
 import { LocationPinIcon, SearchIcon } from "@/components/ui/icons";
+import { ActiveFilters, TagFilterPanel } from "@/components/search/TagFilterPanel";
+import {
+  buildSearchHref,
+  countFilters,
+  EMPTY_FILTERS,
+  toggleFilter,
+  type FilterGroup,
+  type FilterParam,
+  type SearchFilters,
+} from "@/lib/search/filters";
 
 interface SearchFilterBarProps {
   initialLocation: string;
   initialQuery: string;
-  initialCuisine: string | null;
-}
-
-/** Builds the `/search` URL for a given filter combination, resetting
- * pagination to page 1 — shared by the text-field submit and the cuisine
- * chip click below so both stay consistent. */
-function buildSearchUrl(location: string, query: string, cuisine: string | null): string {
-  const params = new URLSearchParams();
-  if (location.trim()) params.set("location", location.trim());
-  if (query.trim()) params.set("q", query.trim());
-  if (cuisine) params.set("cuisine", cuisine);
-  const qs = params.toString();
-  return qs ? `/search?${qs}` : "/search";
+  /** Parsed from the URL server-side — the source of truth for chip state. */
+  filters: SearchFilters;
+  groups: FilterGroup[];
 }
 
 export default function SearchFilterBar({
   initialLocation,
   initialQuery,
-  initialCuisine,
+  filters,
+  groups,
 }: SearchFilterBarProps) {
   const router = useRouter();
+  const [isPending, startTransition] = useTransition();
   const [location, setLocation] = useState(initialLocation);
   const [query, setQuery] = useState(initialQuery);
-  const [selectedCuisine, setSelectedCuisine] = useState<string | null>(initialCuisine);
+  // Mobile-only disclosure; the panel is always visible from `md` up.
+  const [panelOpen, setPanelOpen] = useState(false);
+
+  const activeCount = countFilters(filters);
+
+  function navigate(next: SearchFilters) {
+    startTransition(() => {
+      router.push(buildSearchHref({ location, query, filters: next }));
+    });
+  }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    router.push(buildSearchUrl(location, query, selectedCuisine));
+    navigate(filters);
   }
 
-  // Cuisine chips filter immediately on click (no extra "Search" press
-  // needed) — the text fields above still require the submit button,
-  // matching Hero's existing UX for those two inputs.
-  function handleChipClick(name: string | null) {
-    setSelectedCuisine(name);
-    router.push(buildSearchUrl(location, query, name));
+  function handleToggle(param: FilterParam, name: string) {
+    navigate(toggleFilter(filters, param, name));
   }
 
   return (
@@ -104,30 +116,38 @@ export default function SearchFilterBar({
       </form>
 
       <div
-        role="group"
-        aria-label="Filter by cuisine"
-        className="mx-auto mt-4 flex max-w-3xl flex-wrap gap-2"
+        className={`mx-auto mt-4 max-w-3xl space-y-3 transition-opacity ${
+          isPending ? "opacity-60" : ""
+        }`}
+        aria-busy={isPending}
       >
-        {CUISINE_FILTER_CHIPS.map((chip) => {
-          const isSelected =
-            chip.name === selectedCuisine ||
-            (chip.name === null && selectedCuisine === null);
-          return (
-            <button
-              key={chip.display_name}
-              type="button"
-              aria-pressed={isSelected}
-              onClick={() => handleChipClick(chip.name)}
-              className={
-                isSelected
-                  ? "min-h-[36px] rounded-brand-pill bg-brand-ink px-4 text-sm font-medium text-brand-bg transition"
-                  : "min-h-[36px] rounded-brand-pill bg-brand-chip px-4 text-sm font-medium text-brand-chip-ink transition hover:bg-brand-chip/80"
-              }
-            >
-              {chip.display_name}
-            </button>
-          );
-        })}
+        {groups.length > 0 && (
+          <button
+            type="button"
+            aria-expanded={panelOpen}
+            aria-controls="tag-filter-panel"
+            onClick={() => setPanelOpen((open) => !open)}
+            className="flex min-h-[44px] w-full items-center justify-between rounded-brand-control border border-brand-border bg-white px-4 text-sm font-semibold text-brand-ink md:hidden"
+          >
+            <span>Filters{activeCount > 0 ? ` (${activeCount})` : ""}</span>
+            <span aria-hidden="true" className="text-brand-ink-subtle">
+              {panelOpen ? "−" : "+"}
+            </span>
+          </button>
+        )}
+
+        <ActiveFilters
+          groups={groups}
+          filters={filters}
+          onRemove={handleToggle}
+          onClearAll={() => navigate(EMPTY_FILTERS)}
+        />
+
+        {groups.length > 0 && (
+          <div id="tag-filter-panel" className={panelOpen ? "block" : "hidden md:block"}>
+            <TagFilterPanel groups={groups} filters={filters} onToggle={handleToggle} />
+          </div>
+        )}
       </div>
     </div>
   );
