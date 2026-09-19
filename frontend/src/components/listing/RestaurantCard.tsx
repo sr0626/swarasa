@@ -10,8 +10,8 @@
 // icon requirement is met without inventing a number.
 import Link from "next/link";
 import type { SearchResultItem } from "@/types/search";
+import DefaultRestaurantImage from "@/components/ui/DefaultRestaurantImage";
 import {
-  CoffeeCupIcon,
   LocationPinIcon,
   PhoneIcon,
   StarIcon,
@@ -44,17 +44,7 @@ export default function RestaurantCard({ item }: { item: SearchResultItem }) {
               className="absolute inset-0 h-full w-full object-cover"
             />
           ) : (
-            // Default image when no cover photo is set — an inline-SVG
-            // coffee-cup line illustration (CoffeeCupIcon; drawn in-house,
-            // no third-party image), large and low-opacity cream on the
-            // warm gradient, with a consistent margin (`inset-6`). A thin
-            // strokeWidth keeps the 24px-grid icon delicate at this size.
-            <div className="absolute inset-6 flex items-center justify-center">
-              <CoffeeCupIcon
-                className="h-full w-full text-brand-bg/60"
-                strokeWidth={0.6}
-              />
-            </div>
+            <DefaultRestaurantImage />
           )}
           {nearest_location.is_paid && (
             <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-brand-pill bg-brand-ink/85 px-2.5 py-1 text-xs font-semibold text-brand-bg">

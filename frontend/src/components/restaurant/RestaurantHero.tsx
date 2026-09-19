@@ -2,6 +2,7 @@
 // homepage card's gradient placeholder when none exists), name, cuisine
 // tags, open/closed status, and address/phone when a location exists.
 import { LocationPinIcon, PhoneIcon } from "@/components/ui/icons";
+import DefaultRestaurantImage from "@/components/ui/DefaultRestaurantImage";
 import OpenStatusBadge from "@/components/ui/OpenStatusBadge";
 import type { RestaurantBrand } from "@/types/restaurant";
 import type { LocationDetail } from "@/types/location";
@@ -17,7 +18,7 @@ export default function RestaurantHero({ restaurant, location }: RestaurantHeroP
   return (
     <section>
       <div className="relative h-56 w-full overflow-hidden rounded-brand-card border border-brand-border bg-brand-warm-gradient sm:h-72">
-        {location?.cover_photo_url && (
+        {location?.cover_photo_url ? (
           // eslint-disable-next-line @next/next/no-img-element -- remote
           // CloudFront URL, no next/image domain config for this host yet.
           <img
@@ -25,6 +26,8 @@ export default function RestaurantHero({ restaurant, location }: RestaurantHeroP
             alt={`${restaurant.name} cover photo`}
             className="absolute inset-0 h-full w-full object-cover"
           />
+        ) : (
+          <DefaultRestaurantImage />
         )}
         {location && (
           <div className="absolute right-3 top-3">
