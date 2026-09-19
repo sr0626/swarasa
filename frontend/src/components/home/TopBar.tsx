@@ -8,13 +8,11 @@
 // directly (see "SESSION-AWARE" note below) — it renders TopBarShell.tsx
 // instead.
 //
-// JUDGMENT CALL (flagged in final report): "For Owners" and "Add Your
-// Restaurant" still point at `/login` for a signed-out visitor — the only
-// real auth entry point that exists yet (the owner-onboarding/claim flow
-// isn't built in this task's scope). Once a dedicated owners-landing or
-// claim-flow route exists, repoint these. Left `/login`-pointing and
-// unchanged for the signed-in case too (this task is purely additive:
-// replace "Sign In" with the account menu, don't touch the CTA).
+// LINK TARGETS: "For Owners" and the signed-out "Add Your Restaurant" CTA
+// both go to `/signup?role=owner` (pre-selects the Owner role on the
+// sign-up form); "Sign In" goes to `/login`. They previously all pointed at
+// `/login`, which made "For Owners" and "Sign In" duplicates. See
+// TopBarShell.tsx for the sticky-header notes.
 //
 // SESSION-AWARE, ASYNC SERVER COMPONENT (docs/PROJECT_PLAN.csv "Signed-in
 // account dropdown in site header" — flagged in this PR's description):

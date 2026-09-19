@@ -64,12 +64,17 @@ const ROLE_OPTIONS: Array<{ value: Role; label: string; hint: string }> = [
   },
 ];
 
-export default function SignUpForm() {
+export default function SignUpForm({
+  initialRole = "registered_user",
+}: {
+  /** Pre-selected account type (validated by the page; defaults to diner). */
+  initialRole?: Role;
+}) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [role, setRole] = useState<Role>("registered_user");
+  const [role, setRole] = useState<Role>(initialRole);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);

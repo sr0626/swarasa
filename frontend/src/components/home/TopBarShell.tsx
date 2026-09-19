@@ -36,7 +36,17 @@ export default function TopBarShell({
   role?: UserRole | null;
 }) {
   return (
-    <header className="border-b border-brand-border bg-brand-bg">
+    // STICKY: stays visible on scroll. `sticky` (not `fixed`) keeps the bar
+    // in normal flow so there is no layout shift and no spacer needed. Every
+    // caller renders this as a direct child of a page-tall <main>, so the
+    // sticky containing block spans the whole page. No ancestor sets
+    // `overflow` (which would silently break sticky). `z-40` sits above page
+    // content (nothing else in the app uses z-index) and the account
+    // dropdown (`z-20`, absolutely positioned inside this header's stacking
+    // context) is never clipped because the header has no `overflow` set.
+    // `bg-brand-bg/95 backdrop-blur` keeps scrolled content from showing
+    // through legibly.
+    <header className="sticky top-0 z-40 border-b border-brand-border bg-brand-bg/95 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
         <Link href="/" className="flex flex-col leading-tight">
           <span className="flex items-center gap-1.5 font-display text-xl font-bold text-brand-ink sm:text-2xl">
@@ -53,7 +63,10 @@ export default function TopBarShell({
             <AccountMenu greetingName={greetingName} />
           ) : (
             <>
-              <Link href="/login" className="hidden transition hover:text-brand-ink sm:inline">
+              <Link
+                href="/signup?role=owner"
+                className="hidden transition hover:text-brand-ink sm:inline"
+              >
                 For Owners
               </Link>
               <Link href="/login" className="hidden transition hover:text-brand-ink sm:inline">
@@ -81,10 +94,18 @@ export default function TopBarShell({
             to the create-brand form and a signed-in manager/admin/
             registered_user — for whom this CTA doesn't apply — don't see
             it at all, rather than clicking into a page that would just
-            403. */}
+            403.
+
+            SIGNED-OUT TARGET: `/signup?role=owner` (was `/login`). A
+            visitor clicking "Add Your Restaurant" is by definition a
+            prospective owner who most likely has no account yet, so a
+            sign-in page is a dead end for them; the sign-up page
+            pre-selects the Owner role and still links "Already have an
+            account? Sign in" for returning owners. Same target as the
+            "For Owners" nav link. */}
         {(!greetingName || role === "owner") && (
           <Link
-            href={greetingName ? "/portal/brands/new" : "/login"}
+            href={greetingName ? "/portal/brands/new" : "/signup?role=owner"}
             className={`min-h-[44px] items-center whitespace-nowrap rounded-brand-pill bg-brand-ink px-4 text-sm font-semibold text-brand-bg transition hover:bg-brand-ink/90 sm:px-5 ${
               greetingName ? "hidden sm:flex" : "flex"
             }`}
