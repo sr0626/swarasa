@@ -37,6 +37,7 @@ import { getServerSession } from "@/lib/auth/session";
 import RestaurantHero from "@/components/restaurant/RestaurantHero";
 import RestaurantInfoCard from "@/components/restaurant/RestaurantInfoCard";
 import ClaimCTA from "@/components/restaurant/ClaimCTA";
+import RestaurantAbout from "@/components/restaurant/RestaurantAbout";
 import EditListingBar from "@/components/restaurant/EditListingBar";
 import TopBar from "@/components/home/TopBar";
 import type { LocationDetail } from "@/types/location";
@@ -209,9 +210,12 @@ export default async function RestaurantPage({ params }: RestaurantPageProps) {
                 </section>
               )}
 
-              {/* INSERTION POINT (unused): future `about` / `specialties`
-                  block, being added separately -- render it here, and only
-                  when the API returns data for it. */}
+              {/* Owner/manager-authored "we specialize in ..." content
+                  (location.about / location.specialties, editable in the
+                  portal). Renders nothing when both are empty. */}
+              {location && (
+                <RestaurantAbout about={location.about} specialties={location.specialties} />
+              )}
 
               {/* INSERTION POINT (unused): future Deals section (Phase 2).
                   Do not add placeholder or fake deals; render nothing when
