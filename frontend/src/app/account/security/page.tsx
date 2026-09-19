@@ -28,7 +28,7 @@ export default async function AccountSecurityPage() {
 
   return (
     <main className="min-h-screen bg-brand-bg">
-      <section className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
+      <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
         <Link
           href="/account"
           className="text-sm font-medium text-brand-accent transition hover:text-brand-accent-hover"
@@ -36,15 +36,15 @@ export default async function AccountSecurityPage() {
           ← Back to My Account
         </Link>
 
-        <h1 className="mt-3 font-display text-2xl font-bold text-brand-ink sm:text-3xl">
+        <h1 className="mt-3 font-display text-3xl font-bold text-brand-ink sm:text-4xl">
           Security
         </h1>
         <p className="mt-2 text-sm text-brand-ink-muted">Change your account password.</p>
 
-        <div className="mt-6">
+        <div className="mt-6 max-w-2xl">
           <ChangePasswordForm />
         </div>
-      </section>
+      </div>
     </main>
   );
 }
