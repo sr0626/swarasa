@@ -22,7 +22,11 @@ export default function SignUpPage({
   searchParams?: { role?: string | string[]; next?: string | string[] };
 }) {
   const next = safeNextPath(searchParams?.next);
-  const initialRole = searchParams?.role === "owner" ? "owner" : undefined;
+  // Owner when asked (?role=owner) OR when the visitor is being sent to an
+  // owner area after sign-up (e.g. header "Add Your Restaurant" ->
+  // /login?next=/portal/brands/new -> "Create an account").
+  const initialRole =
+    searchParams?.role === "owner" || next?.startsWith("/portal") ? "owner" : undefined;
 
   return (
     <main className="min-h-screen bg-brand-bg">

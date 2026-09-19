@@ -34,7 +34,7 @@ import { signIn, fetchAuthSession } from "@aws-amplify/auth";
 import { ensureAmplifyConfigured } from "@/lib/auth/amplifyClient";
 import { startSessionKeepAlive } from "@/lib/auth/sessionKeepAlive";
 import { signInSchema, type SignInFormValues } from "@/lib/validation/auth";
-import { withNext } from "@/lib/auth/safeNext";
+import { withNext, pathAllowedForRole } from "@/lib/auth/safeNext";
 import { messageForAuthError, messageForNextStep } from "@/lib/auth/errorMessages";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import type { UserRole } from "@/types/auth";
@@ -137,7 +137,11 @@ export default function LoginForm({
       if (rememberMe) {
         startSessionKeepAlive();
       }
-      router.push(nextPath ?? ROLE_LANDING[role] ?? "/");
+      // `nextPath` only if this role can use it (a diner signing in from an
+      // owner-only link goes to the normal landing, not a guard bounce).
+      router.push(
+        nextPath && pathAllowedForRole(nextPath, role) ? nextPath : (ROLE_LANDING[role] ?? "/")
+      );
       router.refresh();
     } catch (err) {
       setFormError(messageForAuthError(err));
