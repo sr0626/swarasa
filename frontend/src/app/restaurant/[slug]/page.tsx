@@ -30,11 +30,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ApiError } from "@/lib/api/client";
 import { getRestaurantBySlug, getRestaurantLocations } from "@/lib/api/restaurants";
-import { getLocationById } from "@/lib/api/locations";
+import { getLocationById, getLocationManagers } from "@/lib/api/locations";
+import { getServerSession } from "@/lib/auth/session";
 import RestaurantHero from "@/components/restaurant/RestaurantHero";
 import RestaurantHours from "@/components/restaurant/RestaurantHours";
 import RestaurantGallery from "@/components/restaurant/RestaurantGallery";
 import ClaimCTA from "@/components/restaurant/ClaimCTA";
+import EditListingBar from "@/components/restaurant/EditListingBar";
 import TopBar from "@/components/home/TopBar";
 import type { LocationDetail } from "@/types/location";
 import type { RestaurantBrand } from "@/types/restaurant";
@@ -132,12 +134,35 @@ function buildRestaurantSchema(restaurant: RestaurantBrand, location: LocationDe
   };
 }
 
+/**
+ * Can the signed-in visitor edit this listing? Uses the same access probe
+ * the location editor itself uses as its gate (`GET /locations/{id}/managers`
+ * -- owner of the parent brand, admin, or an actively assigned manager;
+ * docs/API_CONTRACTS.md "Location Managers"), so this page never decides
+ * permissions on its own: whatever the editor would allow, and only that,
+ * shows the link. Any failure (403, network) is "no" -- the link is a
+ * convenience, never a security boundary; the backend re-validates every
+ * write regardless.
+ */
+async function canEditListing(location: LocationDetail | null): Promise<boolean> {
+  if (!location) return false;
+  const session = await getServerSession();
+  if (!session || !["owner", "manager", "admin"].includes(session.role)) return false;
+  try {
+    await getLocationManagers(location.id, {}, session.accessToken);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export default async function RestaurantPage({ params }: RestaurantPageProps) {
   const data = await loadRestaurantPageData(params.slug);
   if (!data) {
     notFound();
   }
   const { restaurant, location } = data;
+  const canEdit = await canEditListing(location);
 
   return (
     <>
@@ -151,6 +176,7 @@ export default async function RestaurantPage({ params }: RestaurantPageProps) {
         <TopBar />
 
         <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
+          {canEdit && location && <EditListingBar locationId={location.id} />}
           <RestaurantHero restaurant={restaurant} location={location} />
 
           <div className="mt-8 flex flex-col gap-8">

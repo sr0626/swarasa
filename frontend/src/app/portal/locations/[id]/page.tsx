@@ -1,4 +1,4 @@
-// Owner/manager location editor — auth-gated. Phase 1 scope: edit listing
+// Owner/manager/admin location editor — auth-gated. Phase 1 scope: edit listing
 // details, hours, and photos (frontend/CLAUDE.md), plus manager assignment
 // (owner-only, docs/API_CONTRACTS.md "Location Managers").
 //
@@ -30,7 +30,17 @@ interface LocationPageProps {
   params: { id: string };
 }
 
-function NotFoundOrNoAccess() {
+/** Where "back" goes depends on the role: the portal dashboard is
+ * owner/manager-only (an admin sent there would be bounced to /login), so an
+ * admin goes back to the admin listings panel instead. */
+function backTarget(role: string): { href: string; label: string } {
+  return role === "admin"
+    ? { href: "/admin/listings", label: "Back to listings" }
+    : { href: "/portal/dashboard", label: "Back to dashboard" };
+}
+
+function NotFoundOrNoAccess({ role }: { role: string }) {
+  const back = backTarget(role);
   return (
     <main className="min-h-screen bg-brand-bg">
       <TopBar />
@@ -40,10 +50,10 @@ function NotFoundOrNoAccess() {
           body="This location either doesn't exist or you don't have access to it."
         />
         <Link
-          href="/portal/dashboard"
+          href={back.href}
           className="mt-6 inline-flex min-h-[44px] items-center rounded-brand-pill bg-brand-ink px-5 text-sm font-semibold text-brand-bg transition hover:bg-brand-ink/90"
         >
-          Back to dashboard
+          {back.label}
         </Link>
       </section>
     </main>
@@ -51,11 +61,11 @@ function NotFoundOrNoAccess() {
 }
 
 export default async function PortalLocationPage({ params }: LocationPageProps) {
-  const session = await requireSession(["owner", "manager"]);
+  const session = await requireSession(["owner", "manager", "admin"]);
 
   const locationId = Number.parseInt(params.id, 10);
   if (!Number.isInteger(locationId) || locationId <= 0 || String(locationId) !== params.id) {
-    return <NotFoundOrNoAccess />;
+    return <NotFoundOrNoAccess role={session.role} />;
   }
 
   let location: LocationDetail;
@@ -65,7 +75,7 @@ export default async function PortalLocationPage({ params }: LocationPageProps) 
     // Public endpoint — a thrown error here means the location genuinely
     // doesn't exist (or the API is unreachable, treated the same way
     // rather than a confusing partial page).
-    return <NotFoundOrNoAccess />;
+    return <NotFoundOrNoAccess role={session.role} />;
   }
 
   let managers: LocationManager[] = [];
@@ -76,17 +86,18 @@ export default async function PortalLocationPage({ params }: LocationPageProps) 
     // 403 (no ownership/assignment) — same panel as a 404 above, so this
     // doesn't leak "it exists, you just can't see it" to an unauthorized
     // caller. Any other unexpected error is treated the same, conservatively.
-    return <NotFoundOrNoAccess />;
+    return <NotFoundOrNoAccess role={session.role} />;
   }
 
   const isOwner = session.role === "owner";
+  const back = backTarget(session.role);
 
   return (
     <main className="min-h-screen bg-brand-bg">
       <TopBar />
       <section className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
-        <Link href="/portal/dashboard" className="text-sm font-medium text-brand-ink-subtle hover:text-brand-ink">
-          Back to dashboard
+        <Link href={back.href} className="text-sm font-medium text-brand-ink-subtle hover:text-brand-ink">
+          {back.label}
         </Link>
         <h1 className="mt-2 font-display text-2xl font-bold text-brand-ink sm:text-3xl">
           {location.brand_name}
