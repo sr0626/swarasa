@@ -198,3 +198,38 @@ async def test_dispose_engine_is_a_no_op_when_never_created(monkeypatch: pytest.
 
     assert db_session._engine is None
     assert db_session._session_factory is None
+
+
+def test_discard_engine_cache_forgets_engine_without_disposing(monkeypatch: pytest.MonkeyPatch):
+    """A warm container may hold an engine cached on another event loop
+    (e.g. from an HTTP request); management commands must not inherit it.
+    Must NOT dispose -- the owning loop is unreachable from here."""
+    fake_engine = _FakeAsyncEngine()
+    monkeypatch.setattr(db_session, "_engine", fake_engine)
+    monkeypatch.setattr(db_session, "_session_factory", object())
+
+    db_session.discard_engine_cache()
+
+    assert db_session._engine is None
+    assert db_session._session_factory is None
+    assert fake_engine.dispose_calls == 0
+
+
+def test_run_management_command_starts_with_no_inherited_engine(monkeypatch: pytest.MonkeyPatch):
+    from app.scripts import management
+
+    seen: dict = {}
+
+    def _probe(event: dict) -> dict:
+        seen["engine"] = db_session._engine
+        seen["factory"] = db_session._session_factory
+        return {"ok": True}
+
+    monkeypatch.setitem(management._COMMANDS, "probe", _probe)
+    monkeypatch.setattr(db_session, "_engine", _FakeAsyncEngine())
+    monkeypatch.setattr(db_session, "_session_factory", object())
+
+    result = management.run_management_command({"_management_command": "probe"}, None)
+
+    assert result == {"ok": True}
+    assert seen == {"engine": None, "factory": None}
