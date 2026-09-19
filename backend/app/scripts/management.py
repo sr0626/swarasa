@@ -109,6 +109,27 @@ def _run_seed_random_hours(event: dict) -> dict:
     return {"ok": True, "command": "seed_random_hours", **counts}
 
 
+@_command("seed_random_phones")
+def _run_seed_random_phones(event: dict) -> dict:
+    """DEV-ONLY fabricated phone numbers (reserved-fictional 555-01XX range)
+    for locations with no phone. See app/scripts/seed_random_hours.py.
+
+    Event payload shape: {"_management_command": "seed_random_phones"}
+    """
+    from app.db.session import dispose_engine
+    from app.scripts.seed_random_hours import run_seed_random_phones
+
+    # Same same-loop-disposal reasoning as _run_seed_dev_data above.
+    async def _run_and_dispose() -> dict:
+        try:
+            return await run_seed_random_phones()
+        finally:
+            await dispose_engine()
+
+    counts = asyncio.run(_run_and_dispose())
+    return {"ok": True, "command": "seed_random_phones", **counts}
+
+
 @_command("bulk_import_restaurants")
 def _run_bulk_import_restaurants(event: dict) -> dict:
     """One-off/reusable restaurant basic-detail bulk import, run the same

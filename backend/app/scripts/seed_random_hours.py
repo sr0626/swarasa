@@ -28,7 +28,7 @@ from __future__ import annotations
 import random
 from datetime import time
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_session_factory
@@ -86,5 +86,43 @@ async def run_seed_random_hours() -> dict[str, int]:
     session_factory = get_session_factory()
     async with session_factory() as db:
         counts = await seed_random_hours(db)
+        await db.commit()
+    return counts
+
+
+# --- fabricated phone numbers ------------------------------------------------
+# Same DEV-ONLY fabricated-data caveat as the hours above. The tile and detail
+# page render the phone as a tap-to-call `tel:` link on the live dev site, so
+# these use the NANP block reserved for fictional use (555-0100 .. 555-0199)
+# behind real Dallas-Fort Worth area codes -- guaranteed not to ring a real
+# person. Requested directly by the user 2026-09-19.
+_DFW_AREA_CODES = ["214", "469", "972"]
+
+
+def generate_phone(location_id: int) -> str:
+    """E.164, e.g. +19725550142. Deterministic per location id; the last two
+    digits are `location_id * 37 % 100`, so up to 100 consecutive ids are
+    guaranteed distinct (37 is coprime with 100)."""
+    area = random.Random(location_id).choice(_DFW_AREA_CODES)
+    return f"+1{area}555{100 + (location_id * 37) % 100:04d}"
+
+
+async def seed_random_phones(db: AsyncSession) -> dict[str, int]:
+    """Fills `phone` only where it is NULL/empty -- never overwrites a number
+    an owner entered. Flushes but does not commit."""
+    rows = (await db.execute(
+        select(RestaurantLocation).where(or_(RestaurantLocation.phone.is_(None), RestaurantLocation.phone == ""))
+    )).scalars().all()
+    total = (await db.execute(select(RestaurantLocation.id))).scalars().all()
+    for location in rows:
+        location.phone = generate_phone(location.id)
+    await db.flush()
+    return {"phones_seeded": len(rows), "skipped_already_had_phone": len(total) - len(rows)}
+
+
+async def run_seed_random_phones() -> dict[str, int]:
+    session_factory = get_session_factory()
+    async with session_factory() as db:
+        counts = await seed_random_phones(db)
         await db.commit()
     return counts
