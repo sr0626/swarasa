@@ -7,7 +7,7 @@
 // `type` params (lib/search/filters.ts) — so the homepage's Hero and
 // shared links land here with filters pre-applied, and the single legacy
 // `?cuisine=north_indian` form keeps working. The tag taxonomy that drives
-// the filter panel is fetched server-side from `GET /cuisine-tags`, falling
+// the Filters dropdown is fetched server-side from `GET /cuisine-tags`, falling
 // back to a small built-in list if that call fails.
 // `location`/`q` round-trip in the UI without a backend param to map onto
 // yet — see SearchFilterBar.tsx.
@@ -114,7 +114,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           />
         </div>
 
-        <div className="mt-8">
+        <div className="mt-5">
           <Suspense key={resultsKey} fallback={<SearchResultsSkeleton />}>
             <SearchResults filters={filters} page={page} location={location} query={query} />
           </Suspense>

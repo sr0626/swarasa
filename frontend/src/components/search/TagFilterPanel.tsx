@@ -2,10 +2,11 @@
 
 // Fine-grained, multi-select tag filter for /search: one group of toggle
 // chips per tag category (Regional cuisine, Dietary, Restaurant type, ...)
-// plus an "active filters" summary with remove-one / clear-all.
+// plus a compact "active filters" chip row with remove-one / clear-all.
 //
 // Purely presentational — the parent (`SearchFilterBar`) owns the URL
-// navigation; this only reports toggles. Filter state lives in the URL
+// navigation and the dropdown container (card/popover chrome); this only
+// reports toggles. Filter state lives in the URL
 // (see lib/search/filters.ts) so results stay shareable and SSR.
 import { useState } from "react";
 import {
@@ -38,7 +39,7 @@ export function TagFilterPanel({ groups, filters, onToggle }: TagFilterPanelProp
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   return (
-    <div className="space-y-5 rounded-brand-card border border-brand-border bg-white p-4 shadow-brand-card">
+    <div className="space-y-5">
       {groups.map((group) => {
         const isExpanded = expanded[group.id] ?? false;
         const collapsible = group.tags.length > COLLAPSED_CHIP_LIMIT;
@@ -99,13 +100,14 @@ interface ActiveFiltersProps {
   onClearAll: () => void;
 }
 
-/** "Active filters" summary: one removable pill per selected tag + Clear
- * all. Renders nothing when no filter is active. */
+/** "Active filters" summary: one compact removable chip per selected tag +
+ * Clear all, in a single wrapping row. Renders nothing when no filter is
+ * active. */
 export function ActiveFilters({ groups, filters, onRemove, onClearAll }: ActiveFiltersProps) {
   if (countFilters(filters) === 0) return null;
 
   return (
-    <div className="flex flex-wrap items-center gap-2" aria-label="Active filters" role="group">
+    <div className="flex flex-wrap items-center gap-1.5" aria-label="Active filters" role="group">
       {FILTER_PARAMS.flatMap((param) =>
         filters[param].map((name) => {
           const label = labelFor(groups, param, name);
@@ -115,7 +117,7 @@ export function ActiveFilters({ groups, filters, onRemove, onClearAll }: ActiveF
               type="button"
               onClick={() => onRemove(param, name)}
               aria-label={`Remove filter ${label}`}
-              className="flex min-h-[44px] items-center gap-1.5 rounded-brand-pill border border-brand-border bg-white px-3 text-sm font-medium text-brand-ink transition hover:bg-brand-chip sm:min-h-[36px]"
+              className="flex min-h-[36px] items-center gap-1.5 rounded-brand-pill border border-brand-border bg-white px-3 text-xs font-medium text-brand-ink transition hover:bg-brand-chip"
             >
               {label}
               <span aria-hidden="true" className="text-base leading-none text-brand-ink-subtle">
@@ -128,7 +130,7 @@ export function ActiveFilters({ groups, filters, onRemove, onClearAll }: ActiveF
       <button
         type="button"
         onClick={onClearAll}
-        className="min-h-[44px] px-2 text-sm font-semibold text-brand-accent underline-offset-2 hover:underline sm:min-h-[36px]"
+        className="min-h-[36px] px-2 text-xs font-semibold text-brand-accent underline-offset-2 hover:underline"
       >
         Clear all
       </button>
