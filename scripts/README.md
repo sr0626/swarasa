@@ -73,3 +73,17 @@ Dev database only. Reversible via an approved claim or a re-import.
 python3 scripts/dev_unclaim_restaurants.py
 python3 scripts/dev_unclaim_restaurants.py --slugs dera-grill taj-chaat-house
 ```
+
+### `geocode_missing_locations.py`
+Backfills coordinates for active locations with NULL `geom` (invisible to geo
+search). Lists them via the `list_ungeocoded_locations` command, geocodes on
+your machine via Nominatim (full address, then street+city+state, then an
+approximate postal-code lookup; 1 req/sec), prints a resolved/unresolved
+table, then sends only the resolved ones to `set_location_coordinates`
+(validated, audit-logged, idempotent, never moves an already-set point).
+Run `--dry-run` first — it geocodes and prints but writes nothing.
+
+```bash
+python3 scripts/geocode_missing_locations.py --dry-run
+python3 scripts/geocode_missing_locations.py
+```
