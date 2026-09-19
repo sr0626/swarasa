@@ -93,7 +93,7 @@ export interface LocationDetail {
   /** Short specialty chips (max 8, each 1-40 chars); null until set. */
   specialties: string[] | null;
   timezone: string;
-  /** null when the listing has never been geocoded (e.g. Nominatim found no match). */
+  /** null when the listing has never been geocoded (e.g. no geocoder match). */
   latitude: number | null;
   longitude: number | null;
   is_verified: boolean;

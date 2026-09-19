@@ -8,7 +8,7 @@
 //
 // One submit creates a usable listing in up to three steps:
 //   1. POST /restaurants  (the brand — name, description, website, tags)
-//   2. geocode the address (Nominatim, lib/geocode/nominatim.ts). Done HERE
+//   2. geocode the address (US Census, Nominatim fallback: lib/geocode). Done HERE
 //      because the API Lambda has no internet access (no NAT Gateway), so
 //      it cannot geocode. Best-effort: never blocks creation.
 //   3. POST /locations    (the first location — address, phone, timezone,
@@ -23,7 +23,7 @@ import { ApiError } from "@/lib/api/client";
 import { createLocation } from "@/lib/api/locations";
 import { createRestaurant } from "@/lib/api/restaurants";
 import { getServerSession } from "@/lib/auth/session";
-import { geocodeAddress } from "@/lib/geocode/nominatim";
+import { geocodeAddress } from "@/lib/geocode";
 import { timezoneForState } from "@/lib/timezone";
 import { fieldErrorsFromZod, type FieldErrors } from "@/lib/validation/fieldErrors";
 import { addRestaurantSchema } from "@/lib/validation/restaurant";

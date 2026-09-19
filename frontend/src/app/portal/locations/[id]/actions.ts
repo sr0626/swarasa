@@ -24,7 +24,7 @@ import {
   updateLocationPhoto,
 } from "@/lib/api/locations";
 import { getServerSession } from "@/lib/auth/session";
-import { geocodeAddress } from "@/lib/geocode/nominatim";
+import { geocodeAddress } from "@/lib/geocode";
 import {
   assignLocationManagerSchema,
   createPhotoSchema,
@@ -74,7 +74,7 @@ function messageFor(error: unknown, fallback: string): string {
  * changed and the owner did NOT type new coordinates by hand — the old
  * lat/lng would otherwise silently go stale. The address is then geocoded
  * here (server-side: the API Lambda has no internet, see
- * lib/geocode/nominatim.ts). On a miss the coordinates are left unchanged
+ * lib/geocode). On a miss the coordinates are left unchanged
  * and a `notice` tells the owner; the save itself never fails on geocoding.
  */
 export async function updateLocationInfoAction(
