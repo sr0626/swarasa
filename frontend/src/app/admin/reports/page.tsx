@@ -5,7 +5,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireSession } from "@/lib/auth/guards";
-import TopBar from "@/components/home/TopBar";
 import InfoPanel from "@/components/ui/InfoPanel";
 import ReportsTriagePanel from "@/components/admin/ReportsTriagePanel";
 import { ApiError } from "@/lib/api/client";
@@ -75,80 +74,77 @@ export default async function AdminReportsPage({ searchParams }: AdminReportsPag
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
-    <main className="min-h-screen bg-brand-bg">
-      <TopBar />
-      <section className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
-        <h1 className="font-display text-2xl font-bold text-brand-ink sm:text-3xl">
-          Reports
-        </h1>
-        <p className="mt-2 text-sm text-brand-ink-muted">
-          Problems visitors flagged on listings. Fix the listing, then mark the
-          report resolved — or dismiss it if it isn&apos;t actionable.
-        </p>
+    <section>
+      <h1 className="font-display text-2xl font-bold text-brand-ink sm:text-3xl">
+        Reports
+      </h1>
+      <p className="mt-2 text-sm text-brand-ink-muted">
+        Problems visitors flagged on listings. Fix the listing, then mark the
+        report resolved — or dismiss it if it isn&apos;t actionable.
+      </p>
 
-        <nav aria-label="Report status" className="mt-6 flex flex-wrap gap-2">
-          {TABS.map((t) => (
-            <Link
-              key={t.value}
-              href={hrefFor(t.value, 1)}
-              aria-current={t.value === tab ? "page" : undefined}
-              className={
-                t.value === tab
-                  ? "flex min-h-[40px] items-center rounded-brand-pill bg-brand-ink px-4 text-sm font-semibold text-brand-bg"
-                  : "flex min-h-[40px] items-center rounded-brand-pill border border-brand-border bg-white px-4 text-sm font-semibold text-brand-ink-muted transition hover:bg-brand-chip"
-              }
-            >
-              {t.label}
-            </Link>
-          ))}
-        </nav>
-
-        <div className="mt-6">
-          {loadError ? (
-            <InfoPanel title="Couldn't load reports" body={loadError} />
-          ) : (
-            <>
-              <p className="mb-3 text-sm text-brand-ink-subtle">
-                {total} {total === 1 ? "report" : "reports"}
-              </p>
-              {/* Keyed so a filter/page change remounts with fresh data
-                  rather than reusing the previous view's local state. */}
-              <ReportsTriagePanel
-                key={`${tab}-${page}`}
-                initialReports={reports}
-                statusFilter={statusFilter}
-              />
-            </>
-          )}
-        </div>
-
-        {!loadError && totalPages > 1 && (
-          <nav
-            aria-label="Reports pages"
-            className="mt-8 flex items-center justify-center gap-3 text-sm"
+      <nav aria-label="Report status" className="mt-6 flex flex-wrap gap-2">
+        {TABS.map((t) => (
+          <Link
+            key={t.value}
+            href={hrefFor(t.value, 1)}
+            aria-current={t.value === tab ? "page" : undefined}
+            className={
+              t.value === tab
+                ? "flex min-h-[40px] items-center rounded-brand-pill bg-brand-ink px-4 text-sm font-semibold text-brand-bg"
+                : "flex min-h-[40px] items-center rounded-brand-pill border border-brand-border bg-white px-4 text-sm font-semibold text-brand-ink-muted transition hover:bg-brand-chip"
+            }
           >
-            {page > 1 ? (
-              <Link
-                href={hrefFor(tab, page - 1)}
-                className="flex min-h-[40px] items-center rounded-brand-control border border-brand-border px-4 font-semibold text-brand-ink-muted transition hover:bg-brand-chip"
-              >
-                Previous
-              </Link>
-            ) : null}
-            <span className="text-brand-ink-subtle">
-              Page {page} of {totalPages}
-            </span>
-            {page < totalPages ? (
-              <Link
-                href={hrefFor(tab, page + 1)}
-                className="flex min-h-[40px] items-center rounded-brand-control border border-brand-border px-4 font-semibold text-brand-ink-muted transition hover:bg-brand-chip"
-              >
-                Next
-              </Link>
-            ) : null}
-          </nav>
+            {t.label}
+          </Link>
+        ))}
+      </nav>
+
+      <div className="mt-6">
+        {loadError ? (
+          <InfoPanel title="Couldn't load reports" body={loadError} />
+        ) : (
+          <>
+            <p className="mb-3 text-sm text-brand-ink-subtle">
+              {total} {total === 1 ? "report" : "reports"}
+            </p>
+            {/* Keyed so a filter/page change remounts with fresh data
+                rather than reusing the previous view's local state. */}
+            <ReportsTriagePanel
+              key={`${tab}-${page}`}
+              initialReports={reports}
+              statusFilter={statusFilter}
+            />
+          </>
         )}
-      </section>
-    </main>
+      </div>
+
+      {!loadError && totalPages > 1 && (
+        <nav
+          aria-label="Reports pages"
+          className="mt-8 flex items-center justify-center gap-3 text-sm"
+        >
+          {page > 1 ? (
+            <Link
+              href={hrefFor(tab, page - 1)}
+              className="flex min-h-[40px] items-center rounded-brand-control border border-brand-border px-4 font-semibold text-brand-ink-muted transition hover:bg-brand-chip"
+            >
+              Previous
+            </Link>
+          ) : null}
+          <span className="text-brand-ink-subtle">
+            Page {page} of {totalPages}
+          </span>
+          {page < totalPages ? (
+            <Link
+              href={hrefFor(tab, page + 1)}
+              className="flex min-h-[40px] items-center rounded-brand-control border border-brand-border px-4 font-semibold text-brand-ink-muted transition hover:bg-brand-chip"
+            >
+              Next
+            </Link>
+          ) : null}
+        </nav>
+      )}
+    </section>
   );
 }

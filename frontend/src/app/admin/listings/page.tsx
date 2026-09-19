@@ -12,7 +12,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireSession } from "@/lib/auth/guards";
-import TopBar from "@/components/home/TopBar";
 import { ApiError } from "@/lib/api/client";
 import { mapWithConcurrency } from "@/lib/concurrency";
 import { getMyRestaurants, getRestaurantLocations } from "@/lib/api/restaurants";
@@ -96,79 +95,76 @@ export default async function AdminListingsPage({ searchParams }: AdminListingsP
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
-    <main className="min-h-screen bg-brand-bg">
-      <TopBar />
-      <section className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
-        <h1 className="font-display text-2xl font-bold text-brand-ink sm:text-3xl">
-          Listings
-        </h1>
-        <p className="mt-2 text-sm text-brand-ink-muted">
-          Every restaurant on the platform, across all owners. Delete a listing entirely
-          or deactivate one of its locations.
-        </p>
+    <section>
+      <h1 className="font-display text-2xl font-bold text-brand-ink sm:text-3xl">
+        Listings
+      </h1>
+      <p className="mt-2 text-sm text-brand-ink-muted">
+        Every restaurant on the platform, across all owners. Delete a listing entirely
+        or deactivate one of its locations.
+      </p>
 
-        <form
-          method="get"
-          className="mt-6 flex flex-wrap items-end gap-2 rounded-brand-card border border-brand-border bg-white p-4"
-        >
-          <div>
-            <label htmlFor="owner_id" className="text-sm font-semibold text-brand-ink">
-              Filter by owner ID
-            </label>
-            <input
-              id="owner_id"
-              name="owner_id"
-              type="number"
-              min={1}
-              defaultValue={searchParams.owner_id ?? ""}
-              placeholder="e.g. 55"
-              className="mt-2 w-40 rounded-brand-control border border-brand-border bg-white px-3 py-2 text-sm text-brand-ink placeholder:text-brand-placeholder focus:border-brand-accent focus:outline-none"
-            />
-          </div>
-          <button
-            type="submit"
-            className="flex min-h-[40px] items-center justify-center rounded-brand-control bg-brand-ink px-4 text-sm font-semibold text-brand-bg transition hover:bg-brand-ink/90"
-          >
-            Apply
-          </button>
-          {ownerId && (
-            <Link
-              href="/admin/listings"
-              className="flex min-h-[40px] items-center justify-center rounded-brand-control border border-brand-border px-4 text-sm font-semibold text-brand-ink-muted transition hover:bg-brand-chip"
-            >
-              Clear
-            </Link>
-          )}
-        </form>
-
-        <div className="mt-6">
-          {loadError ? (
-            <p className="rounded-brand-control bg-brand-closed-bg px-3 py-2.5 text-sm text-brand-closed">
-              {loadError}
-            </p>
-          ) : (
-            <AdminListingsPanel initialBrands={brandsWithLocations} />
-          )}
+      <form
+        method="get"
+        className="mt-6 flex flex-wrap items-end gap-2 rounded-brand-card border border-brand-border bg-white p-4"
+      >
+        <div>
+          <label htmlFor="owner_id" className="text-sm font-semibold text-brand-ink">
+            Filter by owner ID
+          </label>
+          <input
+            id="owner_id"
+            name="owner_id"
+            type="number"
+            min={1}
+            defaultValue={searchParams.owner_id ?? ""}
+            placeholder="e.g. 55"
+            className="mt-2 w-40 rounded-brand-control border border-brand-border bg-white px-3 py-2 text-sm text-brand-ink placeholder:text-brand-placeholder focus:border-brand-accent focus:outline-none"
+          />
         </div>
-
-        {!loadError && totalPages > 1 && (
-          <nav
-            aria-label="Listings pages"
-            className="mt-8 flex items-center justify-center gap-3 text-sm"
+        <button
+          type="submit"
+          className="flex min-h-[40px] items-center justify-center rounded-brand-control bg-brand-ink px-4 text-sm font-semibold text-brand-bg transition hover:bg-brand-ink/90"
+        >
+          Apply
+        </button>
+        {ownerId && (
+          <Link
+            href="/admin/listings"
+            className="flex min-h-[40px] items-center justify-center rounded-brand-control border border-brand-border px-4 text-sm font-semibold text-brand-ink-muted transition hover:bg-brand-chip"
           >
-            <PageLink page={page - 1} ownerId={ownerId} disabled={page <= 1}>
-              &larr; Previous
-            </PageLink>
-            <span className="text-brand-ink-subtle">
-              Page {page} of {totalPages}
-            </span>
-            <PageLink page={page + 1} ownerId={ownerId} disabled={page >= totalPages}>
-              Next &rarr;
-            </PageLink>
-          </nav>
+            Clear
+          </Link>
         )}
-      </section>
-    </main>
+      </form>
+
+      <div className="mt-6">
+        {loadError ? (
+          <p className="rounded-brand-control bg-brand-closed-bg px-3 py-2.5 text-sm text-brand-closed">
+            {loadError}
+          </p>
+        ) : (
+          <AdminListingsPanel initialBrands={brandsWithLocations} />
+        )}
+      </div>
+
+      {!loadError && totalPages > 1 && (
+        <nav
+          aria-label="Listings pages"
+          className="mt-8 flex items-center justify-center gap-3 text-sm"
+        >
+          <PageLink page={page - 1} ownerId={ownerId} disabled={page <= 1}>
+            &larr; Previous
+          </PageLink>
+          <span className="text-brand-ink-subtle">
+            Page {page} of {totalPages}
+          </span>
+          <PageLink page={page + 1} ownerId={ownerId} disabled={page >= totalPages}>
+            Next &rarr;
+          </PageLink>
+        </nav>
+      )}
+    </section>
   );
 }
 
