@@ -5,3 +5,4 @@ export * from "./locations";
 export * from "./claim";
 export * from "./auth";
 export * from "./listingReports";
+export * from "./adminNotifications";
