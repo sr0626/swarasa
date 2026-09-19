@@ -45,3 +45,9 @@ variable "cloudfront_url" {
   description = "CloudFront media base URL passed as NEXT_PUBLIC_MEDIA_URL"
   type        = string
 }
+
+variable "contact_email" {
+  description = "Public contact email passed as NEXT_PUBLIC_CONTACT_EMAIL (Contact/Terms pages, geocoder User-Agent). Empty = not set."
+  type        = string
+  default     = ""
+}

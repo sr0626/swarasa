@@ -344,4 +344,5 @@ module "amplify" {
   cognito_user_pool_id = module.cognito.user_pool_id
   cognito_client_id    = module.cognito.client_id
   cloudfront_url       = "https://${module.s3.cloudfront_domain}"
+  contact_email        = var.contact_email
 }

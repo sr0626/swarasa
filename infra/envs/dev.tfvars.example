@@ -43,3 +43,7 @@ aurora_max_capacity = 4
 # 2026-09-16 — S3 image resize pipeline). Its own one-time ":bootstrap"
 # push is required before the first apply, separate from the API image's.
 # resize_image_uri = "REPLACE_WITH_ECR_RESIZE_REPO_URL:bootstrap"
+
+# Optional. Public contact email shown on the Contact/Terms pages and used in
+# the geocoder User-Agent. Set a real inbox; leave unset to use the placeholder.
+# contact_email = "hello@example.com"
