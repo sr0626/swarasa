@@ -8,10 +8,10 @@
 // directly (see "SESSION-AWARE" note below) — it renders TopBarShell.tsx
 // instead.
 //
-// LINK TARGETS: "For Owners" and the signed-out "Add Your Restaurant" CTA
-// both go to `/signup?role=owner` (pre-selects the Owner role on the
-// sign-up form); "Sign In" goes to `/login`. They previously all pointed at
-// `/login`, which made "For Owners" and "Sign In" duplicates. See
+// LINK TARGETS: the signed-out "Add Your Restaurant" CTA goes to
+// `/signup?role=owner` (pre-selects the Owner role on the sign-up form);
+// "Sign In" goes to `/login`. The separate "For Owners" nav link was removed
+// at the user's request (2026-09-19) -- it duplicated the CTA. See
 // TopBarShell.tsx for the sticky-header notes.
 //
 // SESSION-AWARE, ASYNC SERVER COMPONENT (docs/PROJECT_PLAN.csv "Signed-in
