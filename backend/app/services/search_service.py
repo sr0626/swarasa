@@ -25,7 +25,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from geoalchemy2.functions import ST_DWithin, ST_Distance, ST_MakePoint, ST_SetSRID
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.restaurant_brand import RestaurantBrand
@@ -45,6 +45,16 @@ _DEFAULT_LAT = 32.7767
 _DEFAULT_LNG = -96.7970
 
 
+def _escape_like(value: str) -> str:
+    """Escapes LIKE wildcards so a user typing `%` or `_` matches literally."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _distance_key(distance_mi: float | None) -> float:
+    """Sort key: a location with no coordinates sorts after every located one."""
+    return float("inf") if distance_mi is None else distance_mi
+
+
 @dataclass
 class _CandidateRow:
     location_id: int
@@ -57,7 +67,9 @@ class _CandidateRow:
     is_verified: bool
     is_paid: bool
     timezone: str
-    distance_mi: float
+    # None for a location with no coordinates -- only ever returned for a
+    # text (`q`) search, which does not require a geocoded location.
+    distance_mi: float | None
 
 
 async def _fetch_candidates(
@@ -68,6 +80,7 @@ async def _fetch_candidates(
     cuisine: list[str] | None,
     dietary: list[str] | None,
     type_: list[str] | None,
+    q: str | None = None,
 ) -> list[_CandidateRow]:
     point = ST_SetSRID(ST_MakePoint(lng, lat), 4326)
     radius_m = radius_mi * _METERS_PER_MILE
@@ -88,9 +101,37 @@ async def _fetch_candidates(
             distance_expr.label("distance_mi"),
         )
         .where(RestaurantLocation.is_active == True)  # noqa: E712
-        .where(RestaurantLocation.geom.isnot(None))
-        .where(ST_DWithin(RestaurantLocation.geom, point, radius_m))
     )
+    if q:
+        # Text search (restaurant name, or a cuisine tag's name) deliberately
+        # does NOT require coordinates or a radius: someone typing a
+        # restaurant's name expects to find it wherever it is, and a
+        # location that failed geocoding would otherwise be unfindable even
+        # by its exact name. Such rows come back with distance_mi = NULL.
+        pattern = "%" + _escape_like(q.strip()) + "%"
+        matching_brands = select(RestaurantBrand.id).where(
+            RestaurantBrand.name.ilike(pattern, escape="\\")
+        )
+        matching_tag_brands = (
+            select(RestaurantCuisine.brand_id)
+            .join(CuisineTag, CuisineTag.id == RestaurantCuisine.cuisine_tag_id)
+            .where(
+                or_(
+                    CuisineTag.display_name.ilike(pattern, escape="\\"),
+                    CuisineTag.name.ilike(pattern, escape="\\"),
+                )
+            )
+        )
+        stmt = stmt.where(
+            or_(
+                RestaurantLocation.brand_id.in_(matching_brands),
+                RestaurantLocation.brand_id.in_(matching_tag_brands),
+            )
+        )
+    else:
+        stmt = stmt.where(RestaurantLocation.geom.isnot(None)).where(
+            ST_DWithin(RestaurantLocation.geom, point, radius_m)
+        )
 
     # cuisine[]/dietary[]/type[] are independent facets — AND across
     # provided facets, OR within a facet's own tag list (docs/API_CONTRACTS.md
@@ -127,12 +168,13 @@ async def search(
     dietary: list[str] | None,
     type_: list[str] | None,
     pagination,
+    q: str | None = None,
 ) -> tuple[list[SearchResultOut], int]:
     effective_lat = lat if lat is not None else _DEFAULT_LAT
     effective_lng = lng if lng is not None else _DEFAULT_LNG
 
     candidates = await _fetch_candidates(
-        db, effective_lat, effective_lng, radius_mi, cuisine, dietary, type_
+        db, effective_lat, effective_lng, radius_mi, cuisine, dietary, type_, q
     )
     if not candidates:
         return [], 0
@@ -150,7 +192,7 @@ async def search(
         brand = brands_by_id.get(brand_id)
         if brand is None:
             continue
-        nearest = min(rows, key=lambda r: r.distance_mi)
+        nearest = min(rows, key=lambda r: _distance_key(r.distance_mi))
         cards.append(_BrandCard(brand=brand, nearest=nearest, location_count_nearby=len(rows)))
 
     # Default sort: paid first, then verified, then distance, then
@@ -160,7 +202,7 @@ async def search(
         key=lambda c: (
             not c.nearest.is_paid,
             not c.nearest.is_verified,
-            c.nearest.distance_mi,
+            _distance_key(c.nearest.distance_mi),
             c.brand.name.lower(),
         )
     )
@@ -192,7 +234,7 @@ async def search(
                 ],
                 nearest_location=NearestLocationOut(
                     location_id=nearest.location_id,
-                    distance_mi=round(nearest.distance_mi, 2),
+                    distance_mi=round(nearest.distance_mi, 2) if nearest.distance_mi is not None else None,
                     address_line1=nearest.address_line1,
                     city=nearest.city,
                     state=nearest.state,

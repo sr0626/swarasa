@@ -28,6 +28,8 @@ export default async function SearchResults({ filters, page, location, query }: 
       cuisine: filters.cuisine.length ? filters.cuisine : undefined,
       dietary: filters.dietary.length ? filters.dietary : undefined,
       type: filters.type.length ? filters.type : undefined,
+      // Free-text box: matches restaurant name or cuisine tag (backend `q`).
+      q: query.trim() || undefined,
       page,
       page_size: SEARCH_PAGE_SIZE,
     });

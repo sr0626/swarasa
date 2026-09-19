@@ -10,7 +10,8 @@ from app.schemas.cuisine import CuisineTagOut
 
 class NearestLocationOut(BaseModel):
     location_id: int
-    distance_mi: float
+    # None only for a text (`q`) search hit whose location has no coordinates.
+    distance_mi: float | None
     # Added: search result cards need the full street address for display
     # and a "get directions"-style link — city/state alone wasn't enough
     # (docs/PROJECT_PLAN.csv "Search result card: full address + Google

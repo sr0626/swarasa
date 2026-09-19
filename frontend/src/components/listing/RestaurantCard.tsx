@@ -89,7 +89,8 @@ export default function RestaurantCard({ item }: { item: SearchResultItem }) {
         >
           <LocationPinIcon className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
-            {fullAddress} · {nearest_location.distance_mi.toFixed(1)} mi
+            {fullAddress}
+            {nearest_location.distance_mi !== null && ` · ${nearest_location.distance_mi.toFixed(1)} mi`}
           </span>
         </a>
 
