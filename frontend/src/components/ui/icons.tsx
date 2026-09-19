@@ -113,6 +113,16 @@ export function ClipboardCheckIcon(props: IconProps) {
   );
 }
 
+/** Added for the admin account page's "Reports" quick action. */
+export function FlagIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} {...props}>
+      <path d="M5.5 21V4" />
+      <path d="M5.5 4.5h11l-2 4 2 4h-11" />
+    </svg>
+  );
+}
+
 /** Added for the owner portal's info-edit sections (location editor). */
 export function PencilIcon(props: IconProps) {
   return (

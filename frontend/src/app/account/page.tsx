@@ -18,8 +18,13 @@
 // registered_user get a read-only name/email display with a short note —
 // building an edit form that would just 403 for those roles would be
 // worse than not having one.
+//
+// ROLE LAYOUTS (2026-09-19): the page only fetches data and picks a view —
+// each role has its own layout under components/account/ (DinerAccountView,
+// OwnerAccountView, ManagerAccountView, AdminAccountView), sharing the
+// summary/details/security/privacy pieces. All data-fetching, the server
+// actions (app/account/actions.ts) and the role gating are unchanged.
 import type { Metadata } from "next";
-import Link from "next/link";
 import { requireSession } from "@/lib/auth/guards";
 import TopBar from "@/components/home/TopBar";
 import { ApiError } from "@/lib/api/client";
@@ -29,20 +34,43 @@ import {
   getMyFollows,
   getMyManagedLocations,
 } from "@/lib/api/auth";
-import { getMyRestaurants } from "@/lib/api/restaurants";
-import ProfileEditForm from "@/components/account/ProfileEditForm";
-import FollowedRestaurantsList from "@/components/account/FollowedRestaurantsList";
-import ManagedLocationsList from "@/components/account/ManagedLocationsList";
-import OwnerRestaurantsList from "@/components/account/OwnerRestaurantsList";
-import AccountSummaryCard from "@/components/account/AccountSummaryCard";
-import AccountDetailsCard from "@/components/account/AccountDetailsCard";
-import DataPrivacySection from "@/components/account/DataPrivacySection";
+import { getMyRestaurants, getRestaurantLocations } from "@/lib/api/restaurants";
+import { mapWithConcurrency } from "@/lib/concurrency";
+import AdminAccountView from "@/components/account/AdminAccountView";
+import DinerAccountView from "@/components/account/DinerAccountView";
+import ManagerAccountView from "@/components/account/ManagerAccountView";
+import OwnerAccountView from "@/components/account/OwnerAccountView";
+import type { OwnerBrandSummary } from "@/components/account/OwnerRestaurantsPanel";
 import InfoPanel from "@/components/ui/InfoPanel";
 import type { AuthMe } from "@/types/auth";
 import type { FollowedBrand } from "@/types/follow";
 import type { ManagedLocation } from "@/types/location";
 import type { DataDeletionRequest } from "@/types/privacy";
 import type { RestaurantBrand } from "@/types/restaurant";
+
+// Same cap the owner dashboard uses for its per-brand locations fan-out
+// (see lib/concurrency.ts and app/portal/dashboard/page.tsx).
+const LOCATIONS_FETCH_CONCURRENCY = 5;
+
+/** Public `GET /restaurants/{id}/locations` for one brand; a failure is scoped to that brand. */
+async function loadOwnerBrand(brand: RestaurantBrand): Promise<OwnerBrandSummary> {
+  if (brand.location_count === 0) {
+    return { brand, locations: [], locationsError: null };
+  }
+  try {
+    const page = await getRestaurantLocations(brand.id, { page: 1, page_size: 100 });
+    return { brand, locations: page.results, locationsError: null };
+  } catch (error) {
+    return {
+      brand,
+      locations: [],
+      locationsError:
+        error instanceof ApiError
+          ? error.message
+          : "Could not load this restaurant's locations. Please try again.",
+    };
+  }
+}
 
 export const metadata: Metadata = {
   title: "My Account",
@@ -76,12 +104,16 @@ export default async function AccountPage() {
     }
   }
 
-  let ownedBrands: RestaurantBrand[] = [];
+  let ownedBrands: OwnerBrandSummary[] = [];
   let ownedBrandsError: string | null = null;
   if (me && me.role === "owner") {
     try {
       const page = await getMyRestaurants({ page: 1, page_size: 50 }, session.accessToken);
-      ownedBrands = page.results;
+      ownedBrands = await mapWithConcurrency(
+        page.results,
+        LOCATIONS_FETCH_CONCURRENCY,
+        loadOwnerBrand
+      );
     } catch (error) {
       ownedBrandsError =
         error instanceof ApiError
@@ -124,76 +156,46 @@ export default async function AccountPage() {
     <main className="min-h-screen bg-brand-bg">
       <TopBar />
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-        <header>
-          <h1 className="font-display text-3xl font-bold text-brand-ink sm:text-4xl">
-            My Account
-          </h1>
-          <p className="mt-2 text-sm text-brand-ink-muted">
-            Your profile, {me?.role === "owner" ? "your restaurants, " : ""}
-            {me?.role === "registered_user" ? "followed restaurants, " : ""}
-            {me?.role === "manager" ? "assigned locations, " : ""}
-            and data privacy settings.
-          </p>
-        </header>
-
         {meError && (
-          <div className="mt-6">
-            <InfoPanel title="Couldn't load your account" body={meError} />
-          </div>
+          <>
+            <h1 className="font-display text-3xl font-bold text-brand-ink sm:text-4xl">
+              My Account
+            </h1>
+            <div className="mt-6">
+              <InfoPanel title="Couldn't load your account" body={meError} />
+            </div>
+          </>
         )}
 
-        {me && (
-          // Two columns from lg up (summary card left, sections right); a
-          // single column below that. DOM order is the mobile order: the
-          // summary card first, then the sections.
-          <div className="mt-6 flex flex-col gap-8 lg:grid lg:grid-cols-[22rem_minmax(0,1fr)] lg:items-start lg:gap-x-10">
-            <aside aria-label="Account summary" className="lg:sticky lg:top-6">
-              <AccountSummaryCard me={me} />
-            </aside>
+        {me?.role === "registered_user" && (
+          <DinerAccountView
+            me={me}
+            follows={follows}
+            followsError={followsError}
+            latestDeletionRequest={latestDeletionRequest}
+          />
+        )}
 
-            <div className="flex min-w-0 flex-col gap-5">
-              {me.role === "owner" && me.owner_account ? (
-                <ProfileEditForm ownerAccount={me.owner_account} />
-              ) : (
-                <AccountDetailsCard me={me} />
-              )}
+        {me?.role === "owner" && (
+          <OwnerAccountView
+            me={me}
+            brands={ownedBrands}
+            brandsError={ownedBrandsError}
+            latestDeletionRequest={latestDeletionRequest}
+          />
+        )}
 
-              {me.role === "owner" && (
-                <OwnerRestaurantsList brands={ownedBrands} loadError={ownedBrandsError} />
-              )}
+        {me?.role === "manager" && (
+          <ManagerAccountView
+            me={me}
+            locations={managedLocations}
+            locationsError={managedLocationsError}
+            latestDeletionRequest={latestDeletionRequest}
+          />
+        )}
 
-              {me.role === "registered_user" && (
-                <FollowedRestaurantsList follows={follows} loadError={followsError} />
-              )}
-
-              {me.role === "manager" && (
-                <ManagedLocationsList
-                  locations={managedLocations}
-                  loadError={managedLocationsError}
-                />
-              )}
-
-              <section
-                aria-labelledby="security-heading"
-                className="flex flex-col items-start gap-3 rounded-brand-card border border-brand-border bg-white p-5 shadow-brand-card sm:flex-row sm:items-center sm:justify-between sm:p-6"
-              >
-                <div>
-                  <h2 id="security-heading" className="font-display text-xl font-bold text-brand-ink">
-                    Security
-                  </h2>
-                  <p className="mt-1 text-sm text-brand-ink-muted">Change your account password.</p>
-                </div>
-                <Link
-                  href="/account/security"
-                  className="flex min-h-[44px] shrink-0 items-center whitespace-nowrap rounded-brand-pill border border-brand-ink px-5 text-sm font-semibold text-brand-ink transition hover:bg-brand-chip focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent"
-                >
-                  Change password
-                </Link>
-              </section>
-
-              <DataPrivacySection latestDeletionRequest={latestDeletionRequest} />
-            </div>
-          </div>
+        {me?.role === "admin" && (
+          <AdminAccountView me={me} latestDeletionRequest={latestDeletionRequest} />
         )}
       </div>
     </main>
