@@ -88,6 +88,10 @@ export interface LocationDetail {
   postal_code: string;
   country: string;
   phone: string | null;
+  /** Owner/manager-authored "about / we specialize in ..." text (max 1000 chars); null until set. */
+  about: string | null;
+  /** Short specialty chips (max 8, each 1-40 chars); null until set. */
+  specialties: string[] | null;
   timezone: string;
   latitude: number;
   longitude: number;
@@ -122,7 +126,12 @@ export interface CreateLocationInput {
  */
 export type UpdateLocationInput = Partial<
   Omit<CreateLocationInput, "brand_id">
->;
+> & {
+  /** null / "" clears the stored value (unlike the other fields). */
+  about?: string | null;
+  /** null / [] clears the stored value. */
+  specialties?: string[] | null;
+};
 
 /** Body for PUT /locations/{id}/hours. */
 export interface UpdateLocationHoursInput {

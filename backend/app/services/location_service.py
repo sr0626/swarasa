@@ -69,6 +69,8 @@ async def _location_to_out(db: AsyncSession, location: RestaurantLocation) -> Lo
         postal_code=location.postal_code,
         country=location.country,
         phone=location.phone,
+        about=location.about,
+        specialties=location.specialties,
         timezone=location.timezone,
         latitude=float(location.latitude) if location.latitude is not None else None,
         longitude=float(location.longitude) if location.longitude is not None else None,
@@ -178,13 +180,19 @@ _UPDATABLE_FIELDS = (
     "timezone",
 )
 
+# Optional public-profile fields: unlike _UPDATABLE_FIELDS (where an
+# explicit null is ignored), sending null/empty here clears the value.
+# LocationUpdate's validators already normalise "" / [] to None.
+_CLEARABLE_FIELDS = ("about", "specialties")
+_AUDITED_FIELDS = _UPDATABLE_FIELDS + _CLEARABLE_FIELDS
+
 
 async def update_location(
     db: AsyncSession, location_id: int, body: LocationUpdate, current_user
 ) -> LocationOut:
     location = await get_location_or_404(db, location_id)
 
-    old_val = {field: getattr(location, field) for field in _UPDATABLE_FIELDS}
+    old_val = {field: getattr(location, field) for field in _AUDITED_FIELDS}
     old_val["latitude"] = float(location.latitude) if location.latitude is not None else None
     old_val["longitude"] = float(location.longitude) if location.longitude is not None else None
 
@@ -195,6 +203,10 @@ async def update_location(
             if field in ("state", "country"):
                 value = value.upper()
             setattr(location, field, value)
+
+    for field in _CLEARABLE_FIELDS:
+        if field in data:
+            setattr(location, field, data[field])
 
     lat_changed = "latitude" in data and data["latitude"] is not None
     lng_changed = "longitude" in data and data["longitude"] is not None
@@ -211,7 +223,7 @@ async def update_location(
         if lat is not None and lng is not None:
             await _sync_geom(db, location.id, lat, lng)
 
-    new_val = {field: getattr(location, field) for field in _UPDATABLE_FIELDS}
+    new_val = {field: getattr(location, field) for field in _AUDITED_FIELDS}
     new_val["latitude"] = float(location.latitude) if location.latitude is not None else None
     new_val["longitude"] = float(location.longitude) if location.longitude is not None else None
 

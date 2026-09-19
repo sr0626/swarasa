@@ -5,7 +5,11 @@ from __future__ import annotations
 
 from datetime import datetime, time
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+ABOUT_MAX_LENGTH = 1000
+SPECIALTIES_MAX_ITEMS = 8
+SPECIALTY_MAX_LENGTH = 40
 
 
 class HoursOut(BaseModel):
@@ -43,6 +47,9 @@ class LocationOut(BaseModel):
     postal_code: str
     country: str
     phone: str | None
+    # Public profile content, see restaurant_location.about/specialties.
+    about: str | None
+    specialties: list[str] | None
     timezone: str
     latitude: float | None
     longitude: float | None
@@ -94,3 +101,44 @@ class LocationUpdate(BaseModel):
     timezone: str | None = None
     latitude: float | None = None
     longitude: float | None = None
+    # Public profile content. Unlike the fields above, an explicit `null`
+    # (or empty string / empty list, normalised to None by the validators
+    # below) CLEARS the stored value -- see location_service.update_location.
+    about: str | None = None
+    specialties: list[str] | None = None
+
+    @field_validator("about")
+    @classmethod
+    def _normalise_about(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if not value:
+            return None
+        if len(value) > ABOUT_MAX_LENGTH:
+            raise ValueError(f"about must be at most {ABOUT_MAX_LENGTH} characters")
+        return value
+
+    @field_validator("specialties")
+    @classmethod
+    def _normalise_specialties(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        cleaned: list[str] = []
+        seen: set[str] = set()
+        for item in value:
+            item = item.strip()
+            if not item:
+                continue
+            if len(item) > SPECIALTY_MAX_LENGTH:
+                raise ValueError(
+                    f"each specialty must be at most {SPECIALTY_MAX_LENGTH} characters"
+                )
+            key = item.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            cleaned.append(item)
+        if len(cleaned) > SPECIALTIES_MAX_ITEMS:
+            raise ValueError(f"at most {SPECIALTIES_MAX_ITEMS} specialties allowed")
+        return cleaned or None

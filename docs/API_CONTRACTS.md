@@ -410,6 +410,8 @@ Response:
   "postal_code": "75024",
   "country": "US",
   "phone": "+14695551234",
+  "about": "Family-run kitchen specializing in Hyderabadi biryani.",
+  "specialties": ["Hyderabadi biryani", "Dum cooking"],
   "timezone": "America/Chicago",
   "latitude": 33.0198,
   "longitude": -96.6989,
@@ -491,7 +493,19 @@ Audit: `audit_log` row (`table_name="restaurant_location"`, `action="create"`).
 Auth: owner (owns parent brand), manager with an active `location_manager` row for this location, or admin (root CLAUDE.md "Permission model" — checked server-side on every write, never from the JWT alone). Admin added 2026-09-17 — see "Platform admin full-access parity" below.
 
 Body: any subset of the address/contact/timezone fields from `POST
-/locations`. Does **not** accept `is_paid`, `paid_until`, or
+/locations`, plus two optional public-profile fields (added 2026-09-19,
+free tier, owner/manager/admin may all set them):
+- `about` — string, max 1000 chars (trimmed; empty string -> `null`;
+  over-length -> `422`). Free text, e.g. "We specialize in ...".
+- `specialties` — array of strings, max 8 items, each 1-40 chars after
+  trimming (blank entries dropped, case-insensitive duplicates removed;
+  over-limit -> `422`; empty array -> `null`).
+
+Unlike the other fields (where an explicit `null` is ignored), sending
+`null`, `""` or `[]` for `about` / `specialties` **clears** the stored
+value; omitting the key leaves it untouched. Both fields are also returned
+by `GET /locations/{id}` (and this PATCH's response) as `about: string |
+null` and `specialties: string[] | null`. Does **not** accept `is_paid`, `paid_until`, or
 `stripe_sub_item_id` — those are Stripe-webhook/admin-only writes
 (root CLAUDE.md "Stripe webhook sets is_paid... on payment
 success/failure"; not a field an owner or manager can set directly).
