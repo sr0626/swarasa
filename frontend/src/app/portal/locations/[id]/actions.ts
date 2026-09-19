@@ -50,7 +50,11 @@ async function requireLocationSession(): Promise<
   if (!session) {
     return { ok: false, error: "Your session has expired. Please sign in again." };
   }
-  if (session.role !== "owner" && session.role !== "manager") {
+  // Admin is allowed too: the backend's location write routes have an admin
+  // branch (docs/PROJECT_PLAN.csv "Platform admin full-access parity"), and
+  // the editor page now opens for admins (Edit link on the public listing).
+  // Manager assignment stays owner-only below -- that contract has no admin path.
+  if (session.role !== "owner" && session.role !== "manager" && session.role !== "admin") {
     return { ok: false, error: "You don't have access to this location." };
   }
   return { ok: true, accessToken: session.accessToken, role: session.role };
