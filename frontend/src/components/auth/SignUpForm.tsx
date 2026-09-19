@@ -45,6 +45,7 @@ import { useRouter } from "next/navigation";
 import { signUp } from "@aws-amplify/auth";
 import { ensureAmplifyConfigured } from "@/lib/auth/amplifyClient";
 import { signUpSchema, type SignUpFormValues } from "@/lib/validation/auth";
+import { withNext } from "@/lib/auth/safeNext";
 import { messageForAuthError } from "@/lib/auth/errorMessages";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 
@@ -66,7 +67,10 @@ const ROLE_OPTIONS: Array<{ value: Role; label: string; hint: string }> = [
 
 export default function SignUpForm({
   initialRole = "registered_user",
+  nextPath = null,
 }: {
+  /** Already-validated same-site path (safeNextPath) to resume after sign-up. */
+  nextPath?: string | null;
   /** Pre-selected account type (validated by the page; defaults to diner). */
   initialRole?: Role;
 }) {
@@ -117,12 +121,14 @@ export default function SignUpForm({
       });
 
       if (!isSignUpComplete && nextStep.signUpStep === "CONFIRM_SIGN_UP") {
-        router.push(`/signup/confirm?email=${encodeURIComponent(parsed.data.email)}`);
+        router.push(
+          withNext(`/signup/confirm?email=${encodeURIComponent(parsed.data.email)}`, nextPath),
+        );
         return;
       }
 
       if (isSignUpComplete) {
-        router.push("/login?confirmed=1");
+        router.push(withNext("/login?confirmed=1", nextPath));
         return;
       }
 
@@ -272,7 +278,7 @@ export default function SignUpForm({
       <p className="text-center text-sm text-brand-ink-muted">
         Already have an account?{" "}
         <Link
-          href="/login"
+          href={withNext("/login", nextPath)}
           className="font-medium text-brand-accent transition hover:text-brand-accent-hover"
         >
           Sign in

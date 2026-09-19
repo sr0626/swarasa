@@ -14,6 +14,8 @@ export interface RestaurantBrand {
   // /restaurant/[slug] with "Cannot read properties of null (reading
   // 'slice')" for every such restaurant.
   description: string | null;
+  /** Restaurant's own site (brand-level, nullable) — already returned by GET /restaurants/{id}. */
+  website: string | null;
   is_claimed: boolean;
   /** null for unclaimed listings — frontend renders a "Claim this listing" CTA. */
   owner_id: number | null;

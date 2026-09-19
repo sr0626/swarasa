@@ -34,6 +34,7 @@ import { signIn, fetchAuthSession } from "@aws-amplify/auth";
 import { ensureAmplifyConfigured } from "@/lib/auth/amplifyClient";
 import { startSessionKeepAlive } from "@/lib/auth/sessionKeepAlive";
 import { signInSchema, type SignInFormValues } from "@/lib/validation/auth";
+import { withNext } from "@/lib/auth/safeNext";
 import { messageForAuthError, messageForNextStep } from "@/lib/auth/errorMessages";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import type { UserRole } from "@/types/auth";
@@ -53,7 +54,12 @@ const ROLE_LANDING: Record<UserRole, string> = {
 
 type FieldErrors = Partial<Record<keyof SignInFormValues, string>>;
 
-export default function LoginForm() {
+export default function LoginForm({
+  nextPath = null,
+}: {
+  /** Already-validated same-site path (safeNextPath) to land on after sign-in. */
+  nextPath?: string | null;
+}) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -131,7 +137,7 @@ export default function LoginForm() {
       if (rememberMe) {
         startSessionKeepAlive();
       }
-      router.push(ROLE_LANDING[role] ?? "/");
+      router.push(nextPath ?? ROLE_LANDING[role] ?? "/");
       router.refresh();
     } catch (err) {
       setFormError(messageForAuthError(err));
@@ -224,7 +230,7 @@ export default function LoginForm() {
       <p className="text-center text-sm text-brand-ink-muted">
         New here?{" "}
         <Link
-          href="/signup"
+          href={withNext("/signup", nextPath)}
           className="font-medium text-brand-accent transition hover:text-brand-accent-hover"
         >
           Create an account

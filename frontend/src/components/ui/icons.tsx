@@ -237,3 +237,25 @@ export function CoffeeCupIcon(props: IconProps) {
     </svg>
   );
 }
+
+/** Added for the restaurant page info card's website link. */
+export function GlobeIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} {...props}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M3.5 12h17" />
+      <path d="M12 3.5c2.4 2.4 3.5 5.2 3.5 8.5s-1.1 6.1-3.5 8.5c-2.4-2.4-3.5-5.2-3.5-8.5S9.6 5.9 12 3.5z" />
+    </svg>
+  );
+}
+
+/** Added for the restaurant page info card's "Get directions" link. */
+export function DirectionsIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} {...props}>
+      <path d="M12 3.5l8.5 8.5-8.5 8.5L3.5 12 12 3.5z" />
+      <path d="M8.75 13.25v-2a1.5 1.5 0 0 1 1.5-1.5H15" />
+      <path d="M13 8l2.25 1.75L13 11.5" />
+    </svg>
+  );
+}

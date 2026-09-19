@@ -14,6 +14,22 @@ export function formatShortTime(time: string): string {
 }
 
 /**
+ * Today's day-of-week as the API indexes it (0=Monday..6=Sunday) in the
+ * LOCATION's timezone -- not the server's or the visitor's, since "today"
+ * on a restaurant's hours list means the restaurant's today. `null` when
+ * the timezone string is unusable (callers then just skip the highlight).
+ */
+export function todayIndexInTimezone(timeZone: string, now: Date = new Date()): number | null {
+  try {
+    const weekday = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone }).format(now);
+    const index = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].indexOf(weekday);
+    return index === -1 ? null : index;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Today's-hours label, or `null` when hours are unknown (callers render
  * nothing then — never a "Hours unknown" placeholder).
  */

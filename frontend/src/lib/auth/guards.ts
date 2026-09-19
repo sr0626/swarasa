@@ -10,12 +10,17 @@
 // placeholders (and future pages) so each one doesn't repeat the check.
 import { redirect } from "next/navigation";
 import { getServerSession } from "./session";
+import { safeNextPath, withNext } from "./safeNext";
 import type { Session, UserRole } from "@/types/auth";
 
-export async function requireSession(allowedRoles: UserRole[]): Promise<Session> {
+export async function requireSession(
+  allowedRoles: UserRole[],
+  /** Same-site path to come back to after signing in (e.g. "/claim?brand_id=3"). */
+  returnTo?: string,
+): Promise<Session> {
   const session = await getServerSession();
   if (!session || !allowedRoles.includes(session.role)) {
-    redirect("/login");
+    redirect(withNext("/login", safeNextPath(returnTo)));
   }
   return session;
 }
