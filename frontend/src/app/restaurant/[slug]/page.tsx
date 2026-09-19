@@ -3,9 +3,11 @@
 // Restaurant markup (required on every listing page)" Key Patterns.
 //
 // The SEO plumbing (SSR, generateMetadata, JSON-LD, canonical, 404
-// handling) predates this change and is untouched; this pass adds the
-// real visual UI on top of it (hero, hours, gallery, unclaimed CTA) —
-// see the components in `components/restaurant/`.
+// handling) predates this change and is untouched. Layout (redesigned per
+// owner feedback): a two-column page -- photo-carousel hero + About on the
+// left, one compact sticky info card (status, address/directions, phone,
+// website, weekly hours) plus the unclaimed-listing claim CTA on the right;
+// single column on mobile. See the components in `components/restaurant/`.
 //
 // No full-menu section here: `docs/API_CONTRACTS.md` has no menu endpoint
 // in Phase 1 ("Full menu with prices is not in this response — no menu
@@ -33,8 +35,7 @@ import { getRestaurantBySlug, getRestaurantLocations } from "@/lib/api/restauran
 import { getLocationById, getLocationManagers } from "@/lib/api/locations";
 import { getServerSession } from "@/lib/auth/session";
 import RestaurantHero from "@/components/restaurant/RestaurantHero";
-import RestaurantHours from "@/components/restaurant/RestaurantHours";
-import RestaurantGallery from "@/components/restaurant/RestaurantGallery";
+import RestaurantInfoCard from "@/components/restaurant/RestaurantInfoCard";
 import ClaimCTA from "@/components/restaurant/ClaimCTA";
 import EditListingBar from "@/components/restaurant/EditListingBar";
 import TopBar from "@/components/home/TopBar";
@@ -175,27 +176,58 @@ export default async function RestaurantPage({ params }: RestaurantPageProps) {
       <main className="min-h-screen bg-brand-bg">
         <TopBar />
 
-        <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
+        <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
           {canEdit && location && <EditListingBar locationId={location.id} />}
-          <RestaurantHero restaurant={restaurant} location={location} />
 
-          <div className="mt-8 flex flex-col gap-8">
-            {!restaurant.is_claimed && <ClaimCTA brandId={restaurant.id} />}
+          {/* Two columns from lg up; a single column below that. DOM order is
+              the mobile order: hero -> sidebar (claim + info card) -> main
+              content. On lg the sidebar sits in the right column, spanning
+              both rows and sticky, while hero + main content stack in the
+              left column. */}
+          <div className="flex flex-col gap-8 lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:grid-rows-[auto_1fr] lg:gap-x-10">
+            <div className="lg:col-start-1 lg:row-start-1">
+              <RestaurantHero restaurant={restaurant} location={location} />
+            </div>
 
-            {location && location.hours.length > 0 && <RestaurantHours hours={location.hours} />}
+            <aside
+              aria-label="Restaurant information"
+              className="flex flex-col gap-5 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:sticky lg:top-6 lg:self-start"
+            >
+              {!restaurant.is_claimed && <ClaimCTA brandId={restaurant.id} />}
+              <RestaurantInfoCard location={location} website={restaurant.website} />
+            </aside>
 
-            {location && <RestaurantGallery photos={location.gallery_photos} />}
+            <div className="flex min-w-0 flex-col gap-8 lg:col-start-1 lg:row-start-2">
+              {restaurant.description && (
+                <section aria-labelledby="about-heading">
+                  <h2 id="about-heading" className="font-display text-xl font-bold text-brand-ink">
+                    About
+                  </h2>
+                  <p className="mt-2 max-w-2xl whitespace-pre-line text-sm leading-relaxed text-brand-ink-muted sm:text-base">
+                    {restaurant.description}
+                  </p>
+                </section>
+              )}
 
-            <div className="flex flex-col items-start gap-3 rounded-brand-card border border-brand-border bg-white p-5 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-brand-ink-muted">
-                See something wrong or out of date on this listing?
-              </p>
-              <Link
-                href={`/restaurant/${restaurant.slug}/report`}
-                className="flex min-h-[44px] shrink-0 items-center whitespace-nowrap rounded-brand-pill border border-brand-ink px-5 text-sm font-semibold text-brand-ink transition hover:bg-brand-chip"
-              >
-                Report a problem
-              </Link>
+              {/* INSERTION POINT (unused): future `about` / `specialties`
+                  block, being added separately -- render it here, and only
+                  when the API returns data for it. */}
+
+              {/* INSERTION POINT (unused): future Deals section (Phase 2).
+                  Do not add placeholder or fake deals; render nothing when
+                  the location has none. */}
+
+              <div className="flex flex-col items-start gap-3 rounded-brand-card border border-brand-border bg-white p-5 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-brand-ink-muted">
+                  See something wrong or out of date on this listing?
+                </p>
+                <Link
+                  href={`/restaurant/${restaurant.slug}/report`}
+                  className="flex min-h-[44px] shrink-0 items-center whitespace-nowrap rounded-brand-pill border border-brand-ink px-5 text-sm font-semibold text-brand-ink transition hover:bg-brand-chip"
+                >
+                  Report a problem
+                </Link>
+              </div>
             </div>
           </div>
         </div>

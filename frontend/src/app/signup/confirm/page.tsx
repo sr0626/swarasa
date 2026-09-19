@@ -6,6 +6,7 @@
 import type { Metadata } from "next";
 import TopBar from "@/components/home/TopBar";
 import ConfirmSignUpForm from "@/components/auth/ConfirmSignUpForm";
+import { safeNextPath } from "@/lib/auth/safeNext";
 
 export const metadata: Metadata = {
   title: "Confirm Your Account",
@@ -14,7 +15,7 @@ export const metadata: Metadata = {
 export default function ConfirmSignUpPage({
   searchParams,
 }: {
-  searchParams: { email?: string };
+  searchParams: { email?: string; next?: string | string[] };
 }) {
   return (
     <main className="min-h-screen bg-brand-bg">
@@ -31,7 +32,10 @@ export default function ConfirmSignUpPage({
           </p>
 
           <div className="mt-6">
-            <ConfirmSignUpForm initialEmail={searchParams.email ?? ""} />
+            <ConfirmSignUpForm
+              initialEmail={searchParams.email ?? ""}
+              nextPath={safeNextPath(searchParams.next)}
+            />
           </div>
         </div>
       </div>

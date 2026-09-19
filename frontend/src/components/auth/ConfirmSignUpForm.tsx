@@ -13,13 +13,17 @@ import {
   confirmSignUpSchema,
   type ConfirmSignUpFormValues,
 } from "@/lib/validation/auth";
+import { withNext } from "@/lib/auth/safeNext";
 import { messageForAuthError } from "@/lib/auth/errorMessages";
 
 type FieldErrors = Partial<Record<keyof ConfirmSignUpFormValues, string>>;
 
 export default function ConfirmSignUpForm({
   initialEmail = "",
+  nextPath = null,
 }: {
+  /** Already-validated same-site path (safeNextPath) to resume after sign-in. */
+  nextPath?: string | null;
   initialEmail?: string;
 }) {
   const router = useRouter();
@@ -57,7 +61,7 @@ export default function ConfirmSignUpForm({
       });
 
       if (isSignUpComplete) {
-        router.push("/login?confirmed=1");
+        router.push(withNext("/login?confirmed=1", nextPath));
         return;
       }
 

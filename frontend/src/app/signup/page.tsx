@@ -6,6 +6,7 @@
 import type { Metadata } from "next";
 import TopBar from "@/components/home/TopBar";
 import SignUpForm from "@/components/auth/SignUpForm";
+import { safeNextPath } from "@/lib/auth/safeNext";
 
 export const metadata: Metadata = {
   title: "Create an Account",
@@ -18,8 +19,9 @@ export const metadata: Metadata = {
 export default function SignUpPage({
   searchParams,
 }: {
-  searchParams?: { role?: string | string[] };
+  searchParams?: { role?: string | string[]; next?: string | string[] };
 }) {
+  const next = safeNextPath(searchParams?.next);
   const initialRole = searchParams?.role === "owner" ? "owner" : undefined;
 
   return (
@@ -37,7 +39,7 @@ export default function SignUpPage({
           </p>
 
           <div className="mt-6">
-            <SignUpForm initialRole={initialRole} />
+            <SignUpForm initialRole={initialRole} nextPath={next} />
           </div>
         </div>
       </div>

@@ -10,6 +10,7 @@
 import type { Metadata } from "next";
 import TopBar from "@/components/home/TopBar";
 import LoginForm from "@/components/auth/LoginForm";
+import { safeNextPath } from "@/lib/auth/safeNext";
 
 export const metadata: Metadata = {
   title: "Sign In",
@@ -25,8 +26,9 @@ export const metadata: Metadata = {
 export default function LoginPage({
   searchParams,
 }: {
-  searchParams: { confirmed?: string; reset?: string };
+  searchParams: { confirmed?: string; reset?: string; next?: string | string[] };
 }) {
+  const next = safeNextPath(searchParams.next);
   const banner = searchParams.confirmed
     ? "Your account is confirmed — sign in below."
     : searchParams.reset
@@ -57,7 +59,7 @@ export default function LoginPage({
           )}
 
           <div className="mt-6">
-            <LoginForm />
+            <LoginForm nextPath={next} />
           </div>
         </div>
       </div>

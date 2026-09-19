@@ -1,9 +1,23 @@
-// Hero section for the public restaurant detail page: cover photo (or the
-// homepage card's gradient placeholder when none exists), name, cuisine
-// tags, open/closed status, and address/phone when a location exists.
-import { LocationPinIcon, PhoneIcon } from "@/components/ui/icons";
+// Hero for the public restaurant detail page: a photo carousel of the
+// location's cover photo + gallery (so owners can show dish photos, not
+// just one banner), then the name and cuisine tags.
+//
+// Photo count decides the rendering:
+//   0 photos -> the shared coffee-cup default image on the warm gradient
+//   1 photo  -> a plain image, no controls
+//   2+       -> RestaurantPhotoCarousel (client component)
+// `gallery_photos` already arrives pre-truncated by the backend to the
+// location's tier limit (2 free / 10 paid, docs/DECISIONS.md "Photo
+// gallery") -- this only merges and renders, it does not re-implement that
+// gate.
+//
+// The open/closed status is deliberately NOT overlaid on the photo any more:
+// the sidebar info card carries it (RestaurantInfoCard), so repeating it
+// here would just be noise.
 import DefaultRestaurantImage from "@/components/ui/DefaultRestaurantImage";
-import OpenStatusBadge from "@/components/ui/OpenStatusBadge";
+import RestaurantPhotoCarousel, {
+  type CarouselPhoto,
+} from "@/components/restaurant/RestaurantPhotoCarousel";
 import type { RestaurantBrand } from "@/types/restaurant";
 import type { LocationDetail } from "@/types/location";
 
@@ -14,27 +28,42 @@ interface RestaurantHeroProps {
   location: LocationDetail | null;
 }
 
+/** Cover first, then gallery in display order; a cover that is also a
+ * gallery entry (same URL) is shown once. */
+function collectPhotos(name: string, location: LocationDetail | null): CarouselPhoto[] {
+  if (!location) return [];
+  const urls: string[] = [];
+  if (location.cover_photo_url) urls.push(location.cover_photo_url);
+  [...location.gallery_photos]
+    .sort((a, b) => a.display_order - b.display_order)
+    .forEach((photo) => {
+      if (!urls.includes(photo.url)) urls.push(photo.url);
+    });
+  return urls.map((url, index) => ({ url, alt: `${name} photo ${index + 1}` }));
+}
+
 export default function RestaurantHero({ restaurant, location }: RestaurantHeroProps) {
+  const photos = collectPhotos(restaurant.name, location);
+
   return (
-    <section>
-      <div className="relative h-56 w-full overflow-hidden rounded-brand-card border border-brand-border bg-brand-warm-gradient sm:h-72">
-        {location?.cover_photo_url ? (
-          // eslint-disable-next-line @next/next/no-img-element -- remote
-          // CloudFront URL, no next/image domain config for this host yet.
-          <img
-            src={location.cover_photo_url}
-            alt={`${restaurant.name} cover photo`}
-            className="absolute inset-0 h-full w-full object-cover"
-          />
-        ) : (
-          <DefaultRestaurantImage />
-        )}
-        {location && (
-          <div className="absolute right-3 top-3">
-            <OpenStatusBadge isOpenNow={location.is_open_now} />
-          </div>
-        )}
-      </div>
+    <section aria-label={`${restaurant.name} photos and summary`}>
+      {photos.length >= 2 ? (
+        <RestaurantPhotoCarousel photos={photos} label={`${restaurant.name} photos`} />
+      ) : (
+        <div className="relative aspect-[4/3] w-full overflow-hidden rounded-brand-card border border-brand-border bg-brand-warm-gradient sm:aspect-[16/9]">
+          {photos.length === 1 && photos[0] ? (
+            // eslint-disable-next-line @next/next/no-img-element -- remote
+            // CloudFront URL, no next/image domain config for this host yet.
+            <img
+              src={photos[0].url}
+              alt={photos[0].alt}
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+          ) : (
+            <DefaultRestaurantImage />
+          )}
+        </div>
+      )}
 
       <div className="mt-5 flex flex-col gap-3">
         <h1 className="font-display text-3xl font-bold text-brand-ink sm:text-4xl">
@@ -51,27 +80,6 @@ export default function RestaurantHero({ restaurant, location }: RestaurantHeroP
                 {tag.display_name}
               </span>
             ))}
-          </div>
-        )}
-
-        {restaurant.description && (
-          <p className="max-w-2xl text-sm text-brand-ink-muted">{restaurant.description}</p>
-        )}
-
-        {location && (
-          <div className="flex flex-col gap-1.5 text-sm text-brand-ink-subtle sm:flex-row sm:items-center sm:gap-4">
-            <span className="flex items-center gap-1.5">
-              <LocationPinIcon className="h-4 w-4 shrink-0" />
-              {location.address_line1}
-              {location.address_line2 ? `, ${location.address_line2}` : ""}, {location.city}, {location.state}{" "}
-              {location.postal_code}
-            </span>
-            {location.phone && (
-              <a href={`tel:${location.phone}`} className="flex items-center gap-1.5 hover:text-brand-ink hover:underline">
-                <PhoneIcon className="h-4 w-4 shrink-0" />
-                {location.phone}
-              </a>
-            )}
           </div>
         )}
       </div>

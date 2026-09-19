@@ -8,9 +8,8 @@
 // `owner`, since the claimant doesn't have the `owner` group yet at
 // submit time (that's granted on approval). Gated with the existing
 // `requireSession` pattern (frontend/src/lib/auth/guards.ts), which
-// redirects to `/login` with no return-to param — frontend/src/lib/auth/
-// has no return-to support today (JUDGMENT CALL, see final report); the
-// intended `/claim?brand_id=...` destination is simply lost on redirect.
+// redirects a signed-out visitor to `/login?next=/claim?brand_id=...`;
+// login / sign-up / confirm carry `next` through and return them here.
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ApiError } from "@/lib/api/client";
@@ -39,9 +38,13 @@ function parseBrandId(raw: string | undefined): number | null {
 export default async function ClaimPage({ searchParams }: ClaimPageProps) {
   // Any authenticated user may submit a claim (docs/API_CONTRACTS.md
   // "POST /claim" — "any authenticated Cognito user (the claimant)").
-  await requireSession([...ALL_AUTHENTICATED_ROLES]);
-
   const brandId = parseBrandId(searchParams.brand_id);
+  // A signed-out visitor is sent to sign in (or create an account from
+  // there) and returned here afterwards -- see lib/auth/safeNext.ts.
+  await requireSession(
+    [...ALL_AUTHENTICATED_ROLES],
+    brandId === null ? "/claim" : `/claim?brand_id=${brandId}`,
+  );
 
   return (
     <main className="min-h-screen bg-brand-bg">

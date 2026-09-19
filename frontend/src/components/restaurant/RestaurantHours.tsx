@@ -1,59 +1,72 @@
-// Weekly hours list for the restaurant detail page, rendered from
+// Compact weekly hours list for the sidebar info card, rendered from
 // `LocationDetail.hours` (docs/API_CONTRACTS.md "GET /locations/{id}" —
-// all 7 `restaurant_hours` rows, day_of_week 0=Monday..6=Sunday). A day
-// missing from the array is treated the same as `is_closed: null`
-// ("hours unknown", never guessed) per that same contract note.
-import { ClockIcon } from "@/components/ui/icons";
+// day_of_week 0=Monday..6=Sunday). Seven short rows, today highlighted.
+// A day that is missing or `is_closed: null` is "hours unknown" and is
+// simply left out rather than guessed or shown as a placeholder (same
+// "never a Hours-unknown label" stance as OpenStatusBadge); if no day has
+// known hours the whole list is omitted.
+import { formatShortTime } from "@/lib/formatHours";
 import type { LocationHour } from "@/types/location";
 
-const DAY_NAMES = [
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-  "Sunday",
+const DAYS = [
+  { short: "Mon", full: "Monday" },
+  { short: "Tue", full: "Tuesday" },
+  { short: "Wed", full: "Wednesday" },
+  { short: "Thu", full: "Thursday" },
+  { short: "Fri", full: "Friday" },
+  { short: "Sat", full: "Saturday" },
+  { short: "Sun", full: "Sunday" },
 ];
 
-/** "14:00:00" -> "2:00 PM" — hours come back as `time` strings, not Dates. */
-function formatTime(time: string): string {
-  const [hourStr, minuteStr] = time.split(":");
-  const hour = parseInt(hourStr ?? "0", 10);
-  const minute = minuteStr ?? "00";
-  const period = hour >= 12 ? "PM" : "AM";
-  const displayHour = hour % 12 === 0 ? 12 : hour % 12;
-  return `${displayHour}:${minute} ${period}`;
-}
-
-function describeDay(hour: LocationHour | undefined): string {
-  if (!hour || hour.is_closed === null) return "Hours unknown";
+/** Known-hours label for a day, or null when unknown. */
+function describeDay(hour: LocationHour | undefined): string | null {
+  if (!hour || hour.is_closed === null) return null;
   if (hour.is_closed) return "Closed";
   if (hour.open_time && hour.close_time) {
-    return `${formatTime(hour.open_time)} – ${formatTime(hour.close_time)}`;
+    return `${formatShortTime(hour.open_time)} – ${formatShortTime(hour.close_time)}`;
   }
-  return "Hours unknown";
+  return null;
 }
 
-export default function RestaurantHours({ hours }: { hours: LocationHour[] }) {
-  return (
-    <section aria-labelledby="hours-heading">
-      <h2 id="hours-heading" className="flex items-center gap-2 font-display text-xl font-bold text-brand-ink">
-        <ClockIcon className="h-5 w-5 text-brand-ink-subtle" />
-        Hours
-      </h2>
+export default function RestaurantHours({
+  hours,
+  todayIndex,
+}: {
+  hours: LocationHour[];
+  /** 0=Monday..6=Sunday in the location's timezone, or null. */
+  todayIndex: number | null;
+}) {
+  const rows = DAYS.map((day, index) => ({
+    day,
+    index,
+    label: describeDay(hours.find((h) => h.day_of_week === index)),
+  })).filter((row) => row.label !== null);
 
-      <ul className="mt-4 divide-y divide-brand-border rounded-brand-card border border-brand-border bg-white">
-        {DAY_NAMES.map((day, index) => {
-          const hour = hours.find((h) => h.day_of_week === index);
+  if (rows.length === 0) return null;
+
+  return (
+    <div>
+      <h2 className="font-display text-base font-semibold text-brand-ink">Hours</h2>
+      <ul className="mt-2 flex flex-col gap-0.5 text-sm">
+        {rows.map(({ day, index, label }) => {
+          const isToday = index === todayIndex;
           return (
-            <li key={day} className="flex items-center justify-between px-4 py-3 text-sm">
-              <span className="font-medium text-brand-ink">{day}</span>
-              <span className="text-brand-ink-muted">{describeDay(hour)}</span>
+            <li
+              key={day.short}
+              aria-current={isToday ? "date" : undefined}
+              className={`flex items-center justify-between rounded-brand-control px-2.5 py-1.5 ${
+                isToday ? "bg-brand-chip font-semibold text-brand-ink" : "text-brand-ink-muted"
+              }`}
+            >
+              <span>
+                <span aria-hidden="true">{day.short}</span>
+                <span className="sr-only">{isToday ? `${day.full} (today)` : day.full}</span>
+              </span>
+              <span>{label}</span>
             </li>
           );
         })}
       </ul>
-    </section>
+    </div>
   );
 }
