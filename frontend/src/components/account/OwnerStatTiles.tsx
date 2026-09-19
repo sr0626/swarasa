@@ -1,12 +1,18 @@
-// Stat tiles across the top of the owner's /account: restaurants, locations,
-// paid vs free locations. Counts are derived from data the page already
-// loads (GET /restaurants + per-brand GET /restaurants/{id}/locations).
+// Stat tiles across the top of the owner's My restaurants panel
+// (/portal/dashboard): restaurants, locations, paid vs free locations. Counts
+// are derived from data the page already loads (GET /restaurants + per-brand
+// GET /restaurants/{id}/locations).
 // Paid/free are only shown when every brand's locations loaded; otherwise a
 // dash, never a partial (misleading) number.
 //
 // Pending claims are deliberately not a tile: GET /claim is admin-only, and
 // there is no owner-scoped claims endpoint (flagged in the PR).
-import type { OwnerBrandSummary } from "@/components/account/OwnerRestaurantsPanel";
+
+/** The minimal per-brand shape the tiles need (satisfied by any loaded brand). */
+export interface OwnerStatBrand {
+  locations: ReadonlyArray<{ is_paid: boolean }>;
+  locationsError: string | null;
+}
 
 interface Tile {
   label: string;
@@ -17,7 +23,7 @@ export default function OwnerStatTiles({
   brands,
   loadFailed,
 }: {
-  brands: OwnerBrandSummary[];
+  brands: ReadonlyArray<OwnerStatBrand>;
   loadFailed: boolean;
 }) {
   const locationsComplete = !loadFailed && brands.every((b) => b.locationsError === null);
