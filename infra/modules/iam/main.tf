@@ -98,6 +98,20 @@ resource "aws_iam_role_policy" "api_lambda_custom" {
         Effect   = "Allow"
         Action   = ["cognito-idp:ListUsers"]
         Resource = var.cognito_user_pool_arn
+      },
+      {
+        # Claim approval: adds the approved claimant to the `owner` pool group
+        # (admin_add_user_to_group) and resolves their pool identity
+        # (admin_get_user) when the sub alone isn't accepted as Username.
+        # Two actions, one pool ARN. No AdminCreateUser/AdminDeleteUser/
+        # AdminUpdateUserAttributes.
+        Sid    = "CognitoOwnerGroupAssignmentOnThisPoolOnly"
+        Effect = "Allow"
+        Action = [
+          "cognito-idp:AdminAddUserToGroup",
+          "cognito-idp:AdminGetUser"
+        ]
+        Resource = var.cognito_user_pool_arn
       }
     ]
   })
