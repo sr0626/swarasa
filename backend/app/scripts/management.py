@@ -153,6 +153,59 @@ def _run_dev_unclaim_restaurants(event: dict) -> dict:
     return {"ok": True, "command": "dev_unclaim_restaurants", **asyncio.run(_run_and_dispose())}
 
 
+@_command("list_ungeocoded_locations")
+def _run_list_ungeocoded_locations(event: dict) -> dict:
+    """Read-only: active locations with NULL `geom`. See
+    app/scripts/geocode_backfill.py. Geocoding happens on the human's
+    machine (scripts/geocode_missing_locations.py), never in this Lambda.
+
+    Event payload shape: {"_management_command": "list_ungeocoded_locations"}
+    """
+    from app.db.session import dispose_engine
+    from app.scripts.geocode_backfill import run_list_ungeocoded_locations
+
+    # Same same-loop-disposal reasoning as _run_seed_dev_data above.
+    async def _run_and_dispose() -> dict:
+        try:
+            return await run_list_ungeocoded_locations()
+        finally:
+            await dispose_engine()
+
+    return {"ok": True, "command": "list_ungeocoded_locations", **asyncio.run(_run_and_dispose())}
+
+
+@_command("set_location_coordinates")
+def _run_set_location_coordinates(event: dict) -> dict:
+    """Writes latitude/longitude + PostGIS `geom` for the given locations,
+    audit-logged, idempotent. See app/scripts/geocode_backfill.py.
+
+    Event payload shape:
+        {"_management_command": "set_location_coordinates",
+         "locations": [{"location_id": 1, "latitude": 32.8, "longitude": -96.9}, ...],
+         "overwrite": false}     # optional; default never moves an existing point
+    """
+    from app.db.session import dispose_engine
+    from app.scripts.geocode_backfill import run_set_location_coordinates
+
+    entries = event.get("locations")
+    if not isinstance(entries, list) or not entries:
+        return {
+            "ok": False,
+            "command": "set_location_coordinates",
+            "error": "Event payload needs a non-empty 'locations' list.",
+        }
+    overwrite = event.get("overwrite") is True
+
+    # Same same-loop-disposal reasoning as _run_seed_dev_data above.
+    async def _run_and_dispose() -> dict:
+        try:
+            return await run_set_location_coordinates(entries, overwrite)
+        finally:
+            await dispose_engine()
+
+    return {"ok": True, "command": "set_location_coordinates", **asyncio.run(_run_and_dispose())}
+
+
 @_command("bulk_import_restaurants")
 def _run_bulk_import_restaurants(event: dict) -> dict:
     """One-off/reusable restaurant basic-detail bulk import, run the same
