@@ -7,7 +7,7 @@
 // own `requireSession` gate) since a Server Action is a real network
 // endpoint Next.js exposes, callable on its own.
 import { ApiError } from "@/lib/api/client";
-import { approveClaim, getClaimById, rejectClaim } from "@/lib/api/claim";
+import { approveClaim, rejectClaim } from "@/lib/api/claim";
 import { getServerSession } from "@/lib/auth/session";
 import { approveClaimSchema, rejectClaimSchema } from "@/lib/validation/claim";
 import type { ClaimResponse } from "@/types/claim";
@@ -35,19 +35,6 @@ function messageFor(error: unknown, notFoundMessage: string): string {
     return error.message;
   }
   return "Something went wrong. Please try again.";
-}
-
-/** GET /claim/{id} — auth: the claimant (own claim) or admin (any claim). */
-export async function lookupClaimAction(claimId: number): Promise<ClaimActionResult> {
-  const admin = await requireAdminAccessToken();
-  if (!admin.ok) return admin;
-
-  try {
-    const claim = await getClaimById(claimId, admin.accessToken);
-    return { ok: true, claim };
-  } catch (error) {
-    return { ok: false, error: messageFor(error, `No claim found with id #${claimId}.`) };
-  }
 }
 
 /** POST /claim/{id}/approve — auth: admin. */

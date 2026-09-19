@@ -1128,6 +1128,49 @@ brand at a time (partial unique index) — a second `POST /claim` for
 the same `brand_id` while one is already pending should return `409
 Conflict`, not create a competing row.
 
+### GET /claim
+
+Admin claims queue (`GET /claim`, no id).
+
+Auth: admin only. Query: `status` (optional; `pending_review` (default) |
+`approved` | `rejected`, else `422`), `page`, `page_size` (default 20,
+max 100). Ordering: newest first (`submitted_at` desc, `id` desc).
+
+Response: `200`
+```json
+{
+  "results": [
+    {
+      "claim_id": 789,
+      "brand_id": 123,
+      "brand_name": "Spice Route",
+      "brand_slug": "spice-route",
+      "location_id": 456,
+      "location_address": "100 Main St, Irving, TX 75038",
+      "claimant_user_id": "b3c1...-cognito-sub",
+      "claimant_email": "owner@example.com",
+      "proof_method": "document_upload",
+      "google_business_profile_url": null,
+      "supporting_document_url": "claims/abc/proof.pdf",
+      "status": "pending_review",
+      "submitted_at": "2026-09-12T10:00:00Z",
+      "sla_due_at": "2026-09-16T10:00:00Z",
+      "reviewed_at": null,
+      "reviewer_notes": null
+    }
+  ],
+  "page": 1,
+  "page_size": 20,
+  "total": 1
+}
+```
+`claimant_email` is `owner_account.email` matched on
+`claim_request.claimant_user_id = owner_account.cognito_sub` (the row
+`POST /claim` eagerly creates), `null` if no such row exists.
+`location_address` / `location_id` are `null` when the claim has no
+`location_id`. `supporting_document_url` is the stored S3 key as-is; no
+presigned read URL is minted by this endpoint.
+
 ### GET /claim/{id}
 
 Auth: the claimant (own claim only) or admin (any claim)

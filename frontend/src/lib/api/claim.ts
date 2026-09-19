@@ -1,8 +1,11 @@
 // Typed client for /claim — docs/API_CONTRACTS.md "Claim flow (`/claim`)".
-import { apiFetch } from "./client";
+import { apiFetch, toQueryString } from "./client";
+import type { PaginatedResponse, PaginationParams } from "@/types/common";
 import type {
   ApproveClaimInput,
+  ClaimQueueItem,
   ClaimResponse,
+  ClaimStatus,
   CreateClaimInput,
   RejectClaimInput,
 } from "@/types/claim";
@@ -15,6 +18,26 @@ export async function submitClaim(
   return apiFetch<ClaimResponse>(
     "/claim",
     { method: "POST", body: JSON.stringify(input) },
+    { accessToken }
+  );
+}
+
+/**
+ * GET /claim — auth: admin. Claims queue, newest first; `status` defaults
+ * to `pending_review` server-side.
+ */
+export async function listClaims(
+  params: PaginationParams & { status?: ClaimStatus },
+  accessToken: string
+): Promise<PaginatedResponse<ClaimQueueItem>> {
+  const query = toQueryString({
+    status: params.status,
+    page: params.page,
+    page_size: params.page_size,
+  });
+  return apiFetch<PaginatedResponse<ClaimQueueItem>>(
+    `/claim${query}`,
+    { method: "GET" },
     { accessToken }
   );
 }

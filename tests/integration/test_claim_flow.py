@@ -10,12 +10,13 @@ function is touched by any claim-flow code path).
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import select
 
 from app.models.owner_account import OwnerAccount
-from factories import create_brand, create_location
+from factories import create_brand, create_claim, create_location, create_owner
 
 
 @pytest.mark.asyncio
@@ -191,3 +192,93 @@ async def test_phone_verification_requires_location_id_for_multi_location_brand(
     )
     assert resp.status_code == 400
     assert resp.json()["code"] == "location_required"
+
+
+# ---------------------------------------------------------------------------
+# GET /claim — admin claims queue
+# ---------------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_list_claims_requires_auth(client, as_anonymous):
+    resp = await client.get("/claim")
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["registered_user", "owner", "manager"])
+async def test_list_claims_forbidden_for_non_admin(client, as_user, role):
+    as_user(role)
+    resp = await client.get("/claim")
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_admin_list_claims_defaults_to_pending_newest_first_with_joins(client, db_session, as_user):
+    now = datetime.now(timezone.utc)
+    owner = await create_owner(db_session)
+    brand_a = await create_brand(db_session, is_claimed=False, owner_id=None)
+    brand_b = await create_brand(db_session, is_claimed=False, owner_id=None)
+    brand_c = await create_brand(db_session, is_claimed=False, owner_id=None)
+    location = await create_location(db_session, brand_id=brand_a.id)
+    older = await create_claim(
+        db_session,
+        brand_id=brand_a.id,
+        location_id=location.id,
+        claimant_user_id=owner.cognito_sub,
+        submitted_at=now - timedelta(days=2),
+    )
+    newer = await create_claim(
+        db_session,
+        brand_id=brand_b.id,
+        claimant_user_id=str(uuid.uuid4()),  # no owner_account row
+        proof_method="document_upload",
+        google_business_profile_url=None,
+        supporting_document_key="claims/abc/proof.pdf",
+        submitted_at=now - timedelta(hours=1),
+    )
+    approved = await create_claim(
+        db_session, brand_id=brand_c.id, status="approved", submitted_at=now - timedelta(days=5)
+    )
+    await db_session.commit()
+
+    as_user("admin")
+    resp = await client.get("/claim")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["total"] == 2
+    assert (body["page"], body["page_size"]) == (1, 20)
+    assert [r["claim_id"] for r in body["results"]] == [newer.id, older.id]
+
+    newer_out, older_out = body["results"]
+    assert newer_out["brand_name"] == brand_b.name
+    assert newer_out["brand_slug"] == brand_b.slug
+    assert newer_out["claimant_email"] is None
+    assert newer_out["location_address"] is None
+    assert newer_out["proof_method"] == "document_upload"
+    assert newer_out["supporting_document_url"] == "claims/abc/proof.pdf"
+    assert newer_out["status"] == "pending_review"
+    assert newer_out["sla_due_at"] is not None
+
+    assert older_out["claimant_email"] == owner.email
+    assert location.address_line1 in older_out["location_address"]
+    assert older_out["google_business_profile_url"]
+
+    approved_resp = await client.get("/claim", params={"status": "approved"})
+    assert [r["claim_id"] for r in approved_resp.json()["results"]] == [approved.id]
+
+
+@pytest.mark.asyncio
+async def test_admin_list_claims_pagination_and_bad_status(client, db_session, as_user):
+    now = datetime.now(timezone.utc)
+    for i in range(3):
+        brand = await create_brand(db_session, is_claimed=False, owner_id=None)
+        await create_claim(db_session, brand_id=brand.id, submitted_at=now - timedelta(hours=i))
+    await db_session.commit()
+
+    as_user("admin")
+    page2 = await client.get("/claim", params={"page": 2, "page_size": 2})
+    assert page2.status_code == 200
+    assert page2.json()["total"] == 3
+    assert len(page2.json()["results"]) == 1
+
+    assert (await client.get("/claim", params={"status": "bogus"})).status_code == 422
+    assert (await client.get("/claim", params={"page_size": 101})).status_code == 422

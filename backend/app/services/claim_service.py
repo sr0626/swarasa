@@ -25,12 +25,15 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.errors import AppError
+from app.dependencies.pagination import Pagination
 from app.models.claim_request import ClaimRequest
+from app.models.owner_account import OwnerAccount
 from app.models.restaurant_brand import RestaurantBrand
 from app.models.restaurant_location import RestaurantLocation
-from app.schemas.claim import ClaimCreate, ClaimOut
+from app.schemas.claim import ClaimCreate, ClaimListResponse, ClaimOut, ClaimQueueItem
 from app.services import audit_service, auth_service
 
 _SLA_BUSINESS_DAYS = 2
@@ -56,6 +59,62 @@ def to_claim_out(claim: ClaimRequest) -> ClaimOut:
         sla_due_at=_add_business_days(claim.submitted_at, _SLA_BUSINESS_DAYS),
         reviewed_at=claim.reviewed_at,
         reviewer_notes=claim.reviewer_notes,
+    )
+
+
+def to_claim_queue_item(claim: ClaimRequest, claimant_email: str | None) -> ClaimQueueItem:
+    location = claim.location
+    return ClaimQueueItem(
+        claim_id=claim.id,
+        brand_id=claim.brand_id,
+        brand_name=claim.brand.name,
+        brand_slug=claim.brand.slug,
+        location_id=claim.location_id,
+        location_address=(
+            f"{location.address_line1}, {location.city}, {location.state} {location.postal_code}"
+            if location is not None
+            else None
+        ),
+        claimant_user_id=claim.claimant_user_id,
+        claimant_email=claimant_email,
+        proof_method=claim.proof_method,
+        google_business_profile_url=claim.google_business_profile_url,
+        supporting_document_url=claim.supporting_document_key,
+        status=claim.status,
+        submitted_at=claim.submitted_at,
+        sla_due_at=_add_business_days(claim.submitted_at, _SLA_BUSINESS_DAYS),
+        reviewed_at=claim.reviewed_at,
+        reviewer_notes=claim.reviewer_notes,
+    )
+
+
+async def list_claims(
+    db: AsyncSession, pagination: Pagination, status: str = "pending_review"
+) -> ClaimListResponse:
+    """Admin claims queue, newest first. Claimant email comes from
+    `owner_account` (outer-joined on cognito_sub; `create_claim` eagerly
+    creates that row) and is `None` when no such row exists."""
+    total = (
+        await db.execute(
+            select(func.count()).select_from(ClaimRequest).where(ClaimRequest.status == status)
+        )
+    ).scalar_one()
+    rows = (
+        await db.execute(
+            select(ClaimRequest, OwnerAccount.email)
+            .outerjoin(OwnerAccount, OwnerAccount.cognito_sub == ClaimRequest.claimant_user_id)
+            .options(selectinload(ClaimRequest.brand), selectinload(ClaimRequest.location))
+            .where(ClaimRequest.status == status)
+            .order_by(ClaimRequest.submitted_at.desc(), ClaimRequest.id.desc())
+            .offset(pagination.offset)
+            .limit(pagination.page_size)
+        )
+    ).all()
+    return ClaimListResponse(
+        results=[to_claim_queue_item(claim, email) for claim, email in rows],
+        page=pagination.page,
+        page_size=pagination.page_size,
+        total=total,
     )
 
 
