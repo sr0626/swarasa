@@ -522,3 +522,18 @@ git push -u origin infra/amplify-contact-email   # claude (merged as #150)
 terraform plan -var-file=envs/dev.tfvars   # user  (infra/, swarasa-dev; contact_email in aws_amplify_app.frontend)
 terraform apply -var-file=envs/dev.tfvars   # user
 ```
+
+## 2026-09-22 (later)
+```bash
+git push -u origin infra/fix-plan-warnings   # claude
+git push -u origin fix/ccpa-listing-report-coverage   # claude
+git push -u origin feat/admin-claims-show-owner-group-status   # claude
+git push -u origin fix/data-export-type-listing-reports   # claude
+git push -u origin feature/restaurant-status-lifecycle   # claude (finished + pushed to the existing WIP branch)
+git push -u origin feat/follow-button-tiles-and-detail   # claude
+terraform -chdir=infra init   # user
+terraform -chdir=infra plan -var-file=envs/dev.tfvars   # user (x2 -- contact_email pickup, then S3 lifecycle filter)
+terraform -chdir=infra apply -var-file=envs/dev.tfvars   # user (x2)
+python3 scripts/list_users.py   # user
+aws sso login --profile swarasa-dev   # user (expired session)
+```
