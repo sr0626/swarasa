@@ -30,11 +30,15 @@ export async function getCurrentUser(accessToken: string): Promise<AuthMe> {
 }
 
 /**
- * PATCH /auth/me — auth: owner ONLY per the real contract
- * (docs/API_CONTRACTS.md "PATCH /auth/me": "Auth: owner"). Manager, admin,
- * and registered_user callers get a 403 — the account page only renders
- * this as an editable form for an owner session; see its own comment for
- * the full judgment call.
+ * PATCH /auth/me — full_name + phone, backing `ProfileEditForm`
+ * (owner-only in practice today). The route itself accepts any authenticated
+ * role (`update_me` in backend/app/routers/auth.py takes `get_current_user`,
+ * not `require_owner` — broadened in PR #83), but `owner_account` is still
+ * the only local record with a `phone` field, so a manager/admin/
+ * registered_user caller gets `404 no_editable_profile`, not the `403` an
+ * older version of this comment claimed. Fixed here while adding
+ * `updateMyProfile` below for the roles that DO have something to submit
+ * (name only, no phone) — see that function's comment.
  */
 export async function updateCurrentUser(
   input: UpdateAuthMeInput,

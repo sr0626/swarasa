@@ -76,7 +76,8 @@ export async function updateProfileAction(
 /**
  * PATCH /auth/me — generalized display-name update for `registered_user`/
  * `manager` (docs/PROJECT_PLAN.csv "Generic user display name for
- * registered_user/manager"; see components/account/DisplayNameForm.tsx).
+ * registered_user/manager"; see components/account/DisplayNameForm.tsx and
+ * components/account/NameEditForm.tsx, which both call this same action).
  * Separate action from `updateProfileAction` above (which stays owner-only
  * and posts `full_name` + `phone`) so each form only ever sends the shape
  * its own role can actually persist.
@@ -99,6 +100,15 @@ export async function updateDisplayNameAction(
     const result = await updateMyProfile(parsed.data, auth.accessToken);
     return { ok: true, data: result };
   } catch (error) {
+    // Defensive: covers a brief window where the frontend deploys ahead of
+    // the backend that persists this field (see auth_service.update_me).
+    if (error instanceof ApiError && error.status === 404) {
+      return {
+        ok: false,
+        error:
+          "Name editing isn't turned on for your account yet — check back soon, or contact support if it's urgent.",
+      };
+    }
     return { ok: false, error: messageFor(error, "Something went wrong saving your name.") };
   }
 }

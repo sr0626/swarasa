@@ -39,3 +39,16 @@ export const OWNER_NAV_ITEMS: ReadonlyArray<ConsoleNavItem> = [
   },
   { href: "/portal/brands/new", label: "Add a restaurant", icon: "plus" },
 ];
+
+// Two flat items rather than one item with subItems (contrast with
+// OWNER_NAV_ITEMS above): a manager's /account is a single short page with
+// exactly two sections, so a top-level "Profile" link that jumps straight to
+// `#profile` reads better than a submenu under one umbrella label. "My
+// locations" has no hash -- it's simply the top of the page, the default
+// view. The `#profile` anchor id is the same convention OWNER_NAV_ITEMS
+// already uses for its own `/account#profile` link -- keep the id on
+// ManagerAccountView's profile section in sync with this href.
+export const MANAGER_NAV_ITEMS: ReadonlyArray<ConsoleNavItem> = [
+  { href: "/account", label: "My locations", icon: "store" },
+  { href: "/account#profile", label: "Profile", icon: "user" },
+];

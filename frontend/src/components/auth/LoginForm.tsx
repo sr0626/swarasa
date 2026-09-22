@@ -40,15 +40,19 @@ import { PasswordInput } from "@/components/ui/PasswordInput";
 import type { UserRole } from "@/types/auth";
 
 /**
- * Where each pool group lands after sign-in. Owners land on their business
- * page (/account -- their profile page is their dashboard); managers use the
- * portal dashboard (frontend/CLAUDE.md's "Auth-gated portal pages"
- * pattern); admin has its own section; a registered_user has no gated
- * area yet in Phase 1, so it goes back to the homepage.
+ * Where each pool group lands after sign-in. Owners and managers both land
+ * on /account -- their own console (business page / manager console,
+ * components/portal/OwnerShell.tsx / ManagerShell.tsx); admin has its own
+ * section; a registered_user has no gated area yet in Phase 1, so it goes
+ * back to the homepage.
+ *
+ * `manager` pointed at `/portal/dashboard` before the manager console
+ * redesign -- that route is now just a redirect back to `/account`, so this
+ * goes straight there instead of bouncing through it.
  */
 const ROLE_LANDING: Record<UserRole, string> = {
   owner: "/account",
-  manager: "/portal/dashboard",
+  manager: "/account",
   admin: "/admin/listings",
   registered_user: "/",
 };
