@@ -36,6 +36,7 @@ from app.models.restaurant_brand import RestaurantBrand
 from app.models.restaurant_location import RestaurantLocation
 from app.models.restaurant_photo import RestaurantPhoto
 from app.models.user_follow import UserFollow
+from app.models.user_profile import UserProfile
 
 
 def _cognito_sub() -> str:
@@ -186,6 +187,18 @@ class CuisineTagFactory(factory.Factory):
     is_active = True
 
 
+class UserProfileFactory(factory.Factory):
+    """Backs `registered_user`/`manager` `full_name` (app/models/user_profile.py)
+    — see docs/PROJECT_PLAN.csv "Generic user display name for
+    registered_user/manager"."""
+
+    class Meta:
+        model = UserProfile
+
+    cognito_sub = factory.LazyFunction(_cognito_sub)
+    full_name = FactoryFaker("name")
+
+
 class RestaurantPhotoFactory(factory.Factory):
     class Meta:
         model = RestaurantPhoto
@@ -273,6 +286,13 @@ async def create_cuisine_tag(db: AsyncSession, **overrides) -> CuisineTag:
     db.add(tag)
     await db.flush()
     return tag
+
+
+async def create_user_profile(db: AsyncSession, **overrides) -> UserProfile:
+    profile = UserProfileFactory(**overrides)
+    db.add(profile)
+    await db.flush()
+    return profile
 
 
 def submitted_recently() -> datetime:

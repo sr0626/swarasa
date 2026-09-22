@@ -14,13 +14,17 @@
 import { ApiError } from "@/lib/api/client";
 import {
   exportMyData,
+  getMyActivity,
   requestDataDeletion,
   updateCurrentUser,
+  updateMyProfile,
 } from "@/lib/api/auth";
 import { getServerSession } from "@/lib/auth/session";
 import { requestDataDeletionSchema } from "@/lib/validation/account";
-import { updateAuthMeSchema } from "@/lib/validation/auth";
-import type { AuthMe } from "@/types/auth";
+import { updateAuthMeSchema, updateDisplayNameSchema } from "@/lib/validation/auth";
+import type { OwnerActivity } from "@/types/activity";
+import type { AuthMe, UpdateProfileResult } from "@/types/auth";
+import type { PaginatedResponse } from "@/types/common";
 import type { DataDeletionRequest, DataExport } from "@/types/privacy";
 
 type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -66,6 +70,66 @@ export async function updateProfileAction(
     return { ok: true, data: account };
   } catch (error) {
     return { ok: false, error: messageFor(error, "Something went wrong saving your profile.") };
+  }
+}
+
+/**
+ * PATCH /auth/me — generalized display-name update for `registered_user`/
+ * `manager` (docs/PROJECT_PLAN.csv "Generic user display name for
+ * registered_user/manager"; see components/account/DisplayNameForm.tsx and
+ * components/account/NameEditForm.tsx, which both call this same action).
+ * Separate action from `updateProfileAction` above (which stays owner-only
+ * and posts `full_name` + `phone`) so each form only ever sends the shape
+ * its own role can actually persist.
+ */
+export async function updateDisplayNameAction(
+  input: unknown
+): Promise<ActionResult<UpdateProfileResult>> {
+  const auth = await requireAccountSession();
+  if (!auth.ok) return auth;
+
+  const parsed = updateDisplayNameSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Please check the form and try again.",
+    };
+  }
+
+  try {
+    const result = await updateMyProfile(parsed.data, auth.accessToken);
+    return { ok: true, data: result };
+  } catch (error) {
+    // Defensive: covers a brief window where the frontend deploys ahead of
+    // the backend that persists this field (see auth_service.update_me).
+    if (error instanceof ApiError && error.status === 404) {
+      return {
+        ok: false,
+        error:
+          "Name editing isn't turned on for your account yet — check back soon, or contact support if it's urgent.",
+      };
+    }
+    return { ok: false, error: messageFor(error, "Something went wrong saving your name.") };
+  }
+}
+
+/**
+ * GET /auth/me/activity (owner only). Backs OwnerActivitySection's
+ * "Load more" button -- each click re-derives the session server-side and
+ * fetches the next page, same "keep the access token server-side" shape as
+ * every other action in this file.
+ */
+export async function getMyActivityAction(
+  page: number
+): Promise<ActionResult<PaginatedResponse<OwnerActivity>>> {
+  const auth = await requireAccountSession();
+  if (!auth.ok) return auth;
+
+  try {
+    const result = await getMyActivity({ page, page_size: 20 }, auth.accessToken);
+    return { ok: true, data: result };
+  } catch (error) {
+    return { ok: false, error: messageFor(error, "Could not load recent activity.") };
   }
 }
 

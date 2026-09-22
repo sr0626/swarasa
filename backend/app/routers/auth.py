@@ -9,11 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies.auth import (
     CurrentUser,
     get_current_user,
+    require_owner,
     require_registered_user,
 )
 from app.dependencies.db import get_db
 from app.dependencies.pagination import Pagination, pagination_params
-from app.schemas.auth import MeResponse, MeUpdateRequest, OwnerAccountOut
+from app.schemas.audit import OwnerActivityListResponse
+from app.schemas.auth import MeResponse, MeUpdateRequest, OwnerAccountOut, ProfileOut
 from app.schemas.follow import FollowListResponse
 from app.schemas.location_manager import ManagedLocationListResponse
 from app.schemas.privacy import (
@@ -22,7 +24,13 @@ from app.schemas.privacy import (
     DataDeletionRequestOut,
     DataExportOut,
 )
-from app.services import auth_service, follow_service, location_manager_service, privacy_service
+from app.services import (
+    audit_query_service,
+    auth_service,
+    follow_service,
+    location_manager_service,
+    privacy_service,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -35,20 +43,24 @@ async def get_me(
     return await auth_service.get_me(db, current_user)
 
 
-@router.patch("/me", response_model=OwnerAccountOut)
+@router.patch("/me", response_model=OwnerAccountOut | ProfileOut)
 async def update_me(
     body: MeUpdateRequest,
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
-) -> OwnerAccountOut:
+) -> OwnerAccountOut | ProfileOut:
     """Any authenticated role, self-scoped (docs/PROJECT_PLAN.csv "Broaden
     PATCH /auth/me beyond owner-only") — same auth posture GET /auth/me
     already uses. `require_owner` was an oversight from when this route was
     first built with only owner accounts in mind, not a deliberate
-    restriction: there is no local editable profile record for
-    manager/admin/registered_user today (only `owner_account` has
-    `full_name`/`phone`), so `auth_service.update_me` still 404s those
-    three roles with an explicit `no_editable_profile` code — never a bare
+    restriction.
+
+    Generalized further (docs/PROJECT_PLAN.csv "Generic user display name
+    for registered_user/manager"): `owner` keeps writing `owner_account`
+    unchanged; `registered_user`/`manager` now upsert `full_name` into the
+    new `user_profile` table (see `app/models/user_profile.py`) instead of
+    404ing. `admin` still has no local profile record to write to, so it
+    still 404s with an explicit `no_editable_profile` code — never a bare
     403, which would (incorrectly) read as a permissions problem rather
     than "there's nothing here to update yet."
     """
@@ -75,6 +87,20 @@ async def get_my_follows(
     current_user: CurrentUser = Depends(require_registered_user),
 ) -> FollowListResponse:
     return await follow_service.list_my_follows(db, current_user, pagination)
+
+
+@router.get("/me/activity", response_model=OwnerActivityListResponse)
+async def get_my_activity(
+    pagination: Pagination = Depends(pagination_params),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_owner),
+) -> OwnerActivityListResponse:
+    """Auth: owner. Read-only `audit_log` history scoped to entities this
+    owner actually owns (see `audit_query_service.list_owner_activity`'s
+    docstring) — surfaces manager-made edits on the owner's behalf, not
+    just the owner's own writes.
+    """
+    return await audit_query_service.list_owner_activity(db, current_user, pagination)
 
 
 @router.get("/me/data-export", response_model=DataExportOut)

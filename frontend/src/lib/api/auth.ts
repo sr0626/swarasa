@@ -5,7 +5,13 @@
 // through typed functions").
 import { apiFetch, toQueryString } from "./client";
 import type { PaginatedResponse, PaginationParams } from "@/types/common";
-import type { AuthMe, UpdateAuthMeInput } from "@/types/auth";
+import type {
+  AuthMe,
+  UpdateAuthMeInput,
+  UpdateProfileInput,
+  UpdateProfileResult,
+} from "@/types/auth";
+import type { OwnerActivity } from "@/types/activity";
 import type { FollowedBrand } from "@/types/follow";
 import type { ManagedLocation } from "@/types/location";
 import type {
@@ -24,17 +30,45 @@ export async function getCurrentUser(accessToken: string): Promise<AuthMe> {
 }
 
 /**
- * PATCH /auth/me — auth: owner ONLY per the real contract
- * (docs/API_CONTRACTS.md "PATCH /auth/me": "Auth: owner"). Manager, admin,
- * and registered_user callers get a 403 — the account page only renders
- * this as an editable form for an owner session; see its own comment for
- * the full judgment call.
+ * PATCH /auth/me — full_name + phone, backing `ProfileEditForm`
+ * (owner-only in practice today). The route itself accepts any authenticated
+ * role (`update_me` in backend/app/routers/auth.py takes `get_current_user`,
+ * not `require_owner` — broadened in PR #83), but `owner_account` is still
+ * the only local record with a `phone` field, so a manager/admin/
+ * registered_user caller gets `404 no_editable_profile`, not the `403` an
+ * older version of this comment claimed. Fixed here while adding
+ * `updateMyProfile` below for the roles that DO have something to submit
+ * (name only, no phone) — see that function's comment.
  */
 export async function updateCurrentUser(
   input: UpdateAuthMeInput,
   accessToken: string
 ): Promise<AuthMe["owner_account"]> {
   return apiFetch<AuthMe["owner_account"]>(
+    "/auth/me",
+    { method: "PATCH", body: JSON.stringify(input) },
+    { accessToken }
+  );
+}
+
+/**
+ * PATCH /auth/me — generalized display-name update for `registered_user`/
+ * `manager` callers (docs/API_CONTRACTS.md "PATCH /auth/me", generalized
+ * alongside the new `user_profile` table — see
+ * backend/app/models/user_profile.py). Separate from `updateCurrentUser`
+ * above (which is owner-only and returns the full `OwnerAccount` shape):
+ * this hits the same endpoint but only ever sends/receives `full_name` —
+ * the shape a registered_user/manager caller's write actually has. Safe to
+ * call for an owner session too (the backend still routes an owner caller
+ * to `owner_account`, `phone` simply stays untouched), but owner UI uses
+ * `updateCurrentUser` instead so it keeps getting `phone`/`id`/
+ * `stripe_customer_id` back.
+ */
+export async function updateMyProfile(
+  input: UpdateProfileInput,
+  accessToken: string
+): Promise<UpdateProfileResult> {
+  return apiFetch<UpdateProfileResult>(
     "/auth/me",
     { method: "PATCH", body: JSON.stringify(input) },
     { accessToken }
@@ -69,6 +103,23 @@ export async function getMyManagedLocations(
   const query = toQueryString({ page: params.page, page_size: params.page_size });
   return apiFetch<PaginatedResponse<ManagedLocation>>(
     `/auth/me/managed-locations${query}`,
+    { method: "GET" },
+    { accessToken }
+  );
+}
+
+/**
+ * GET /auth/me/activity — auth: owner only (docs/API_CONTRACTS.md
+ * "GET /auth/me/activity"). Owner-scoped read of `audit_log`, including
+ * manager edits made on the owner's behalf.
+ */
+export async function getMyActivity(
+  params: PaginationParams,
+  accessToken: string
+): Promise<PaginatedResponse<OwnerActivity>> {
+  const query = toQueryString({ page: params.page, page_size: params.page_size });
+  return apiFetch<PaginatedResponse<OwnerActivity>>(
+    `/auth/me/activity${query}`,
     { method: "GET" },
     { accessToken }
   );

@@ -63,6 +63,36 @@ python3 scripts/bulk_import_restaurants_csv.py --csv-file restaurants.csv
 python3 scripts/bulk_import_restaurants_csv.py --csv-file restaurants.csv --dry-run
 ```
 
+Example data: `scripts/data/dfw_multi_city_restaurants.csv` — ~17
+obviously-fictional restaurants (names suffixed "(Test Data)") with real,
+geocodable DFW-area street addresses outside Irving (Plano, Frisco,
+Dallas, Arlington, Fort Worth, Richardson, Carrollton, McKinney), same
+"fabricated, dev-only, never for prod" spirit as
+`backend/app/scripts/seed_random_hours.py`'s hours/phones. Owner emails
+point at `owner3@test.com`/`owner4@test.com` — these must already exist
+as Cognito users **and** have a local `owner_account` row (see
+`create_test_users.py` below and its "owner_account note") before this
+CSV will import successfully; see `scripts/data/README.md` for the exact
+run order.
+
+### `create_test_users.py`
+Creates short-email, fixed-password test users — N per role (owner,
+manager, admin, registered_user) — in the swarasa-dev Cognito user pool
+(`admin-create-user` + `admin-set-user-password --permanent` +
+`admin-add-user-to-group`, `MessageAction=SUPPRESS` so no invite email is
+sent to the fake address). Idempotent: an email that already exists is
+skipped, never touched. DEV-ONLY — see the script's own module docstring
+for the full naming convention, password, and the important
+"owner_account note" (a new Cognito user is NOT automatically an existing
+`owner_account` row; something still needs to trigger
+`get_or_create_owner_account`, e.g. one real login, before
+`bulk_import_restaurants_csv.py` can resolve that `owner_email`).
+
+```bash
+python3 scripts/create_test_users.py --dry-run
+python3 scripts/create_test_users.py
+```
+
 ### `dev_unclaim_restaurants.py`
 Un-assigns restaurants (owner removed, marked unclaimed) so the public
 "Claim this restaurant" flow can be tested. Defaults to two searchable
@@ -72,6 +102,20 @@ Dev database only. Reversible via an approved claim or a re-import.
 ```bash
 python3 scripts/dev_unclaim_restaurants.py
 python3 scripts/dev_unclaim_restaurants.py --slugs dera-grill taj-chaat-house
+```
+
+### `dev_clear_manager_assignments.py`
+Soft-removes (deactivates) a manager's active `location_manager`
+assignments by email — for exercising the manager cap / cross-owner /
+reassignment validation in `location_manager_service.py` repeatedly
+without clicking "remove manager" once per assignment in the owner
+portal. Defaults to ALL of that manager's active assignments; pass
+`--location-ids` to scope it, `--dry-run` to preview. Dev database only.
+Reversible via re-assignment.
+
+```bash
+python3 scripts/dev_clear_manager_assignments.py --manager-email manager@example.com
+python3 scripts/dev_clear_manager_assignments.py --manager-email manager@example.com --location-ids 12 34
 ```
 
 ### `geocode_missing_locations.py`

@@ -2,11 +2,23 @@
 // typed GET /search client, same graceful-degradation posture as the
 // homepage's `PopularNearYou` (frontend/CLAUDE.md "ALWAYS handle API
 // errors gracefully" / no fabricated restaurant data ever).
+//
+// The `location` text box (city/ZIP/neighborhood) is geocoded here,
+// server-side, before calling GET /search — never client-side, and never
+// persisted beyond this request (lib/geocode's Census-then-Nominatim
+// chain, same one PR #144 built for owner address entry, reused as-is via
+// `geocodeSearchLocation`). A non-empty location that fails to geocode is
+// NOT silently dropped: that would fall back to the backend's Dallas-area
+// default and show unrelated results for a typo or a place with no
+// restaurants, so it renders a "no results for that place" empty state
+// instead. An empty location is unchanged — no lat/lng sent, backend
+// default area applies.
 import { searchRestaurants } from "@/lib/api/search";
 import RestaurantCard from "@/components/listing/RestaurantCard";
 import InfoPanel from "@/components/ui/InfoPanel";
 import Pagination from "@/components/search/Pagination";
 import { countFilters, type SearchFilters } from "@/lib/search/filters";
+import { geocodeSearchLocation } from "@/lib/geocode";
 
 /** Matches docs/API_CONTRACTS.md "GET /search" default page_size. */
 export const SEARCH_PAGE_SIZE = 20;
@@ -14,16 +26,36 @@ export const SEARCH_PAGE_SIZE = 20;
 interface SearchResultsProps {
   filters: SearchFilters;
   page: number;
-  /** Carried through to pagination links only — see SearchFilterBar's
-   * note on why these aren't sent to the API itself. */
+  /** Geocoded below (when non-empty) and also carried through to
+   * pagination links as the raw text. */
   location: string;
   query: string;
 }
 
 export default async function SearchResults({ filters, page, location, query }: SearchResultsProps) {
+  const trimmedLocation = location.trim();
+  let lat: number | undefined;
+  let lng: number | undefined;
+
+  if (trimmedLocation) {
+    const geocoded = await geocodeSearchLocation(trimmedLocation);
+    if (!geocoded) {
+      return (
+        <InfoPanel
+          title={`We couldn't find "${trimmedLocation}"`}
+          body="Check the spelling, try a nearby city or ZIP code, or clear the location box to browse everything nearby."
+        />
+      );
+    }
+    lat = geocoded.latitude;
+    lng = geocoded.longitude;
+  }
+
   let data;
   try {
     data = await searchRestaurants({
+      lat,
+      lng,
       // Empty facets are omitted entirely (never sent as `cuisine[]=`).
       cuisine: filters.cuisine.length ? filters.cuisine : undefined,
       dietary: filters.dietary.length ? filters.dietary : undefined,

@@ -1,5 +1,6 @@
 // Types for `restaurant_location` and its sub-resources (hours, photos),
 // matching docs/API_CONTRACTS.md "Locations (`restaurant_location`)".
+import type { ConsoleTodayStatus } from "@/lib/consoleLocationStatus";
 
 /** 0=Monday..6=Sunday, per docs/API_CONTRACTS.md GET /locations/{id} notes. */
 export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6;
@@ -64,11 +65,19 @@ export interface LocationSummary {
  * managers are fetched separately per location via
  * `GET /locations/{id}/managers` (the location list endpoints don't
  * inline manager rows).
+ *
+ * `todayStatus` is likewise derived client-side, not an API field —
+ * `GET /restaurants/{id}/locations` only serializes `is_open_now` (no
+ * today's open/close breakdown, see docs/API_CONTRACTS.md
+ * "Summary shape only"), so `lib/owner/loadOwnerRestaurants.ts` fetches each
+ * location's full hours via `GET /locations/{id}` and computes it with
+ * `lib/consoleLocationStatus.ts`'s `describeConsoleTodayStatus`.
  */
 export interface LocationWithManagers {
   location: LocationSummary;
   managers: LocationManager[];
   managersError: string | null;
+  todayStatus: ConsoleTodayStatus;
 }
 
 /** Full detail shape from GET /locations/{id}. */
@@ -114,7 +123,14 @@ export interface CreateLocationInput {
   state: string;
   postal_code: string;
   country: string;
-  phone: string | null;
+  // Required as of 2026-09-22 (docs/PROJECT_PLAN.csv "Make location phone
+  // required") — same standing as address_line1/city. `LocationSummary`/
+  // `LocationDetail`/`ManagedLocation` below stay `string | null`: those
+  // are read shapes and existing seeded/imported rows can still have
+  // `phone IS NULL` (not backfilled, see
+  // backend/app/schemas/location.py LocationCreate.phone's note) — only
+  // the write shape here tightens.
+  phone: string;
   timezone: string;
   /** null/omitted when the address couldn't be geocoded — the listing then
    * stays out of geo search until an admin sets a position. */
@@ -126,6 +142,11 @@ export interface CreateLocationInput {
  * Body for PATCH /locations/{id}. Any subset of the address/contact/timezone
  * fields — deliberately excludes is_paid, paid_until, stripe_sub_item_id,
  * which are Stripe-webhook/admin-only writes (docs/API_CONTRACTS.md).
+ * `phone` becomes optional-to-omit here (via `Partial`) but, per
+ * backend/app/schemas/location.py LocationUpdate.phone, if the key IS
+ * sent it still can't be empty/null — omission is the only way to leave
+ * it untouched, unlike `about`/`specialties` below which null/empty
+ * explicitly clears.
  */
 export type UpdateLocationInput = Partial<
   Omit<CreateLocationInput, "brand_id">

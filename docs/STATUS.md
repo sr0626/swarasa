@@ -28,7 +28,33 @@ fully satisfied and asked to stop iterating for now, with an explicit intent
 to revisit later, not a final sign-off.
 
 ## Open PRs
-- Follow-up PR in flight: owner links to /account + phone display formatting.
+- #163 (ready for review) — manager console redesign (banner + left menu,
+  matches owner/admin); fixes stale "no location list" dashboard message.
+
+## Landed 2026-09-22 (#151-#162)
+- Site copy: "Indian restaurant" -> "desi restaurant" across user-facing
+  text and the SEO title convention (#151).
+- Top-bar account menu is role-aware: owner/manager get Account + Profile
+  anchor, diner gets My Favorites (#152).
+- Search location box now actually geocodes the typed city (#153) -- was
+  previously cosmetic only, always showed the Dallas-default area.
+- Dev seed: restaurants across more DFW cities, short test-user emails
+  (`ownerN@test.com` / `Test123$`) (#154).
+- Manager assignment rules: configurable caps (Postgres `platform_config`
+  table, not DynamoDB -- see DECISIONS.md), same-owner-only, named-location
+  error messages (#155).
+- Restaurant page: back link + cuisine tags grouped/labeled (#156).
+- Owner/manager console: hours refresh without a hard reload; tiles show
+  the next opening time instead of a bare "Closed" (#157).
+- **Production bug fixed**: CSV bulk import silently dropped every row's
+  cuisine `type` column since the feature shipped (#158).
+- Restaurant location phone is now required (#159).
+- Owner-scoped activity/audit log, `GET /auth/me/activity` (#160).
+- Editable display name for registered_user/manager, new `user_profile`
+  table (#162).
+- Follow-any-role (#161) was built then **closed unmerged** per user
+  clarification: follow stays registered_user-only, not opened to
+  owner/manager/admin.
 
 ## Recently landed (2026-09-17 → 2026-09-19, PRs #64–#134)
 - Auth: sign-up / forgot-password / remember-me, post-confirmation role Lambda,
@@ -59,9 +85,10 @@ to revisit later, not a final sign-off.
 - Owner console: single Business account page at `/account` (#142, #147); Add restaurant collects address/phone/website and geocodes (#144); authenticated fetches uncached (#141); scripts guide `docs/SCRIPTS.md` (#146).
 - Payments/subscriptions/refunds/deals deferred by decision.
 
-## Known gaps (2026-09-19)
+## Known gaps (2026-09-22)
+- Restaurant status lifecycle (activate/deactivate/coming-soon/closed-pending-reopen) drafted but NOT shipped: backend models/migration exist on branch `feature/restaurant-status-lifecycle`, but the router isn't wired in, no tests, no frontend.
 - Admin claims UI doesn't yet show the `owner_group_granted` flag.
-- Set `NEXT_PUBLIC_CONTACT_EMAIL` in Amplify (Nominatim User-Agent contact).
+- `NEXT_PUBLIC_CONTACT_EMAIL` set in Amplify (#150, applied to dev).
 - Admin new-user feed covers owner accounts only (no local diner user table).
 - Social login not started. Deals/refunds/payments deferred by decision.
 

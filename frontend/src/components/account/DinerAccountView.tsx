@@ -7,6 +7,7 @@ import Link from "next/link";
 import AccountAvatar from "@/components/account/AccountAvatar";
 import AccountDetailsCard from "@/components/account/AccountDetailsCard";
 import DataPrivacySection from "@/components/account/DataPrivacySection";
+import DisplayNameForm from "@/components/account/DisplayNameForm";
 import FollowedRestaurantsGrid from "@/components/account/FollowedRestaurantsGrid";
 import SecurityCard from "@/components/account/SecurityCard";
 import { firstNameFor, primaryLinkClass } from "@/components/account/accountShared";
@@ -42,9 +43,9 @@ export default function DinerAccountView({
               </h1>
               <p className="mt-1 text-sm text-brand-ink-muted">
                 {followsError
-                  ? "Your favorite Indian restaurants, all in one place."
+                  ? "Your favorite desi restaurants, all in one place."
                   : followCount === 0
-                    ? "Follow your favorite Indian restaurants to keep them close."
+                    ? "Follow your favorite desi restaurants to keep them close."
                     : `You follow ${followCount} restaurant${followCount === 1 ? "" : "s"}.`}
               </p>
             </div>
@@ -61,7 +62,8 @@ export default function DinerAccountView({
           <FollowedRestaurantsGrid follows={follows} loadError={followsError} />
         </div>
         <div className="flex min-w-0 flex-col gap-5">
-          <AccountDetailsCard me={me} stacked />
+          <DisplayNameForm initialFullName={me.full_name} />
+          <AccountDetailsCard me={me} stacked nameEditableElsewhere />
           <SecurityCard />
           <DataPrivacySection latestDeletionRequest={latestDeletionRequest} />
         </div>

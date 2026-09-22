@@ -1565,3 +1565,82 @@ quality over breadth.
 May 2026 | Phase 1: $20-50/mo. Phase 2: $40-80/mo. Phase 3: $100-180/mo.
 Phase 4: $180-350/mo. Add Redis and RDS Proxy only when traffic justifies it.
 *Rejected: Full production stack from day 1 (wasteful at launch scale)*
+
+---
+
+## Manager Caps & Assignment Rules
+
+**Configurable manager/location caps via `platform_config` (Postgres, not DynamoDB)**
+2026-09-22 | A human explicitly requested DynamoDB for the two manager/
+location cap numbers (`max_active_managers_per_location`,
+`max_active_locations_per_manager`, both currently 2). Built in Postgres
+instead, in a new generic `platform_config` (key/value/updated_at) table.
+This app's stack is Aurora Postgres Serverless v2 for ALL application data
+(root CLAUDE.md) — there is no DynamoDB table, client, or IAM footprint
+anywhere else in this codebase. `platform_pricing` already established the
+exact pattern this task asks for ("don't hardcode a business number, put
+it in an admin-configurable table") for the $100/mo price point; reusing
+that pattern for two more integers needs zero new infrastructure. A
+DynamoDB table for this would mean: a new Terraform module, a new
+least-privilege IAM policy to design and grant (another surface per root
+CLAUDE.md "AWS Best Practices"), a new boto3 client wired into
+`app/services/`, and a second datastore with no throughput/latency/access-
+pattern need that would actually justify choosing it over the one
+relational database this app already has open in every request. See
+`app/models/platform_config.py`'s module docstring for the full writeup;
+flagged prominently in PR #(this task's PR) description since it overrides
+an explicit ask.
+*Rejected: DynamoDB table (no technical need at this scale; would add a
+second datastore, new Terraform/IAM, and no reuse of the existing
+`platform_pricing` precedent for exactly this kind of value)*
+
+**Symmetric manager-location cap**
+2026-09-22 | New cap, symmetric to "Assignable location managers capped at
+2 per location on paid tier" (below): a manager can also be capped on how
+many *locations* they actively manage. Scoped with the exact same
+paid-tier-only gating philosophy as the original cap, applied from the
+manager's side rather than inventing a new rule: the check only runs when
+the location being newly assigned is `is_paid=true` (same trigger as the
+original cap), and only counts the manager's OTHER active assignments that
+are ALSO on paid locations — consistent with "No location cap for free
+tier" below, which already establishes that free-tier assignments are
+deliberately uncapped platform-wide. A manager already managing several
+free locations is never blocked from taking on more free ones or their
+first couple of paid ones; a manager already at the paid cap is blocked
+regardless of how many free locations they also manage. Default 2, same
+number as the original cap, both configurable via `platform_config` (see
+above). Error message names the locations (owner-facing clarity — "who
+does this person already manage"), not just a bare count.
+*Rejected: Counting ALL active assignments (paid + free) toward the cap —
+would make the free tier's explicit "no cap" promise meaningless the
+moment a manager also holds one paid assignment; Rejected: A separate,
+unrelated free-tier manager cap — no stated need, and root CLAUDE.md's
+"No location cap for free tier" reasoning (per-location billing makes the
+cap concept redundant) applies here too*
+
+**Manager scoped to one owner at a time**
+2026-09-22 | New runtime invariant: assigning a manager who already holds
+an ACTIVE `location_manager` row on a different owner's location is
+rejected (`409 manager_different_owner`), checked before either cap. Root
+CLAUDE.md's ownership hierarchy and `location_manager.user_id`'s own
+JUDGMENT CALL docstring both confirm there is no `owner_id` column on
+`location_manager` and no local "manager account" table — a manager's
+identity lives entirely in Cognito, with no existing stored fact that says
+"this manager belongs to this owner." This is therefore a business-process
+invariant enforced at assignment time (a fresh query joining
+`location_manager -> restaurant_location -> restaurant_brand.owner_id`),
+not a schema constraint — a generalized cross-table CHECK spanning three
+tables isn't practical in Postgres, same reasoning already used for the
+per-location manager cap not being a DB constraint either. Scoped to
+ACTIVE rows only: a manager's history with a PRIOR owner (now fully
+soft-removed) does not block a fresh assignment elsewhere; only a
+currently live assignment does. The SAME owner assigning the same manager
+across multiple of their own brands/locations is unaffected (not a
+different-owner conflict).
+*Rejected: A stored `owner_id` column on `location_manager` (schema
+change beyond this task's scope, and `assigned_by_owner_id` already
+records who made an assignment — adding an ADDITIONAL "which owner does
+this manager belong to" column would duplicate information the join
+already derives correctly); Rejected: Checking historical (inactive)
+assignments too (would permanently lock a manager to their first-ever
+owner even after every prior assignment was cleanly removed)*

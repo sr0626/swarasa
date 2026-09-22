@@ -489,6 +489,21 @@ New locations start `is_paid=false`, `is_verified=false`, `is_active=true`.
 call; the service layer derives `geom` from them on write (see
 `docs/DATA_MODEL.md` judgment-call note on `restaurant_location.geom`).
 
+`phone` is **required** (added 2026-09-22, docs/PROJECT_PLAN.csv "Make
+location phone required") — same standing as `address_line1`/`city`:
+missing or blank -> `422`. Accepted in any of the formats
+`frontend/src/lib/phone.ts normalizePhone` handles (e.g.
+`"(972) 555-0142"`, `"9725550142"`, `"+14695551234"`) and normalised to
+E.164 server-side (`backend/app/schemas/location.py normalize_phone` — a
+line-for-line port of the frontend function, kept in sync); an
+unparseable value is also `422`. The DB column
+(`restaurant_location.phone`) is **not** getting a `NOT NULL` migration —
+it stays nullable so existing/imported rows with `phone IS NULL` (e.g. the
+CSV bulk-import path, which builds `RestaurantLocation` directly and
+never goes through this schema) are untouched; "required" is enforced
+purely at this Pydantic layer, the standard lower-risk choice absent a
+backfill.
+
 Response: `201`, same shape as `GET /locations/{id}` (with an empty `hours` array).
 
 Audit: `audit_log` row (`table_name="restaurant_location"`, `action="create"`).
@@ -508,7 +523,12 @@ free tier, owner/manager/admin may all set them):
 
 Unlike the other fields (where an explicit `null` is ignored), sending
 `null`, `""` or `[]` for `about` / `specialties` **clears** the stored
-value; omitting the key leaves it untouched. Both fields are also returned
+value; omitting the key leaves it untouched. `phone` is the opposite kind
+of exception: it's optional to *omit* (omitting leaves the stored phone
+untouched, like every other address field), but if the key IS sent, `null`
+or `""` is rejected with `422` rather than silently clearing it — phone is
+required going forward (see `POST /locations` above), so there is no way
+to PATCH it back to empty/missing. Both fields are also returned
 by `GET /locations/{id}` (and this PATCH's response) as `about: string |
 null` and `specialties: string[] | null`. Does **not** accept `is_paid`, `paid_until`, or
 `stripe_sub_item_id` — those are Stripe-webhook/admin-only writes
@@ -823,14 +843,22 @@ Response: `201`
 }
 ```
 
-Errors:
+Errors (checked in this order — see `assign_manager`'s own docstring for
+why: cheapest/most-fundamental rejection first):
 | Status | Code | When |
 |---|---|---|
 | 404 | `not_found` | Location doesn't exist |
 | 403 | `forbidden` | Caller doesn't own the location's parent brand |
-| 404 | `manager_not_found` | No Cognito user exists with `manager_email` |
-| 409 | `manager_cap_reached` | Location is `is_paid=true` and already has 2 active managers — from the existing `assert_can_add_active_manager` check in `location_manager_service.py`, unchanged |
+| 404 | `manager_not_found` | No Cognito user exists with `manager_email` — the "unknown email" case; no invite email is sent and no Cognito user is created (SES is Phase-2-deferred), this is a clear, immediate error only |
+| 409 | `manager_different_owner` | (added 2026-09-22) The resolved manager already holds an ACTIVE `location_manager` row on a location owned by a DIFFERENT owner than the caller — see DECISIONS.md "Manager scoped to one owner at a time" |
+| 409 | `manager_cap_reached` | Location is `is_paid=true` and already has the configured max active managers (default 2, `platform_config.max_active_managers_per_location` — see DECISIONS.md "Configurable manager/location caps via platform_config") — from the existing `assert_can_add_active_manager` check in `location_manager_service.py`, cap value now config-driven instead of hardcoded |
+| 409 | `manager_location_cap_reached` | (added 2026-09-22) The resolved manager already actively manages the configured max number of OTHER `is_paid=true` locations (default 2, `platform_config.max_active_locations_per_manager`) — only checked when the TARGET location is also paid; free-tier assignments never count toward or trigger this cap. The message NAMES the locations, e.g. `"This person already manages 2 locations: Dera Grill (Irving), Taj Chaat House (Plano)"` — see DECISIONS.md "Symmetric manager-location cap" for the full paid-tier-only scoping rationale |
 | 409 | `already_active_manager` | This user already has an active assignment on this location — `uq_location_manager_active_user` (`docs/DATA_MODEL.md`) would otherwise raise a raw DB integrity error; service layer catches it the same way `DELETE /restaurants/{id}` catches its `ON DELETE RESTRICT` case above |
+
+**Backlog (explicitly not built here):** an "invite a not-yet-registered
+email, auto-link them to this assignment on their later signup" flow. The
+`manager_not_found` 404 above is the complete, intentional behavior for
+Phase 1/this task — SES/email is Phase-2-deferred (root CLAUDE.md).
 
 Audit: `audit_log` row (`table_name="location_manager"`, `action="create"`) — `location_manager` is in root CLAUDE.md's audit-required table list.
 
@@ -1343,9 +1371,13 @@ Cognito itself issues and refreshes JWTs directly to the frontend
 never issues, stores, or validates passwords (root CLAUDE.md "NEVER
 store passwords — Cognito handles all auth"). The two routes below
 cover only what the backend itself needs: reading the caller's
-identity off a validated JWT, and lazily provisioning the local
+identity off a validated JWT, lazily provisioning the local
 `owner_account` row the first time a Cognito "owner" group user is
-seen (Cognito has no concept of our `owner_account` table).
+seen (Cognito has no concept of our `owner_account` table), and — since
+docs/PROJECT_PLAN.csv "Generic user display name for registered_user/
+manager" — reading/writing a generic `user_profile` row for
+`registered_user`/`manager` callers (see `docs/DATA_MODEL.md`
+"user_profile").
 
 ### GET /auth/me
 
@@ -1357,6 +1389,7 @@ Response:
   "cognito_sub": "us-east-1:abc-123",
   "role": "owner",
   "email": "owner@example.com",
+  "full_name": "Priya Rao",
   "owner_account": {
     "id": 55,
     "full_name": "Priya Rao",
@@ -1368,12 +1401,26 @@ Response:
 `phone` added 2026-09-17 (was previously accepted by `PATCH /auth/me` but
 never returned by `GET /auth/me`, so the account page's edit form could
 never pre-fill it — a real, fixed gap, not a deliberate omission).
-`owner_account` is `null` for `manager`/`admin`/`registered_user` roles
-(they have no local business record in this schema — see
-`docs/DATA_MODEL.md`'s identity note). For an `owner`-group user with
-no existing `owner_account` row yet, the service layer creates one on
+
+`full_name` (added alongside `user_profile` — docs/PROJECT_PLAN.csv
+"Generic user display name for registered_user/manager") is a **unified**
+display name regardless of which table it's actually stored in:
+`owner_account.full_name` for an `owner` caller, the new
+`user_profile.full_name` for `registered_user`/`manager`, `null` for
+`admin` (no local profile source for admin yet). Added so a frontend
+caller never needs to branch on role/backing table to show "the user's
+name" — it just reads this one field.
+
+`owner_account` is still `null` for `manager`/`admin`/`registered_user`
+roles (they have no local *business* record in this schema — see
+`docs/DATA_MODEL.md`'s identity note; `user_profile` is a much smaller,
+name-only record, not a second `owner_account`). For an `owner`-group user
+with no existing `owner_account` row yet, the service layer creates one on
 first call (`cognito_sub` + `email` from the JWT claims) rather than
-requiring a separate signup-sync step.
+requiring a separate signup-sync step. `user_profile`, by contrast, is
+never lazily created on `GET` — a `registered_user`/`manager` caller who
+has never set a name just gets `full_name: null` back; a row is only
+created on the first successful `PATCH`.
 
 ### PATCH /auth/me
 
@@ -1383,31 +1430,143 @@ owner-only gate was an oversight from when this route was first built with
 only owner accounts in mind, not a deliberate restriction — `GET /auth/me`
 already worked for every role.)
 
-Body: `{ "full_name": "Priya Rao", "phone": "+14695559876" }`
+Body:
+- `owner`: `{ "full_name": "Priya Rao", "phone": "+14695559876" }`
+- `registered_user` / `manager`: `{ "full_name": "Priya Rao" }` — `phone`
+  is accepted but silently ignored (`user_profile` has no phone column).
 
-Updates the caller's own `owner_account` row only — no `owner_id` in
-the body, it's always the authenticated caller (root CLAUDE.md
-"Permission model" — never trust a client-supplied identity for a
-write that should be self-scoped). Same lazy-provisioning as `GET
-/auth/me`: an `owner`-role caller's first-ever write creates their
-`owner_account` row rather than 404ing.
+`full_name`, when provided, must be non-empty after trimming and at most
+255 characters (`backend/app/schemas/auth.py FULL_NAME_MAX_LENGTH`) — `422`
+otherwise. Same self-scoping posture as before: no `owner_id`/`user_id` in
+the body, it's always the authenticated caller (root CLAUDE.md "Permission
+model" — never trust a client-supplied identity for a write that should be
+self-scoped).
 
 Response for an `owner` caller: `200`, `owner_account` shape from `GET
-/auth/me`.
+/auth/me` (unchanged by this generalization — still lazily provisions
+`owner_account` on first write, still audit-logged).
 
-Response for `manager` / `admin` / `registered_user`: `404`,
-`{"detail": "...", "code": "no_editable_profile"}` — deliberately NOT the
-old `403`. It is not a permissions problem (every authenticated role may
-call this route); those three roles simply have no local profile record
-in this schema to write to today (only `owner_account` has
-`full_name`/`phone` — see `docs/DATA_MODEL.md`'s identity note and
-`backend/app/models/` — there is no manager/admin/registered_user profile
-table). If those roles ever need editable name/phone, the honest home for
-it is Cognito attributes (`given_name`/`family_name`/`phone_number`) via a
-frontend Amplify/Cognito `updateUserAttributes` call, not a write through
-this endpoint — out of scope for this fix; adding a new Postgres table for
-it is a schema decision for Architect, not something invented here
-unilaterally.
+Response for a `registered_user`/`manager` caller: `200`,
+`{ "full_name": "Priya Rao" }` — upserts into `user_profile`
+(`cognito_sub` primary key; see `docs/DATA_MODEL.md`). `full_name` is
+required for these two roles specifically (omitting it entirely is a `400
+full_name_required` — there's nothing else in the body for them to write).
+**Not** audit-logged: `user_profile` isn't on root CLAUDE.md's
+audited-entity list (restaurant_brand, restaurant_location, menu_item,
+deal, owner_account, location_manager), and `audit_log.record_id` is a
+`BigInteger` that a Cognito `sub` string doesn't fit anyway.
+
+Response for `admin`: `404`, `{"detail": "...", "code":
+"no_editable_profile"}` — deliberately NOT `403`. It is not a permissions
+problem (every authenticated role may call this route); admin simply has
+no local profile record in this schema to write to yet (neither
+`owner_account` nor `user_profile` apply). If admin ever needs an
+editable name, extending `user_profile` to cover it is the natural next
+step — out of scope here since it wasn't asked for.
+
+ARCHITECT-LEVEL JUDGMENT CALL (flagged for review, docs/PROJECT_PLAN.csv
+"Generic user display name for registered_user/manager"): Cognito's own
+self-service `updateUserAttributes` was considered and rejected for
+`registered_user`/`manager` display names — the frontend session cookie
+caches ID-token claims from sign-in, so a Cognito attribute write
+wouldn't show up anywhere in the app until the next sign-in/token
+refresh. The new `user_profile` table (Postgres, backed by this same
+`GET`/`PATCH /auth/me` pair) gives an immediate, consistent read-your-write
+instead. See `docs/DATA_MODEL.md` "user_profile" for the full schema
+rationale.
+
+### GET /auth/me/activity
+
+**Added 2026-09-22** — closes the gap flagged in the task brief: the app
+already writes an `audit_log` row for every write on
+`restaurant_brand`/`restaurant_location`/`location_manager` (root
+CLAUDE.md "ALWAYS write an audit_log entry ..."), including manager
+edits made on an owner's behalf, but no endpoint ever let an owner see
+that history.
+
+Auth: owner only (`require_owner`) — unlike `GET /auth/me/managed-
+locations` or `GET /auth/me/follows`, this is NOT open to every
+authenticated role, since `audit_log` scoping here depends on resolving
+the caller's own `owner_account` and its brands/locations; a manager/
+admin/registered_user caller has no equivalent "my own entities" concept
+this endpoint could scope to.
+
+Query params: standard pagination (`page`, default `1`; `page_size`,
+default `20`, max `100`).
+
+Response: `200`
+```json
+{
+  "results": [
+    {
+      "id": 9101,
+      "table_name": "restaurant_location",
+      "action": "update",
+      "actor_role": "manager",
+      "actor_label": "manager@example.com",
+      "actor_resolved": true,
+      "summary": "Location phone number updated",
+      "created_at": "2026-09-22T14:03:11Z"
+    },
+    {
+      "id": 9099,
+      "table_name": "restaurant_brand",
+      "action": "update",
+      "actor_role": "owner",
+      "actor_label": "You",
+      "actor_resolved": true,
+      "summary": "Restaurant name, website updated",
+      "created_at": "2026-09-21T09:44:02Z"
+    }
+  ],
+  "page": 1,
+  "page_size": 20,
+  "total": 2
+}
+```
+Most-recent-first (`created_at desc`, `id desc` tiebreak).
+
+**Scoping** (see `backend/app/services/audit_query_service.py` module
+docstring for the full reasoning): a row is included only if its
+`table_name`/`record_id` traces back to a brand/location/location_manager
+row this owner actually owns — via `restaurant_brand.owner_id`, then
+`restaurant_location.brand_id`, then `location_manager.location_id` —
+computed with real DB queries every time, never trusted from the row's
+own `actor_id`/`actor_role` (a manager's edit is included even though
+its `actor_id` is the manager's own sub, not the owner's) and never from
+a client-supplied id. `menu_item`/`deal` are on root CLAUDE.md's
+audit-required table list too but don't exist as tables yet (Phase 2) so
+are not queried. `owner_account` writes are deliberately excluded even
+though they're audit-logged — that's the owner's own account record,
+already covered by `GET /auth/me`/`GET /auth/me/data-export`, not one of
+"the entities the owner manages."
+
+**`actor_label` / `actor_resolved`** — JUDGMENT CALL (flagged for
+review): `audit_log.actor_id` is a bare Cognito `sub`, not directly
+human-readable. Resolution order: (1) if `actor_id` is the caller's own
+`cognito_sub`, `actor_label = "You"`, `actor_resolved = true`; (2)
+otherwise, best-effort resolve an email via
+`cognito_service.find_email_by_sub` (same Admin API lookup
+`GET /locations/{id}/managers` already uses for its own `email` field —
+cheap, one call per distinct actor per page, memoized within the
+request); (3) if that lookup fails or returns nothing, fall back to
+`"{role} ({first 8 chars of actor_id}…)"` (e.g. `"manager (a1b2c3d4…)"`)
+with `actor_resolved = false` so the frontend can render the gap
+honestly instead of implying a real name was found. No new local
+"display name" table was added for this — Cognito is already this app's
+identity source of truth for every role (root CLAUDE.md "Auth: AWS
+Cognito"), so a live lookup was preferred over introducing a second,
+potentially-stale copy of the same data.
+
+**`summary`** — a short derived one-liner (`table_name` + `action` +
+which fields changed between `old_val`/`new_val`), e.g. "Location hours
+updated", "Restaurant claimed", "Manager access revoked" — deliberately
+NOT the raw `old_val`/`new_val` JSON diff (task brief: "keep it simple
+... not a full JSON diff dump"). See `audit_query_service._summarize`
+for the exact rules; unrecognized field combinations fall back to a
+generic `"{Entity} {field, field} updated"` built from a field-name
+label map, so a future audited field never produces a blank or broken
+summary, just a slightly less specific one.
 
 ---
 

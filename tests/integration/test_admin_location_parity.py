@@ -147,6 +147,7 @@ async def test_admin_cannot_create_a_new_location_directly(client, db_session, a
             "state": "TX",
             "postal_code": "75024",
             "country": "US",
+            "phone": "+12145550100",
             "timezone": "America/Chicago",
         },
     )

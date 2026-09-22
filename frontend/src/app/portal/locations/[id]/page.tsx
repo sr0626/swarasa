@@ -34,9 +34,10 @@ interface LocationPageProps {
 }
 
 /** Where "back" goes depends on the role: an owner's home is their single
- * business page (/account -- /portal/dashboard only redirects owners there),
- * a manager still uses /portal/dashboard, and an admin (who would be bounced
- * to /login from the portal dashboard) goes back to the admin listings panel. */
+ * business page (/account), a manager's is their manager console (also
+ * /account -- /portal/dashboard is only a redirect there, for both roles,
+ * since the manager console redesign), and an admin (who would be bounced
+ * to /login from /account) goes back to the admin listings panel. */
 function backTarget(role: string): { href: string; label: string } {
   switch (role) {
     case "admin":
@@ -44,7 +45,7 @@ function backTarget(role: string): { href: string; label: string } {
     case "owner":
       return { href: "/account", label: "Back to your business account" };
     default:
-      return { href: "/portal/dashboard", label: "Back to dashboard" };
+      return { href: "/account", label: "Back to your locations" };
   }
 }
 

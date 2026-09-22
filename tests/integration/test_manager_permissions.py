@@ -28,7 +28,11 @@ async def test_manager_cannot_access_unassigned_location(client, db_session, as_
     await db_session.commit()
 
     as_user("manager", sub=manager_sub)
-    response = await client.patch(f"/locations/{location_b.id}", json={"phone": "555-1234"})
+    # Valid phone shape -- this test is only about the permission
+    # boundary, not phone validation, and shouldn't rely on the 403 from
+    # the permission dependency happening to be raised before body
+    # validation would separately reject an invalid number.
+    response = await client.patch(f"/locations/{location_b.id}", json={"phone": "(972) 555-1234"})
     assert response.status_code == 403
 
 
@@ -42,14 +46,19 @@ async def test_manager_can_access_assigned_location(client, db_session, as_user)
     await db_session.commit()
 
     as_user("manager", sub=manager_sub)
-    response = await client.patch(f"/locations/{location.id}", json={"phone": "555-9876"})
+    # "555-9876" alone (no area code) isn't a dialable NANP number and is
+    # now rejected by LocationUpdate's phone validator (phone required
+    # going forward, see backend/app/schemas/location.py) -- use a
+    # plausible number instead; this test is about the manager permission
+    # boundary, not phone format.
+    response = await client.patch(f"/locations/{location.id}", json={"phone": "(972) 555-9876"})
     assert response.status_code == 200, response.text
-    assert response.json()["phone"] == "555-9876"
+    assert response.json()["phone"] == "+19725559876"
 
     refreshed = (
         await db_session.execute(select(RestaurantLocation).where(RestaurantLocation.id == location.id))
     ).scalar_one()
-    assert refreshed.phone == "555-9876"
+    assert refreshed.phone == "+19725559876"
 
 
 @pytest.mark.asyncio
@@ -68,7 +77,7 @@ async def test_revoked_manager_assignment_is_rejected(client, db_session, as_use
     await db_session.commit()
 
     as_user("manager", sub=manager_sub)
-    response = await client.patch(f"/locations/{location.id}", json={"phone": "555-0000"})
+    response = await client.patch(f"/locations/{location.id}", json={"phone": "(972) 555-0000"})
     assert response.status_code == 403
 
 
