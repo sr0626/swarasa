@@ -17,8 +17,10 @@ import { searchRestaurants } from "@/lib/api/search";
 import RestaurantCard from "@/components/listing/RestaurantCard";
 import InfoPanel from "@/components/ui/InfoPanel";
 import Pagination from "@/components/search/Pagination";
-import { countFilters, type SearchFilters } from "@/lib/search/filters";
+import { buildSearchHref, countFilters, type SearchFilters } from "@/lib/search/filters";
 import { geocodeSearchLocation } from "@/lib/geocode";
+import { getServerSession } from "@/lib/auth/session";
+import { getViewerFollowState } from "@/lib/follow/viewerFollowState";
 
 /** Matches docs/API_CONTRACTS.md "GET /search" default page_size. */
 export const SEARCH_PAGE_SIZE = 20;
@@ -51,9 +53,11 @@ export default async function SearchResults({ filters, page, location, query }: 
     lng = geocoded.longitude;
   }
 
-  let data;
-  try {
-    data = await searchRestaurants({
+  // Resolved once per results render, not per tile — see
+  // lib/follow/viewerFollowState.ts for the client-side-match approach and
+  // its documented limitation.
+  const [data, followState] = await Promise.all([
+    searchRestaurants({
       lat,
       lng,
       // Empty facets are omitted entirely (never sent as `cuisine[]=`).
@@ -64,8 +68,11 @@ export default async function SearchResults({ filters, page, location, query }: 
       q: query.trim() || undefined,
       page,
       page_size: SEARCH_PAGE_SIZE,
-    });
-  } catch {
+    }).catch(() => null),
+    getServerSession().then(getViewerFollowState),
+  ]);
+
+  if (!data) {
     return (
       <InfoPanel
         title="We can't load restaurants right now"
@@ -87,6 +94,11 @@ export default async function SearchResults({ filters, page, location, query }: 
     );
   }
 
+  // Exact current results URL (same helper Pagination.tsx uses to build
+  // page links) — the "come back here" destination for a signed-out
+  // follow click, filters/page/location/query and all.
+  const currentPath = buildSearchHref({ location, query, filters, page });
+
   return (
     <div>
       <p className="mb-4 text-sm text-brand-ink-muted">
@@ -95,7 +107,14 @@ export default async function SearchResults({ filters, page, location, query }: 
 
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {data.results.map((item) => (
-          <RestaurantCard key={item.brand_id} item={item} />
+          <RestaurantCard
+            key={item.brand_id}
+            item={item}
+            showFollowButton={followState.showFollowButton}
+            isRegisteredUser={followState.isRegisteredUser}
+            isFollowed={followState.followedBrandIds.has(item.brand_id)}
+            currentPath={currentPath}
+          />
         ))}
       </div>
 

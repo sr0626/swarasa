@@ -34,6 +34,7 @@ import { ApiError } from "@/lib/api/client";
 import { getRestaurantBySlug, getRestaurantLocations } from "@/lib/api/restaurants";
 import { getLocationById, getLocationManagers } from "@/lib/api/locations";
 import { getServerSession } from "@/lib/auth/session";
+import { getViewerFollowState } from "@/lib/follow/viewerFollowState";
 import RestaurantHero from "@/components/restaurant/RestaurantHero";
 import RestaurantInfoCard from "@/components/restaurant/RestaurantInfoCard";
 import ClaimCTA from "@/components/restaurant/ClaimCTA";
@@ -168,6 +169,7 @@ export default async function RestaurantPage({ params }: RestaurantPageProps) {
   const canEdit = await canEditListing(location);
   const session = await getServerSession();
   const isAdmin = session?.role === "admin";
+  const followState = await getViewerFollowState(session);
 
   return (
     <>
@@ -194,7 +196,14 @@ export default async function RestaurantPage({ params }: RestaurantPageProps) {
               left column. */}
           <div className="flex flex-col gap-8 lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:grid-rows-[auto_1fr] lg:gap-x-10">
             <div className="lg:col-start-1 lg:row-start-1">
-              <RestaurantHero restaurant={restaurant} location={location} />
+              <RestaurantHero
+                restaurant={restaurant}
+                location={location}
+                showFollowButton={followState.showFollowButton}
+                isRegisteredUser={followState.isRegisteredUser}
+                isFollowed={followState.followedBrandIds.has(restaurant.id)}
+                currentPath={`/restaurant/${restaurant.slug}`}
+              />
             </div>
 
             <aside

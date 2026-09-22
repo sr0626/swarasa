@@ -300,3 +300,34 @@ export function DirectionsIcon(props: IconProps) {
     </svg>
   );
 }
+
+/**
+ * Outline heart — "not followed" state of the follow/unfollow toggle on
+ * restaurant tiles (RestaurantCard) and the detail page hero
+ * (RestaurantHero), added for docs/PROJECT_PLAN.csv "Follow button in UI".
+ * Shares its path with `HeartFilledIcon` below (outline vs. filled is the
+ * only visual difference, same "similar to Facebook like/love" convention
+ * as a typical like button) so the two states read as clearly the same
+ * glyph, just toggled — same pairing pattern as `EyeIcon`/`EyeOffIcon`.
+ */
+export function HeartIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} {...props}>
+      <path d="M12 20.25s-7.6-4.66-10.06-9.35C.36 7.7 2.2 4.24 5.77 3.72c2.16-.31 4.3.78 6.23 2.98 1.93-2.2 4.07-3.29 6.23-2.98 3.57.52 5.41 3.98 3.83 7.18C19.6 15.59 12 20.25 12 20.25z" />
+    </svg>
+  );
+}
+
+/**
+ * Filled/solid counterpart to `HeartIcon` — the "followed" state, rendered
+ * in the brand accent color by the caller's `className` (`currentColor`,
+ * same convention as `StarIcon`) so it reads as distinctly different from
+ * the outline state at a glance, not just a color shift.
+ */
+export function HeartFilledIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} strokeLinejoin="round" fill="currentColor" stroke="none" {...props}>
+      <path d="M12 20.25s-7.6-4.66-10.06-9.35C.36 7.7 2.2 4.24 5.77 3.72c2.16-.31 4.3.78 6.23 2.98 1.93-2.2 4.07-3.29 6.23-2.98 3.57.52 5.41 3.98 3.83 7.18C19.6 15.59 12 20.25 12 20.25z" />
+    </svg>
+  );
+}
