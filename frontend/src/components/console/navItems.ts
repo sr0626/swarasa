@@ -31,6 +31,7 @@ export const OWNER_NAV_ITEMS: ReadonlyArray<ConsoleNavItem> = [
     icon: "store",
     subItems: [
       { href: "/account#restaurants", label: "My restaurants" },
+      { href: "/account#activity", label: "Activity" },
       { href: "/account#profile", label: "Profile" },
       { href: "/account#security", label: "Security" },
       { href: "/account#privacy", label: "Data & privacy" },

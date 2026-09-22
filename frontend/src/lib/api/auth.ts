@@ -6,6 +6,7 @@
 import { apiFetch, toQueryString } from "./client";
 import type { PaginatedResponse, PaginationParams } from "@/types/common";
 import type { AuthMe, UpdateAuthMeInput } from "@/types/auth";
+import type { OwnerActivity } from "@/types/activity";
 import type { FollowedBrand } from "@/types/follow";
 import type { ManagedLocation } from "@/types/location";
 import type {
@@ -69,6 +70,23 @@ export async function getMyManagedLocations(
   const query = toQueryString({ page: params.page, page_size: params.page_size });
   return apiFetch<PaginatedResponse<ManagedLocation>>(
     `/auth/me/managed-locations${query}`,
+    { method: "GET" },
+    { accessToken }
+  );
+}
+
+/**
+ * GET /auth/me/activity — auth: owner only (docs/API_CONTRACTS.md
+ * "GET /auth/me/activity"). Owner-scoped read of `audit_log`, including
+ * manager edits made on the owner's behalf.
+ */
+export async function getMyActivity(
+  params: PaginationParams,
+  accessToken: string
+): Promise<PaginatedResponse<OwnerActivity>> {
+  const query = toQueryString({ page: params.page, page_size: params.page_size });
+  return apiFetch<PaginatedResponse<OwnerActivity>>(
+    `/auth/me/activity${query}`,
     { method: "GET" },
     { accessToken }
   );
