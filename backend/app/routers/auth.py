@@ -9,10 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies.auth import (
     CurrentUser,
     get_current_user,
+    require_owner,
     require_registered_user,
 )
 from app.dependencies.db import get_db
 from app.dependencies.pagination import Pagination, pagination_params
+from app.schemas.audit import OwnerActivityListResponse
 from app.schemas.auth import MeResponse, MeUpdateRequest, OwnerAccountOut
 from app.schemas.follow import FollowListResponse
 from app.schemas.location_manager import ManagedLocationListResponse
@@ -22,7 +24,13 @@ from app.schemas.privacy import (
     DataDeletionRequestOut,
     DataExportOut,
 )
-from app.services import auth_service, follow_service, location_manager_service, privacy_service
+from app.services import (
+    audit_query_service,
+    auth_service,
+    follow_service,
+    location_manager_service,
+    privacy_service,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -75,6 +83,20 @@ async def get_my_follows(
     current_user: CurrentUser = Depends(require_registered_user),
 ) -> FollowListResponse:
     return await follow_service.list_my_follows(db, current_user, pagination)
+
+
+@router.get("/me/activity", response_model=OwnerActivityListResponse)
+async def get_my_activity(
+    pagination: Pagination = Depends(pagination_params),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_owner),
+) -> OwnerActivityListResponse:
+    """Auth: owner. Read-only `audit_log` history scoped to entities this
+    owner actually owns (see `audit_query_service.list_owner_activity`'s
+    docstring) — surfaces manager-made edits on the owner's behalf, not
+    just the owner's own writes.
+    """
+    return await audit_query_service.list_owner_activity(db, current_user, pagination)
 
 
 @router.get("/me/data-export", response_model=DataExportOut)

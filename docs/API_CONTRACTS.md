@@ -1409,6 +1409,99 @@ this endpoint — out of scope for this fix; adding a new Postgres table for
 it is a schema decision for Architect, not something invented here
 unilaterally.
 
+### GET /auth/me/activity
+
+**Added 2026-09-22** — closes the gap flagged in the task brief: the app
+already writes an `audit_log` row for every write on
+`restaurant_brand`/`restaurant_location`/`location_manager` (root
+CLAUDE.md "ALWAYS write an audit_log entry ..."), including manager
+edits made on an owner's behalf, but no endpoint ever let an owner see
+that history.
+
+Auth: owner only (`require_owner`) — unlike `GET /auth/me/managed-
+locations` or `GET /auth/me/follows`, this is NOT open to every
+authenticated role, since `audit_log` scoping here depends on resolving
+the caller's own `owner_account` and its brands/locations; a manager/
+admin/registered_user caller has no equivalent "my own entities" concept
+this endpoint could scope to.
+
+Query params: standard pagination (`page`, default `1`; `page_size`,
+default `20`, max `100`).
+
+Response: `200`
+```json
+{
+  "results": [
+    {
+      "id": 9101,
+      "table_name": "restaurant_location",
+      "action": "update",
+      "actor_role": "manager",
+      "actor_label": "manager@example.com",
+      "actor_resolved": true,
+      "summary": "Location phone number updated",
+      "created_at": "2026-09-22T14:03:11Z"
+    },
+    {
+      "id": 9099,
+      "table_name": "restaurant_brand",
+      "action": "update",
+      "actor_role": "owner",
+      "actor_label": "You",
+      "actor_resolved": true,
+      "summary": "Restaurant name, website updated",
+      "created_at": "2026-09-21T09:44:02Z"
+    }
+  ],
+  "page": 1,
+  "page_size": 20,
+  "total": 2
+}
+```
+Most-recent-first (`created_at desc`, `id desc` tiebreak).
+
+**Scoping** (see `backend/app/services/audit_query_service.py` module
+docstring for the full reasoning): a row is included only if its
+`table_name`/`record_id` traces back to a brand/location/location_manager
+row this owner actually owns — via `restaurant_brand.owner_id`, then
+`restaurant_location.brand_id`, then `location_manager.location_id` —
+computed with real DB queries every time, never trusted from the row's
+own `actor_id`/`actor_role` (a manager's edit is included even though
+its `actor_id` is the manager's own sub, not the owner's) and never from
+a client-supplied id. `menu_item`/`deal` are on root CLAUDE.md's
+audit-required table list too but don't exist as tables yet (Phase 2) so
+are not queried. `owner_account` writes are deliberately excluded even
+though they're audit-logged — that's the owner's own account record,
+already covered by `GET /auth/me`/`GET /auth/me/data-export`, not one of
+"the entities the owner manages."
+
+**`actor_label` / `actor_resolved`** — JUDGMENT CALL (flagged for
+review): `audit_log.actor_id` is a bare Cognito `sub`, not directly
+human-readable. Resolution order: (1) if `actor_id` is the caller's own
+`cognito_sub`, `actor_label = "You"`, `actor_resolved = true`; (2)
+otherwise, best-effort resolve an email via
+`cognito_service.find_email_by_sub` (same Admin API lookup
+`GET /locations/{id}/managers` already uses for its own `email` field —
+cheap, one call per distinct actor per page, memoized within the
+request); (3) if that lookup fails or returns nothing, fall back to
+`"{role} ({first 8 chars of actor_id}…)"` (e.g. `"manager (a1b2c3d4…)"`)
+with `actor_resolved = false` so the frontend can render the gap
+honestly instead of implying a real name was found. No new local
+"display name" table was added for this — Cognito is already this app's
+identity source of truth for every role (root CLAUDE.md "Auth: AWS
+Cognito"), so a live lookup was preferred over introducing a second,
+potentially-stale copy of the same data.
+
+**`summary`** — a short derived one-liner (`table_name` + `action` +
+which fields changed between `old_val`/`new_val`), e.g. "Location hours
+updated", "Restaurant claimed", "Manager access revoked" — deliberately
+NOT the raw `old_val`/`new_val` JSON diff (task brief: "keep it simple
+... not a full JSON diff dump"). See `audit_query_service._summarize`
+for the exact rules; unrecognized field combinations fall back to a
+generic `"{Entity} {field, field} updated"` built from a field-name
+label map, so a future audited field never produces a blank or broken
+summary, just a slightly less specific one.
+
 ---
 
 ## Privacy (CCPA data export / deletion)
