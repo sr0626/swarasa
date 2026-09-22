@@ -59,7 +59,7 @@ async def test_owner_cannot_edit_another_owners_location(client, db_session, as_
     await db_session.commit()
 
     as_user("owner", sub=owner_a.cognito_sub, email=owner_a.email)
-    response = await client.patch(f"/locations/{location_b.id}", json={"phone": "555-0000"})
+    response = await client.patch(f"/locations/{location_b.id}", json={"phone": "(972) 555-0000"})
     assert response.status_code == 403
 
 
@@ -114,6 +114,7 @@ async def test_owner_cannot_add_location_to_another_owners_brand(client, db_sess
             "city": "Plano",
             "state": "TX",
             "postal_code": "75024",
+            "phone": "+12145550100",
         },
     )
     assert response.status_code == 403

@@ -2,7 +2,7 @@
 // (docs/API_CONTRACTS.md "Restaurants") and the combined "Add restaurant"
 // form (brand + first location).
 import { z } from "zod";
-import { locationAddressShape, optionalPhoneSchema } from "./location";
+import { locationAddressShape, requiredPhoneSchema } from "./location";
 
 /**
  * Optional website: blank -> null; a bare "example.com" gets "https://"
@@ -57,7 +57,9 @@ export type UpdateRestaurantFormValues = z.infer<typeof updateRestaurantSchema>;
  */
 export const addRestaurantSchema = createRestaurantSchema.extend({
   ...locationAddressShape,
-  phone: optionalPhoneSchema,
+  // Required 2026-09-22 (docs/PROJECT_PLAN.csv "Make location phone
+  // required") -- same standing as `name` above.
+  phone: requiredPhoneSchema,
 });
 
 /** Raw (pre-transform) input shape the form holds; the parsed output has normalised phone/website/state. */

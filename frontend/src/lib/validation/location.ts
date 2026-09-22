@@ -8,7 +8,11 @@ const TIME_PATTERN = /^\d{2}:\d{2}:\d{2}$/;
 
 /**
  * Optional phone: blank -> null, otherwise normalised to E.164
- * (`lib/phone.ts` — "(972) 555-0142" -> "+19725550142").
+ * (`lib/phone.ts` — "(972) 555-0142" -> "+19725550142"). Kept for callers
+ * that genuinely have an optional phone (none left as of 2026-09-22 --
+ * both "Add restaurant" and the location editor now require phone, see
+ * `requiredPhoneSchema` below -- but this stays exported rather than
+ * deleted in case a future optional-phone contact field needs it).
  */
 export const optionalPhoneSchema = z
   .string()
@@ -16,6 +20,28 @@ export const optionalPhoneSchema = z
   .nullish()
   .transform((value, ctx): string | null => {
     if (!value) return null;
+    const normalised = normalizePhone(value);
+    if (!normalised) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Enter a valid phone number, e.g. (972) 555-0142",
+      });
+      return z.NEVER;
+    }
+    return normalised;
+  });
+
+/**
+ * Required phone: rejects blank (mirrors
+ * backend/app/schemas/location.py LocationCreate.phone), otherwise
+ * normalised to E.164 same as `optionalPhoneSchema` above. Added
+ * 2026-09-22 (docs/PROJECT_PLAN.csv "Make location phone required").
+ */
+export const requiredPhoneSchema = z
+  .string()
+  .trim()
+  .min(1, "Phone number is required")
+  .transform((value, ctx): string => {
     const normalised = normalizePhone(value);
     if (!normalised) {
       ctx.addIssue({
@@ -53,7 +79,7 @@ export const createLocationSchema = z.object({
   brand_id: z.number().int().positive(),
   ...locationAddressShape,
   country: z.string().trim().length(2, "Use a 2-letter country code"),
-  phone: optionalPhoneSchema,
+  phone: requiredPhoneSchema,
   timezone: z.string().trim().min(1, "Timezone is required"),
   latitude: z.number().min(-90).max(90).nullish(),
   longitude: z.number().min(-180).max(180).nullish(),
@@ -61,6 +87,12 @@ export const createLocationSchema = z.object({
 
 export type CreateLocationFormValues = z.infer<typeof createLocationSchema>;
 
+// `.partial()` makes every field (including `phone`) optional so PATCH can
+// omit it -- but `phone`'s own `requiredPhoneSchema` still runs, and still
+// rejects, whenever the key IS sent: `""` fails its `.min(1)` check and
+// `null` fails the underlying `z.string()` type check. Omission is the
+// only way a PATCH leaves phone alone, matching
+// backend/app/schemas/location.py LocationUpdate.phone.
 export const updateLocationSchema = createLocationSchema.omit({ brand_id: true }).partial();
 
 export type UpdateLocationFormValues = z.infer<typeof updateLocationSchema>;
