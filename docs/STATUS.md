@@ -28,8 +28,26 @@ fully satisfied and asked to stop iterating for now, with an explicit intent
 to revisit later, not a final sign-off.
 
 ## Open PRs
-- #163 (ready for review) — manager console redesign (banner + left menu,
-  matches owner/admin); fixes stale "no location list" dashboard message.
+- None open as of 2026-09-22.
+
+## Landed 2026-09-22, wave 4 (#165-#170)
+- Terraform: S3 lifecycle plan warning fixed; DynamoDB `use_lockfile`
+  migration deliberately left as a flagged human follow-up (#165).
+- CCPA export/deletion now covers `listing_report` reporter data, matched
+  by Cognito sub not free-text email (#166); frontend DataExport type
+  caught up to match (#168).
+- Admin claims queue warns when a claim approval couldn't add the
+  claimant to the Cognito owner group (#167).
+- **Restaurant status lifecycle shipped** (#169): owner self-service
+  active / owner_deactivated / coming_soon toggle; closed_pending_reopen
+  is one-way from the owner side, reopening needs an admin-approved
+  request via a new `/admin/reopen-requests` queue. Hidden locations 404
+  on direct URL and are excluded from search. Known gap: the manager's
+  own dashboard list still filters to active-only.
+- **Follow button shipped** (#170): heart icon on restaurant tiles and the
+  detail page, registered_user only (matches the existing backend rule),
+  hidden for owner/manager/admin, sign-in redirect when signed out.
+- Manager console redesign (#163, merged) now reflected as Done.
 
 ## Landed 2026-09-22 (#151-#162)
 - Site copy: "Indian restaurant" -> "desi restaurant" across user-facing
