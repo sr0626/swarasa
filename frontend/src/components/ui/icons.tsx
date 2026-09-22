@@ -280,6 +280,16 @@ export function GlobeIcon(props: IconProps) {
   );
 }
 
+/** Added for the restaurant page's "back to where you came from" link. */
+export function ArrowLeftIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} {...props}>
+      <path d="M19 12H5" />
+      <path d="M11 6l-6 6 6 6" />
+    </svg>
+  );
+}
+
 /** Added for the restaurant page info card's "Get directions" link. */
 export function DirectionsIcon(props: IconProps) {
   return (

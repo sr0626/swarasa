@@ -16,7 +16,7 @@ import { DEFAULT_CITY_LABEL } from "@/lib/constants/city";
 export const metadata: Metadata = {
   title: "About Us",
   description:
-    `Swarasa is a location-based discovery platform for Indian restaurants across ${DEFAULT_CITY_LABEL}, built around regional cuisine filters, verified listings, and owner-managed menus.`,
+    `Swarasa is a location-based discovery platform for desi restaurants across ${DEFAULT_CITY_LABEL}, built around regional cuisine filters, verified listings, and owner-managed menus.`,
   alternates: {
     canonical: "/about",
   },
@@ -39,11 +39,11 @@ export default function AboutPage() {
           <p>
             Swarasa is a location-based discovery platform built for one
             purpose: helping people across {DEFAULT_CITY_LABEL} find the
-            Indian food they&apos;re actually craving. Generic search and review
+            desi food they&apos;re actually craving. Generic search and review
             apps flatten a huge, regionally diverse cuisine into a single
             category. Swarasa doesn&apos;t &mdash; you can filter by regional
             cuisine, dietary needs, and craving, and get to a verified
-            restaurant that fits, not just a list of &quot;Indian
+            restaurant that fits, not just a list of &quot;desi
             restaurants near me.&quot;
           </p>
 

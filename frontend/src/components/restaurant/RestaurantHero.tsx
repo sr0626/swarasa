@@ -27,6 +27,60 @@ import RestaurantPhotoCarousel, {
 } from "@/components/restaurant/RestaurantPhotoCarousel";
 import type { RestaurantBrand } from "@/types/restaurant";
 import type { LocationDetail } from "@/types/location";
+import type { CuisineCategory, CuisineTag } from "@/types/cuisine";
+
+/** Short group label per `cuisine_tag.category` (backend/app/models/
+ * cuisine_tag.py, frontend/src/types/cuisine.ts) -- previously all five
+ * categories were dumped into one flat, unlabeled pill row with no
+ * indication of what a tag meant (a regional cuisine? a dietary note? a
+ * restaurant type?). Order here is also the display order: what kind of
+ * place this is (regional/type) before dietary, then the softer
+ * signature/dining_time descriptors. */
+const CUISINE_CATEGORY_LABELS: Record<CuisineCategory, string> = {
+  regional: "Cuisine",
+  type: "Type",
+  dietary: "Dietary",
+  signature: "Known for",
+  dining_time: "Good for",
+};
+
+const CUISINE_CATEGORY_ORDER: CuisineCategory[] = [
+  "regional",
+  "type",
+  "dietary",
+  "signature",
+  "dining_time",
+];
+
+interface CuisineTagGroup {
+  label: string;
+  tags: CuisineTag[];
+}
+
+/** Groups tags by category in the fixed display order above. Any tag
+ * whose category isn't one of the five known values (future taxonomy
+ * addition the frontend type hasn't caught up to yet) still renders,
+ * under its raw category string, rather than silently disappearing. */
+function groupCuisineTagsByCategory(tags: CuisineTag[]): CuisineTagGroup[] {
+  const groups: CuisineTagGroup[] = CUISINE_CATEGORY_ORDER.map((category) => ({
+    label: CUISINE_CATEGORY_LABELS[category],
+    tags: tags.filter((tag) => tag.category === category),
+  })).filter((group) => group.tags.length > 0);
+
+  const knownCategories = new Set<string>(CUISINE_CATEGORY_ORDER);
+  const otherTags = tags.filter((tag) => !knownCategories.has(tag.category));
+  const otherGroupsByCategory = new Map<string, CuisineTag[]>();
+  otherTags.forEach((tag) => {
+    const existing = otherGroupsByCategory.get(tag.category) ?? [];
+    existing.push(tag);
+    otherGroupsByCategory.set(tag.category, existing);
+  });
+  otherGroupsByCategory.forEach((groupTags, category) => {
+    groups.push({ label: category, tags: groupTags });
+  });
+
+  return groups;
+}
 
 interface RestaurantHeroProps {
   restaurant: RestaurantBrand;
@@ -88,14 +142,21 @@ export default function RestaurantHero({
         </div>
 
         {restaurant.cuisine_tags.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {restaurant.cuisine_tags.map((tag) => (
-              <span
-                key={tag.name}
-                className="rounded-brand-pill bg-brand-chip px-2.5 py-1 text-xs font-medium text-brand-chip-ink"
-              >
-                {tag.display_name}
-              </span>
+          <div className="flex flex-col gap-1.5">
+            {groupCuisineTagsByCategory(restaurant.cuisine_tags).map((group) => (
+              <div key={group.label} className="flex flex-wrap items-center gap-1.5">
+                <span className="text-xs font-semibold text-brand-ink-muted">
+                  {group.label}:
+                </span>
+                {group.tags.map((tag) => (
+                  <span
+                    key={tag.name}
+                    className="rounded-brand-pill bg-brand-chip px-2.5 py-1 text-xs font-medium text-brand-chip-ink"
+                  >
+                    {tag.display_name}
+                  </span>
+                ))}
+              </div>
             ))}
           </div>
         )}
