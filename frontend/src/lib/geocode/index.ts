@@ -21,7 +21,7 @@ export type { GeocodeAddress, GeocodePrecision, GeocodeResult } from "./geocoder
 
 const REAL_DEPS: GeocodeDeps = {
   fetchFn: (url, init) => fetch(url, init),
-  userAgent: `Swarasa/1.0 (Indian restaurant directory; contact: ${CONTACT_EMAIL})`,
+  userAgent: `Swarasa/1.0 (desi restaurant directory; contact: ${CONTACT_EMAIL})`,
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   now: () => Date.now(),
 };
