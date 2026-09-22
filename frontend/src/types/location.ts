@@ -1,5 +1,6 @@
 // Types for `restaurant_location` and its sub-resources (hours, photos),
 // matching docs/API_CONTRACTS.md "Locations (`restaurant_location`)".
+import type { ConsoleTodayStatus } from "@/lib/consoleLocationStatus";
 
 /** 0=Monday..6=Sunday, per docs/API_CONTRACTS.md GET /locations/{id} notes. */
 export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6;
@@ -64,11 +65,19 @@ export interface LocationSummary {
  * managers are fetched separately per location via
  * `GET /locations/{id}/managers` (the location list endpoints don't
  * inline manager rows).
+ *
+ * `todayStatus` is likewise derived client-side, not an API field —
+ * `GET /restaurants/{id}/locations` only serializes `is_open_now` (no
+ * today's open/close breakdown, see docs/API_CONTRACTS.md
+ * "Summary shape only"), so `lib/owner/loadOwnerRestaurants.ts` fetches each
+ * location's full hours via `GET /locations/{id}` and computes it with
+ * `lib/consoleLocationStatus.ts`'s `describeConsoleTodayStatus`.
  */
 export interface LocationWithManagers {
   location: LocationSummary;
   managers: LocationManager[];
   managersError: string | null;
+  todayStatus: ConsoleTodayStatus;
 }
 
 /** Full detail shape from GET /locations/{id}. */

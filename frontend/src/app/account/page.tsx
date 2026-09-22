@@ -34,6 +34,10 @@ import TopBar from "@/components/home/TopBar";
 import { ApiError } from "@/lib/api/client";
 import { loadOwnerRestaurants, type OwnerRestaurants } from "@/lib/owner/loadOwnerRestaurants";
 import {
+  loadManagedLocationStatuses,
+  type ManagedLocationWithStatus,
+} from "@/lib/manager/loadManagedLocationStatuses";
+import {
   getCurrentUser,
   getMyDataDeletionRequests,
   getMyFollows,
@@ -48,7 +52,6 @@ import OwnerAccountView from "@/components/account/OwnerAccountView";
 import InfoPanel from "@/components/ui/InfoPanel";
 import type { AuthMe } from "@/types/auth";
 import type { FollowedBrand } from "@/types/follow";
-import type { ManagedLocation } from "@/types/location";
 import type { DataDeletionRequest } from "@/types/privacy";
 
 export const metadata: Metadata = {
@@ -83,12 +86,12 @@ export default async function AccountPage() {
     }
   }
 
-  let managedLocations: ManagedLocation[] = [];
+  let managedLocations: ManagedLocationWithStatus[] = [];
   let managedLocationsError: string | null = null;
   if (me && me.role === "manager") {
     try {
       const page = await getMyManagedLocations({ page: 1, page_size: 50 }, session.accessToken);
-      managedLocations = page.results;
+      managedLocations = await loadManagedLocationStatuses(page.results);
     } catch (error) {
       managedLocationsError =
         error instanceof ApiError
