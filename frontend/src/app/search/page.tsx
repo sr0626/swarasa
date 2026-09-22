@@ -9,8 +9,10 @@
 // `?cuisine=north_indian` form keeps working. The tag taxonomy that drives
 // the Filters dropdown is fetched server-side from `GET /cuisine-tags`, falling
 // back to a small built-in list if that call fails.
-// `location`/`q` round-trip in the UI without a backend param to map onto
-// yet — see SearchFilterBar.tsx.
+// `q` round-trips straight to the backend `q` param. `location` is
+// geocoded server-side in SearchResults (lib/geocode's Census/Nominatim
+// chain) before the GET /search call — see SearchFilterBar.tsx for why it
+// isn't sent as text.
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import TopBar from "@/components/home/TopBar";
@@ -75,8 +77,10 @@ export function generateMetadata({ searchParams }: SearchPageProps): Metadata {
   // `location` is the one real "city the visitor chose" signal that
   // exists today (what they typed into the Hero/SearchFilterBar location
   // field) — falls back to the launch-city default when they searched
-  // without one (frontend/CLAUDE.md-adjacent: no geocoding endpoint
-  // exists in Phase 1 to resolve this any more precisely).
+  // without one. This is the typed text as-is, not the geocoded result:
+  // a <title>/description doesn't need resolved coordinates, and
+  // metadata generation shouldn't make its own geocoding call (SearchResults
+  // does that once, for the actual query).
   const cityLabel = location || DEFAULT_CITY_LABEL;
   return {
     title: labels.length
