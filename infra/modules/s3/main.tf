@@ -61,6 +61,13 @@ resource "aws_s3_bucket_lifecycle_configuration" "media" {
     id     = "abort-incomplete-multipart"
     status = "Enabled"
 
+    # Intentionally bucket-wide (no prefix) — incomplete multipart uploads
+    # can land anywhere in the bucket, not just under raw/. An empty filter
+    # block is the modern S3 lifecycle resource's explicit way to say "all
+    # objects", and silences the provider's "Invalid Attribute Combination"
+    # warning without narrowing this rule's actual scope.
+    filter {}
+
     abort_incomplete_multipart_upload {
       days_after_initiation = 7
     }
