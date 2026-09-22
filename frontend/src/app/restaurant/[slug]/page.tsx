@@ -82,11 +82,11 @@ export async function generateMetadata({ params }: RestaurantPageProps): Promise
   const { restaurant, location } = data;
 
   // frontend/CLAUDE.md SEO Requirements meta title format:
-  // "{Restaurant Name} — Indian Restaurant in {City}, {State}"
+  // "{Restaurant Name} — Desi Restaurant in {City}, {State}"
   const cityState = location ? ` in ${location.city}, ${location.state}` : "";
 
   return {
-    title: `${restaurant.name} — Indian Restaurant${cityState}`,
+    title: `${restaurant.name} — Desi Restaurant${cityState}`,
     // "first 150 chars of restaurant `about` field" — description here is
     // the closest documented equivalent (no separate `about` field on
     // RestaurantBrand per docs/API_CONTRACTS.md). Nullable in practice
@@ -94,7 +94,7 @@ export async function generateMetadata({ params }: RestaurantPageProps): Promise
     // falls back to a generic line rather than crashing.
     description: restaurant.description
       ? restaurant.description.slice(0, 150)
-      : `${restaurant.name} — Indian Restaurant${cityState} on Swarasa.`,
+      : `${restaurant.name} — Desi Restaurant${cityState} on Swarasa.`,
     alternates: {
       canonical: `/restaurant/${restaurant.slug}`,
     },
