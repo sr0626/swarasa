@@ -104,6 +104,20 @@ python3 scripts/dev_unclaim_restaurants.py
 python3 scripts/dev_unclaim_restaurants.py --slugs dera-grill taj-chaat-house
 ```
 
+### `dev_clear_manager_assignments.py`
+Soft-removes (deactivates) a manager's active `location_manager`
+assignments by email — for exercising the manager cap / cross-owner /
+reassignment validation in `location_manager_service.py` repeatedly
+without clicking "remove manager" once per assignment in the owner
+portal. Defaults to ALL of that manager's active assignments; pass
+`--location-ids` to scope it, `--dry-run` to preview. Dev database only.
+Reversible via re-assignment.
+
+```bash
+python3 scripts/dev_clear_manager_assignments.py --manager-email manager@example.com
+python3 scripts/dev_clear_manager_assignments.py --manager-email manager@example.com --location-ids 12 34
+```
+
 ### `geocode_missing_locations.py`
 Backfills coordinates for active locations with NULL `geom` (invisible to geo
 search). Lists them via the `list_ungeocoded_locations` command, geocodes on

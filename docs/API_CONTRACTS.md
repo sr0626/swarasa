@@ -843,14 +843,22 @@ Response: `201`
 }
 ```
 
-Errors:
+Errors (checked in this order — see `assign_manager`'s own docstring for
+why: cheapest/most-fundamental rejection first):
 | Status | Code | When |
 |---|---|---|
 | 404 | `not_found` | Location doesn't exist |
 | 403 | `forbidden` | Caller doesn't own the location's parent brand |
-| 404 | `manager_not_found` | No Cognito user exists with `manager_email` |
-| 409 | `manager_cap_reached` | Location is `is_paid=true` and already has 2 active managers — from the existing `assert_can_add_active_manager` check in `location_manager_service.py`, unchanged |
+| 404 | `manager_not_found` | No Cognito user exists with `manager_email` — the "unknown email" case; no invite email is sent and no Cognito user is created (SES is Phase-2-deferred), this is a clear, immediate error only |
+| 409 | `manager_different_owner` | (added 2026-09-22) The resolved manager already holds an ACTIVE `location_manager` row on a location owned by a DIFFERENT owner than the caller — see DECISIONS.md "Manager scoped to one owner at a time" |
+| 409 | `manager_cap_reached` | Location is `is_paid=true` and already has the configured max active managers (default 2, `platform_config.max_active_managers_per_location` — see DECISIONS.md "Configurable manager/location caps via platform_config") — from the existing `assert_can_add_active_manager` check in `location_manager_service.py`, cap value now config-driven instead of hardcoded |
+| 409 | `manager_location_cap_reached` | (added 2026-09-22) The resolved manager already actively manages the configured max number of OTHER `is_paid=true` locations (default 2, `platform_config.max_active_locations_per_manager`) — only checked when the TARGET location is also paid; free-tier assignments never count toward or trigger this cap. The message NAMES the locations, e.g. `"This person already manages 2 locations: Dera Grill (Irving), Taj Chaat House (Plano)"` — see DECISIONS.md "Symmetric manager-location cap" for the full paid-tier-only scoping rationale |
 | 409 | `already_active_manager` | This user already has an active assignment on this location — `uq_location_manager_active_user` (`docs/DATA_MODEL.md`) would otherwise raise a raw DB integrity error; service layer catches it the same way `DELETE /restaurants/{id}` catches its `ON DELETE RESTRICT` case above |
+
+**Backlog (explicitly not built here):** an "invite a not-yet-registered
+email, auto-link them to this assignment on their later signup" flow. The
+`manager_not_found` 404 above is the complete, intentional behavior for
+Phase 1/this task — SES/email is Phase-2-deferred (root CLAUDE.md).
 
 Audit: `audit_log` row (`table_name="location_manager"`, `action="create"`) — `location_manager` is in root CLAUDE.md's audit-required table list.
 
