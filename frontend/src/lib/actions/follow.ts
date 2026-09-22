@@ -21,6 +21,7 @@
 // role check below is real, and the backend's own `require_registered_user`
 // dependency (backend/app/dependencies/auth.py) is the final authority
 // either way. This file does not touch that backend restriction.
+import { revalidatePath } from "next/cache";
 import { ApiError } from "@/lib/api/client";
 import { followRestaurant, unfollowRestaurant } from "@/lib/api/restaurants";
 import { getServerSession } from "@/lib/auth/session";
@@ -52,6 +53,13 @@ export async function followRestaurantAction(brandId: number): Promise<FollowAct
 
   try {
     await followRestaurant(brandId, auth.accessToken);
+    // Same staleness fix as PR #157's hours-freshness bug: the underlying
+    // GET /auth/me/follows call is already fetched fresh on every render
+    // (PR #141's cache: "no-store" for authenticated calls), but Next's
+    // client-side Router Cache can still serve a stale /account snapshot on
+    // navigation without this — found live 2026-09-22 ("My favorites needs
+    // a hard refresh to see the update").
+    revalidatePath("/account");
     return { ok: true };
   } catch (error) {
     return { ok: false, error: messageFor(error, "Could not follow this restaurant. Please try again.") };
@@ -65,6 +73,7 @@ export async function unfollowRestaurantAction(brandId: number): Promise<FollowA
 
   try {
     await unfollowRestaurant(brandId, auth.accessToken);
+    revalidatePath("/account");
     return { ok: true };
   } catch (error) {
     return { ok: false, error: messageFor(error, "Could not unfollow this restaurant. Please try again.") };
