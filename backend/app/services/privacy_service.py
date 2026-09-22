@@ -9,11 +9,18 @@ behind every judgment call referenced inline below. Short version:
 - A caller's personal data is found by their Cognito `sub` across every
   table that stores it (`owner_account.cognito_sub`,
   `location_manager.user_id`, `user_follow.user_id`,
-  `claim_request.claimant_user_id`, `audit_log.actor_id`) — not gated by
-  their *current* role claim, since the same identity can appear in more
-  than one of these regardless of which pool group they're in right now
-  (e.g. a `registered_user` can have historic `claim_request` rows —
-  `POST /claim` allows any authenticated user).
+  `claim_request.claimant_user_id`, `listing_report.reporter_user_id`,
+  `audit_log.actor_id`) — not gated by their *current* role claim, since
+  the same identity can appear in more than one of these regardless of
+  which pool group they're in right now (e.g. a `registered_user` can
+  have historic `claim_request` rows — `POST /claim` allows any
+  authenticated user).
+- `listing_report` rows are matched by `reporter_user_id` (the Cognito
+  `sub`, set only when the submitter was signed in), NEVER by
+  `reporter_email` — that column is free text any submitter (including
+  an anonymous one) can type, so it is not a reliable identity match and
+  could pull in — or fail to pull in — the wrong rows. See
+  `app/services/listing_report_service.create_report`.
 - Export is synchronous (no async job, no email) — see DECISIONS.md.
 - Deletion is a reviewed request (`data_deletion_request`), not executed
   at submission time — see DECISIONS.md and
@@ -23,7 +30,14 @@ behind every judgment call referenced inline below. Short version:
   are hard-deleted (pure preference data, no retention reason);
   `location_manager`/`claim_request` rows are kept but have their
   identifying column redacted to `_REDACTED_MARKER` (preserves
-  access-control/business history shape without the identifier).
+  access-control/business history shape without the identifier);
+  `listing_report` rows are kept with only `reporter_email` nulled out —
+  `reporter_user_id` is left in place, same treatment as
+  `audit_log.actor_id`, since a report is an attribution/triage trail
+  (who filed it), not an access grant like `location_manager.user_id` or
+  a contested business claim like `claim_request.claimant_user_id`; the
+  report's own content (`category`, `details`, `status`) is never
+  touched either way.
 """
 from __future__ import annotations
 
@@ -38,6 +52,7 @@ from app.dependencies.pagination import Pagination
 from app.models.audit_log import AuditLog
 from app.models.claim_request import ClaimRequest
 from app.models.data_deletion_request import DataDeletionRequest
+from app.models.listing_report import ListingReport
 from app.models.location_manager import LocationManager
 from app.models.owner_account import OwnerAccount
 from app.models.user_follow import UserFollow
@@ -49,6 +64,7 @@ from app.schemas.privacy import (
     DataDeletionRequestOut,
     DataExportOut,
     FollowExportOut,
+    ListingReportExportOut,
     LocationManagerExportOut,
     OwnerAccountExportOut,
 )
@@ -64,7 +80,8 @@ _REDACTED_MARKER = "deleted-user"
 _EXPORT_NOTICE = (
     "This export covers personal data held directly by this app "
     "(location manager assignments, restaurant follows, claim requests, "
-    "and your owner account record if you have one). Cognito account "
+    "listing reports you submitted while signed in, and your owner "
+    "account record if you have one). Cognito account "
     "details (login email, password, MFA) are managed separately by AWS "
     "Cognito and are not included here. Entries under audit_log_entries "
     "are retained even after a data-deletion request, for legitimate "
@@ -96,6 +113,12 @@ async def _gather(db: AsyncSession, cognito_sub: str) -> dict[str, Any]:
         )
     ).scalars().all()
 
+    listing_report_rows = (
+        await db.execute(
+            select(ListingReport).where(ListingReport.reporter_user_id == cognito_sub)
+        )
+    ).scalars().all()
+
     audit_rows = (
         await db.execute(
             select(AuditLog)
@@ -109,6 +132,7 @@ async def _gather(db: AsyncSession, cognito_sub: str) -> dict[str, Any]:
         "managers": manager_rows,
         "follows": follow_rows,
         "claims": claim_rows,
+        "listing_reports": listing_report_rows,
         "audit": audit_rows,
     }
 
@@ -121,6 +145,7 @@ def _data_scope(gathered: dict[str, Any]) -> dict[str, int]:
         "follows": len(gathered["follows"]),
         "claim_requests": len(gathered["claims"]),
         "claim_requests_pending": pending_claims,
+        "listing_reports": len(gathered["listing_reports"]),
         "audit_log_entries": len(gathered["audit"]),
     }
 
@@ -177,6 +202,20 @@ async def export_my_data(db: AsyncSession, current_user) -> DataExportOut:
                 reviewed_at=c.reviewed_at,
             )
             for c in gathered["claims"]
+        ],
+        listing_reports=[
+            ListingReportExportOut(
+                report_id=r.id,
+                brand_id=r.brand_id,
+                location_id=r.location_id,
+                category=r.category,
+                details=r.details,
+                reporter_email=r.reporter_email,
+                status=r.status,
+                submitted_at=r.submitted_at,
+                reviewed_at=r.reviewed_at,
+            )
+            for r in gathered["listing_reports"]
         ],
         audit_log_entries=[
             AuditLogExportOut(
@@ -357,6 +396,17 @@ async def approve_deletion_request(
     # restaurant_brand write is audited).
     for claim in gathered["claims"]:
         claim.claimant_user_id = _REDACTED_MARKER
+
+    # listing_report: null out reporter_email only — the report's own
+    # content (category, details, status) and reporter_user_id are left
+    # untouched. Not on the audit-required table list (same treatment
+    # claim_request gets), so no audit_log entry. See module docstring
+    # for why reporter_user_id is kept (attribution/triage trail, same
+    # posture as audit_log.actor_id) while reporter_email (free-text
+    # contact PII) is nulled, matching the nullable-field convention
+    # already used for owner_account.full_name/phone below.
+    for report in gathered["listing_reports"]:
+        report.reporter_email = None
 
     # owner_account: anonymize in place, never hard-delete (see
     # app/models/owner_account.py docstring). On the audit-required list.

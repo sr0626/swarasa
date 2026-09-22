@@ -989,6 +989,31 @@ hard-deleting/anonymizing `audit_log` (breaks its data-governance
 purpose and root CLAUDE.md's existing append-only guarantee, and CCPA
 itself carves out this exact legitimate-business-purpose case).
 
+**Amendment 2026-09-22 — `listing_report` added to export/deletion
+scope, `reporter_email` nulled but `reporter_user_id` kept:** PR #113
+(`listing_report`, "report a problem") shipped after the CCPA flow above
+and was never wired into it — a signed-in caller's `reporter_email` sat
+in a table `_gather`/export/deletion didn't know about. Fixed by adding
+`listing_report` to `_gather`, matched by `reporter_user_id` (the
+Cognito `sub`, set only when the submitter was signed in) — deliberately
+**not** by `reporter_email`, since that column is free text any
+submitter, including an anonymous one, can type; matching on it could
+both miss the caller's own reports (submitted with no email, or a
+different email than their account's) and wrongly pull in someone
+else's report (an anonymous submitter typing another person's email).
+On deletion approval, only `reporter_email` is nulled — `reporter_user_id`
+is deliberately left in place, given the same treatment as
+`audit_log.actor_id` rather than `location_manager.user_id` /
+`claim_request.claimant_user_id`: a report is an attribution/triage
+trail (who flagged this listing issue), not an access grant or a
+contested business claim, so there's no access-control or fraud-history
+reason to sever it, and severing it would also make the row impossible
+to find again via `reporter_user_id` in any future export/deletion pass
+for that identity. `category`/`details`/`status` are never touched.
+`listing_report` was already outside root CLAUDE.md's audit-required
+table list (see its own model docstring), so this redaction gets no
+`audit_log` entry, same as `claim_request`'s.
+
 **Owner-scoped restaurant list: bare `GET /restaurants`, not `/restaurants/mine` or a `/search` variant**
 2026-09-13 | Architect decision, made while writing the contract to unblock
 the owner portal dashboard (there was no way for an authenticated owner to

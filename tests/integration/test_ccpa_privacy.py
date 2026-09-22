@@ -17,6 +17,7 @@ from sqlalchemy import select
 
 from app.models.audit_log import AuditLog
 from app.models.claim_request import ClaimRequest
+from app.models.listing_report import ListingReport
 from app.models.location_manager import LocationManager
 from app.models.owner_account import OwnerAccount
 from app.models.user_follow import UserFollow
@@ -25,6 +26,7 @@ from factories import (
     create_claim,
     create_deletion_request,
     create_follow,
+    create_listing_report,
     create_location,
     create_location_manager,
     create_owner,
@@ -124,6 +126,60 @@ async def test_export_includes_location_manager_assignments(client, db_session, 
     assert assignments[0]["is_active"] is True
 
 
+@pytest.mark.asyncio
+async def test_export_includes_only_the_callers_own_listing_reports(client, db_session, as_user):
+    """`listing_report` rows are matched by `reporter_user_id` — never by
+    `reporter_email` (free text any submitter can type, not a reliable
+    identity match; see privacy_service module docstring). A report with
+    no `reporter_user_id` at all (anonymous submission) must never show
+    up in anyone's export, even if its `reporter_email` happens to match
+    the caller's own account email.
+    """
+    brand = await create_brand(db_session)
+    await db_session.commit()
+
+    my_sub = str(uuid.uuid4())
+    other_sub = str(uuid.uuid4())
+    mine = await create_listing_report(
+        db_session,
+        brand_id=brand.id,
+        reporter_user_id=my_sub,
+        reporter_email="me@example.com",
+        category="hours_incorrect",
+        details="Closed Mondays now.",
+    )
+    await create_listing_report(
+        db_session, brand_id=brand.id, reporter_user_id=other_sub, reporter_email="them@example.com"
+    )
+    # Anonymous report whose typed-in email happens to match the caller's
+    # own account email — must NOT be attributed to them.
+    await create_listing_report(
+        db_session, brand_id=brand.id, reporter_user_id=None, reporter_email="my-account@example.com"
+    )
+    await db_session.commit()
+
+    as_user("registered_user", sub=my_sub, email="my-account@example.com")
+    response = await client.get("/auth/me/data-export")
+
+    assert response.status_code == 200, response.text
+    reports = response.json()["listing_reports"]
+    assert len(reports) == 1
+    assert reports[0]["report_id"] == mine.id
+    assert reports[0]["brand_id"] == brand.id
+    assert reports[0]["category"] == "hours_incorrect"
+    assert reports[0]["details"] == "Closed Mondays now."
+    assert reports[0]["reporter_email"] == "me@example.com"
+    assert reports[0]["status"] == "new"
+
+
+@pytest.mark.asyncio
+async def test_export_listing_reports_empty_when_none_submitted(client, db_session, as_user):
+    as_user("registered_user")
+    response = await client.get("/auth/me/data-export")
+    assert response.status_code == 200, response.text
+    assert response.json()["listing_reports"] == []
+
+
 # ---------------------------------------------------------------------------
 # POST /auth/me/data-deletion, GET /auth/me/data-deletion
 # ---------------------------------------------------------------------------
@@ -142,6 +198,7 @@ async def test_create_deletion_request_returns_pending_with_data_scope(client, d
 
     user_sub = str(uuid.uuid4())
     await create_follow(db_session, user_id=user_sub, brand_id=brand.id)
+    await create_listing_report(db_session, brand_id=brand.id, reporter_user_id=user_sub)
     await db_session.commit()
 
     as_user("registered_user", sub=user_sub)
@@ -153,6 +210,7 @@ async def test_create_deletion_request_returns_pending_with_data_scope(client, d
     assert body["reason"] == "no longer using the app"
     assert body["data_scope"]["follows"] == 1
     assert body["data_scope"]["owner_account"] == 0
+    assert body["data_scope"]["listing_reports"] == 1
 
 
 @pytest.mark.asyncio
@@ -304,6 +362,70 @@ async def test_approve_hard_deletes_follows_and_redacts_manager_and_claim_rows(c
     assert len(audit_rows) == 1
     assert audit_rows[0].action == "update"
     assert audit_rows[0].actor_role == "admin"
+
+
+@pytest.mark.asyncio
+async def test_approve_redacts_listing_report_email_but_keeps_row_and_content(client, db_session, as_user):
+    """Only `reporter_email` is nulled — `reporter_user_id`, `category`,
+    `details`, and `status` are left exactly as submitted (see
+    docs/DECISIONS.md "CCPA data export/deletion" amendment 2026-09-22).
+    """
+    brand = await create_brand(db_session)
+    await db_session.commit()
+
+    user_sub = str(uuid.uuid4())
+    report = await create_listing_report(
+        db_session,
+        brand_id=brand.id,
+        reporter_user_id=user_sub,
+        reporter_email="reporter@example.com",
+        category="permanently_closed",
+        details="This location shut down last month.",
+        status="new",
+    )
+    request = await create_deletion_request(db_session, requester_user_id=user_sub, requester_role="registered_user")
+    await db_session.commit()
+
+    as_user("admin")
+    response = await client.post(f"/data-deletion/{request.id}/approve", json={})
+    assert response.status_code == 200, response.text
+
+    await db_session.refresh(report)
+    assert report.reporter_email is None
+    assert report.reporter_user_id == user_sub
+    assert report.category == "permanently_closed"
+    assert report.details == "This location shut down last month."
+    assert report.status == "new"
+
+    # Not on the audit-required table list — same treatment as
+    # claim_request's own redaction, no audit_log entry generated.
+    audit_rows = (
+        await db_session.execute(
+            select(AuditLog).where(AuditLog.table_name == "listing_report", AuditLog.record_id == report.id)
+        )
+    ).scalars().all()
+    assert audit_rows == []
+
+
+@pytest.mark.asyncio
+async def test_approve_does_not_touch_another_users_listing_report(client, db_session, as_user):
+    brand = await create_brand(db_session)
+    await db_session.commit()
+
+    user_sub = str(uuid.uuid4())
+    other_sub = str(uuid.uuid4())
+    others_report = await create_listing_report(
+        db_session, brand_id=brand.id, reporter_user_id=other_sub, reporter_email="other@example.com"
+    )
+    request = await create_deletion_request(db_session, requester_user_id=user_sub, requester_role="registered_user")
+    await db_session.commit()
+
+    as_user("admin")
+    response = await client.post(f"/data-deletion/{request.id}/approve", json={})
+    assert response.status_code == 200, response.text
+
+    await db_session.refresh(others_report)
+    assert others_report.reporter_email == "other@example.com"
 
 
 @pytest.mark.asyncio
