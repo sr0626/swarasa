@@ -1343,9 +1343,13 @@ Cognito itself issues and refreshes JWTs directly to the frontend
 never issues, stores, or validates passwords (root CLAUDE.md "NEVER
 store passwords — Cognito handles all auth"). The two routes below
 cover only what the backend itself needs: reading the caller's
-identity off a validated JWT, and lazily provisioning the local
+identity off a validated JWT, lazily provisioning the local
 `owner_account` row the first time a Cognito "owner" group user is
-seen (Cognito has no concept of our `owner_account` table).
+seen (Cognito has no concept of our `owner_account` table), and — since
+docs/PROJECT_PLAN.csv "Generic user display name for registered_user/
+manager" — reading/writing a generic `user_profile` row for
+`registered_user`/`manager` callers (see `docs/DATA_MODEL.md`
+"user_profile").
 
 ### GET /auth/me
 
@@ -1357,6 +1361,7 @@ Response:
   "cognito_sub": "us-east-1:abc-123",
   "role": "owner",
   "email": "owner@example.com",
+  "full_name": "Priya Rao",
   "owner_account": {
     "id": 55,
     "full_name": "Priya Rao",
@@ -1368,12 +1373,26 @@ Response:
 `phone` added 2026-09-17 (was previously accepted by `PATCH /auth/me` but
 never returned by `GET /auth/me`, so the account page's edit form could
 never pre-fill it — a real, fixed gap, not a deliberate omission).
-`owner_account` is `null` for `manager`/`admin`/`registered_user` roles
-(they have no local business record in this schema — see
-`docs/DATA_MODEL.md`'s identity note). For an `owner`-group user with
-no existing `owner_account` row yet, the service layer creates one on
+
+`full_name` (added alongside `user_profile` — docs/PROJECT_PLAN.csv
+"Generic user display name for registered_user/manager") is a **unified**
+display name regardless of which table it's actually stored in:
+`owner_account.full_name` for an `owner` caller, the new
+`user_profile.full_name` for `registered_user`/`manager`, `null` for
+`admin` (no local profile source for admin yet). Added so a frontend
+caller never needs to branch on role/backing table to show "the user's
+name" — it just reads this one field.
+
+`owner_account` is still `null` for `manager`/`admin`/`registered_user`
+roles (they have no local *business* record in this schema — see
+`docs/DATA_MODEL.md`'s identity note; `user_profile` is a much smaller,
+name-only record, not a second `owner_account`). For an `owner`-group user
+with no existing `owner_account` row yet, the service layer creates one on
 first call (`cognito_sub` + `email` from the JWT claims) rather than
-requiring a separate signup-sync step.
+requiring a separate signup-sync step. `user_profile`, by contrast, is
+never lazily created on `GET` — a `registered_user`/`manager` caller who
+has never set a name just gets `full_name: null` back; a row is only
+created on the first successful `PATCH`.
 
 ### PATCH /auth/me
 
@@ -1383,31 +1402,50 @@ owner-only gate was an oversight from when this route was first built with
 only owner accounts in mind, not a deliberate restriction — `GET /auth/me`
 already worked for every role.)
 
-Body: `{ "full_name": "Priya Rao", "phone": "+14695559876" }`
+Body:
+- `owner`: `{ "full_name": "Priya Rao", "phone": "+14695559876" }`
+- `registered_user` / `manager`: `{ "full_name": "Priya Rao" }` — `phone`
+  is accepted but silently ignored (`user_profile` has no phone column).
 
-Updates the caller's own `owner_account` row only — no `owner_id` in
-the body, it's always the authenticated caller (root CLAUDE.md
-"Permission model" — never trust a client-supplied identity for a
-write that should be self-scoped). Same lazy-provisioning as `GET
-/auth/me`: an `owner`-role caller's first-ever write creates their
-`owner_account` row rather than 404ing.
+`full_name`, when provided, must be non-empty after trimming and at most
+255 characters (`backend/app/schemas/auth.py FULL_NAME_MAX_LENGTH`) — `422`
+otherwise. Same self-scoping posture as before: no `owner_id`/`user_id` in
+the body, it's always the authenticated caller (root CLAUDE.md "Permission
+model" — never trust a client-supplied identity for a write that should be
+self-scoped).
 
 Response for an `owner` caller: `200`, `owner_account` shape from `GET
-/auth/me`.
+/auth/me` (unchanged by this generalization — still lazily provisions
+`owner_account` on first write, still audit-logged).
 
-Response for `manager` / `admin` / `registered_user`: `404`,
-`{"detail": "...", "code": "no_editable_profile"}` — deliberately NOT the
-old `403`. It is not a permissions problem (every authenticated role may
-call this route); those three roles simply have no local profile record
-in this schema to write to today (only `owner_account` has
-`full_name`/`phone` — see `docs/DATA_MODEL.md`'s identity note and
-`backend/app/models/` — there is no manager/admin/registered_user profile
-table). If those roles ever need editable name/phone, the honest home for
-it is Cognito attributes (`given_name`/`family_name`/`phone_number`) via a
-frontend Amplify/Cognito `updateUserAttributes` call, not a write through
-this endpoint — out of scope for this fix; adding a new Postgres table for
-it is a schema decision for Architect, not something invented here
-unilaterally.
+Response for a `registered_user`/`manager` caller: `200`,
+`{ "full_name": "Priya Rao" }` — upserts into `user_profile`
+(`cognito_sub` primary key; see `docs/DATA_MODEL.md`). `full_name` is
+required for these two roles specifically (omitting it entirely is a `400
+full_name_required` — there's nothing else in the body for them to write).
+**Not** audit-logged: `user_profile` isn't on root CLAUDE.md's
+audited-entity list (restaurant_brand, restaurant_location, menu_item,
+deal, owner_account, location_manager), and `audit_log.record_id` is a
+`BigInteger` that a Cognito `sub` string doesn't fit anyway.
+
+Response for `admin`: `404`, `{"detail": "...", "code":
+"no_editable_profile"}` — deliberately NOT `403`. It is not a permissions
+problem (every authenticated role may call this route); admin simply has
+no local profile record in this schema to write to yet (neither
+`owner_account` nor `user_profile` apply). If admin ever needs an
+editable name, extending `user_profile` to cover it is the natural next
+step — out of scope here since it wasn't asked for.
+
+ARCHITECT-LEVEL JUDGMENT CALL (flagged for review, docs/PROJECT_PLAN.csv
+"Generic user display name for registered_user/manager"): Cognito's own
+self-service `updateUserAttributes` was considered and rejected for
+`registered_user`/`manager` display names — the frontend session cookie
+caches ID-token claims from sign-in, so a Cognito attribute write
+wouldn't show up anywhere in the app until the next sign-in/token
+refresh. The new `user_profile` table (Postgres, backed by this same
+`GET`/`PATCH /auth/me` pair) gives an immediate, consistent read-your-write
+instead. See `docs/DATA_MODEL.md` "user_profile" for the full schema
+rationale.
 
 ---
 

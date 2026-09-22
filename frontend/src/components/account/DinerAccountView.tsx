@@ -7,6 +7,7 @@ import Link from "next/link";
 import AccountAvatar from "@/components/account/AccountAvatar";
 import AccountDetailsCard from "@/components/account/AccountDetailsCard";
 import DataPrivacySection from "@/components/account/DataPrivacySection";
+import DisplayNameForm from "@/components/account/DisplayNameForm";
 import FollowedRestaurantsGrid from "@/components/account/FollowedRestaurantsGrid";
 import SecurityCard from "@/components/account/SecurityCard";
 import { firstNameFor, primaryLinkClass } from "@/components/account/accountShared";
@@ -61,7 +62,8 @@ export default function DinerAccountView({
           <FollowedRestaurantsGrid follows={follows} loadError={followsError} />
         </div>
         <div className="flex min-w-0 flex-col gap-5">
-          <AccountDetailsCard me={me} stacked />
+          <DisplayNameForm initialFullName={me.full_name} />
+          <AccountDetailsCard me={me} stacked nameEditableElsewhere />
           <SecurityCard />
           <DataPrivacySection latestDeletionRequest={latestDeletionRequest} />
         </div>

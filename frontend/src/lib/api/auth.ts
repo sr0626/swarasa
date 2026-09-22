@@ -5,7 +5,12 @@
 // through typed functions").
 import { apiFetch, toQueryString } from "./client";
 import type { PaginatedResponse, PaginationParams } from "@/types/common";
-import type { AuthMe, UpdateAuthMeInput } from "@/types/auth";
+import type {
+  AuthMe,
+  UpdateAuthMeInput,
+  UpdateProfileInput,
+  UpdateProfileResult,
+} from "@/types/auth";
 import type { FollowedBrand } from "@/types/follow";
 import type { ManagedLocation } from "@/types/location";
 import type {
@@ -35,6 +40,30 @@ export async function updateCurrentUser(
   accessToken: string
 ): Promise<AuthMe["owner_account"]> {
   return apiFetch<AuthMe["owner_account"]>(
+    "/auth/me",
+    { method: "PATCH", body: JSON.stringify(input) },
+    { accessToken }
+  );
+}
+
+/**
+ * PATCH /auth/me — generalized display-name update for `registered_user`/
+ * `manager` callers (docs/API_CONTRACTS.md "PATCH /auth/me", generalized
+ * alongside the new `user_profile` table — see
+ * backend/app/models/user_profile.py). Separate from `updateCurrentUser`
+ * above (which is owner-only and returns the full `OwnerAccount` shape):
+ * this hits the same endpoint but only ever sends/receives `full_name` —
+ * the shape a registered_user/manager caller's write actually has. Safe to
+ * call for an owner session too (the backend still routes an owner caller
+ * to `owner_account`, `phone` simply stays untouched), but owner UI uses
+ * `updateCurrentUser` instead so it keeps getting `phone`/`id`/
+ * `stripe_customer_id` back.
+ */
+export async function updateMyProfile(
+  input: UpdateProfileInput,
+  accessToken: string
+): Promise<UpdateProfileResult> {
+  return apiFetch<UpdateProfileResult>(
     "/auth/me",
     { method: "PATCH", body: JSON.stringify(input) },
     { accessToken }
