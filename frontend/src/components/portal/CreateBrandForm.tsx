@@ -438,7 +438,6 @@ export default function CreateBrandForm({ cuisineTags }: { cuisineTags: CuisineT
         <Field
           id="phone"
           label="Phone"
-          optional
           error={fieldErrors.phone}
           hint="Shown on your listing so diners can call you."
         >

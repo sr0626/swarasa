@@ -489,6 +489,21 @@ New locations start `is_paid=false`, `is_verified=false`, `is_active=true`.
 call; the service layer derives `geom` from them on write (see
 `docs/DATA_MODEL.md` judgment-call note on `restaurant_location.geom`).
 
+`phone` is **required** (added 2026-09-22, docs/PROJECT_PLAN.csv "Make
+location phone required") — same standing as `address_line1`/`city`:
+missing or blank -> `422`. Accepted in any of the formats
+`frontend/src/lib/phone.ts normalizePhone` handles (e.g.
+`"(972) 555-0142"`, `"9725550142"`, `"+14695551234"`) and normalised to
+E.164 server-side (`backend/app/schemas/location.py normalize_phone` — a
+line-for-line port of the frontend function, kept in sync); an
+unparseable value is also `422`. The DB column
+(`restaurant_location.phone`) is **not** getting a `NOT NULL` migration —
+it stays nullable so existing/imported rows with `phone IS NULL` (e.g. the
+CSV bulk-import path, which builds `RestaurantLocation` directly and
+never goes through this schema) are untouched; "required" is enforced
+purely at this Pydantic layer, the standard lower-risk choice absent a
+backfill.
+
 Response: `201`, same shape as `GET /locations/{id}` (with an empty `hours` array).
 
 Audit: `audit_log` row (`table_name="restaurant_location"`, `action="create"`).
@@ -508,7 +523,12 @@ free tier, owner/manager/admin may all set them):
 
 Unlike the other fields (where an explicit `null` is ignored), sending
 `null`, `""` or `[]` for `about` / `specialties` **clears** the stored
-value; omitting the key leaves it untouched. Both fields are also returned
+value; omitting the key leaves it untouched. `phone` is the opposite kind
+of exception: it's optional to *omit* (omitting leaves the stored phone
+untouched, like every other address field), but if the key IS sent, `null`
+or `""` is rejected with `422` rather than silently clearing it — phone is
+required going forward (see `POST /locations` above), so there is no way
+to PATCH it back to empty/missing. Both fields are also returned
 by `GET /locations/{id}` (and this PATCH's response) as `about: string |
 null` and `specialties: string[] | null`. Does **not** accept `is_paid`, `paid_until`, or
 `stripe_sub_item_id` — those are Stripe-webhook/admin-only writes

@@ -114,7 +114,14 @@ export interface CreateLocationInput {
   state: string;
   postal_code: string;
   country: string;
-  phone: string | null;
+  // Required as of 2026-09-22 (docs/PROJECT_PLAN.csv "Make location phone
+  // required") — same standing as address_line1/city. `LocationSummary`/
+  // `LocationDetail`/`ManagedLocation` below stay `string | null`: those
+  // are read shapes and existing seeded/imported rows can still have
+  // `phone IS NULL` (not backfilled, see
+  // backend/app/schemas/location.py LocationCreate.phone's note) — only
+  // the write shape here tightens.
+  phone: string;
   timezone: string;
   /** null/omitted when the address couldn't be geocoded — the listing then
    * stays out of geo search until an admin sets a position. */
@@ -126,6 +133,11 @@ export interface CreateLocationInput {
  * Body for PATCH /locations/{id}. Any subset of the address/contact/timezone
  * fields — deliberately excludes is_paid, paid_until, stripe_sub_item_id,
  * which are Stripe-webhook/admin-only writes (docs/API_CONTRACTS.md).
+ * `phone` becomes optional-to-omit here (via `Partial`) but, per
+ * backend/app/schemas/location.py LocationUpdate.phone, if the key IS
+ * sent it still can't be empty/null — omission is the only way to leave
+ * it untouched, unlike `about`/`specialties` below which null/empty
+ * explicitly clears.
  */
 export type UpdateLocationInput = Partial<
   Omit<CreateLocationInput, "brand_id">
