@@ -20,14 +20,21 @@
 import { searchRestaurants } from "@/lib/api/search";
 import RestaurantCard from "@/components/listing/RestaurantCard";
 import InfoPanel from "@/components/ui/InfoPanel";
+import { getServerSession } from "@/lib/auth/session";
+import { getViewerFollowState } from "@/lib/follow/viewerFollowState";
 
 const POPULAR_NEAR_YOU_PAGE_SIZE = 6;
 
 export default async function PopularNearYou() {
-  let data;
-  try {
-    data = await searchRestaurants({ page_size: POPULAR_NEAR_YOU_PAGE_SIZE });
-  } catch {
+  // Resolved once per grid render, not per tile — see
+  // lib/follow/viewerFollowState.ts for the client-side-match approach and
+  // its documented limitation.
+  const [data, followState] = await Promise.all([
+    searchRestaurants({ page_size: POPULAR_NEAR_YOU_PAGE_SIZE }).catch(() => null),
+    getServerSession().then(getViewerFollowState),
+  ]);
+
+  if (!data) {
     return (
       <InfoPanel
         title="We can't load restaurants right now"
@@ -48,7 +55,14 @@ export default async function PopularNearYou() {
   return (
     <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
       {data.results.map((item) => (
-        <RestaurantCard key={item.brand_id} item={item} />
+        <RestaurantCard
+          key={item.brand_id}
+          item={item}
+          showFollowButton={followState.showFollowButton}
+          isRegisteredUser={followState.isRegisteredUser}
+          isFollowed={followState.followedBrandIds.has(item.brand_id)}
+          currentPath="/"
+        />
       ))}
     </div>
   );

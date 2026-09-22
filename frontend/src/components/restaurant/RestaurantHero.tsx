@@ -15,6 +15,7 @@
 // the sidebar info card carries it (RestaurantInfoCard), so repeating it
 // here would just be noise.
 import DefaultRestaurantImage from "@/components/ui/DefaultRestaurantImage";
+import FollowButton from "@/components/ui/FollowButton";
 import RestaurantPhotoCarousel, {
   type CarouselPhoto,
 } from "@/components/restaurant/RestaurantPhotoCarousel";
@@ -80,6 +81,22 @@ interface RestaurantHeroProps {
   /** Full location detail for the brand's primary location — null when the
    * brand has no locations yet (an unclaimed, address-less seed row). */
   location: LocationDetail | null;
+  /** See lib/follow/viewerFollowState.ts — `false` only for a signed-in
+   * owner/manager/admin (root CLAUDE.md's permission model has no follow
+   * use case for those roles), so the icon is omitted entirely for them.
+   * `true` for both a signed-out visitor and a signed-in registered_user —
+   * `isRegisteredUser` below distinguishes those two. */
+  showFollowButton: boolean;
+  /** Whether the viewer is a signed-in registered_user (toggle) as opposed
+   * to signed out (sign-in redirect). Only consulted when
+   * `showFollowButton` is true. */
+  isRegisteredUser: boolean;
+  /** Whether the current viewer already follows this brand. Only
+   * meaningful when `isRegisteredUser`. */
+  isFollowed: boolean;
+  /** This page's own path (e.g. "/restaurant/spice-garden") — the sign-in
+   * return destination for a signed-out follow click. */
+  currentPath: string;
 }
 
 /** Cover first, then gallery in display order; a cover that is also a
@@ -96,7 +113,14 @@ function collectPhotos(name: string, location: LocationDetail | null): CarouselP
   return urls.map((url, index) => ({ url, alt: `${name} photo ${index + 1}` }));
 }
 
-export default function RestaurantHero({ restaurant, location }: RestaurantHeroProps) {
+export default function RestaurantHero({
+  restaurant,
+  location,
+  showFollowButton,
+  isRegisteredUser,
+  isFollowed,
+  currentPath,
+}: RestaurantHeroProps) {
   const photos = collectPhotos(restaurant.name, location);
 
   return (
@@ -120,9 +144,21 @@ export default function RestaurantHero({ restaurant, location }: RestaurantHeroP
       )}
 
       <div className="mt-5 flex flex-col gap-3">
-        <h1 className="font-display text-3xl font-bold text-brand-ink sm:text-4xl">
-          {restaurant.name}
-        </h1>
+        <div className="flex items-start gap-3">
+          <h1 className="font-display text-3xl font-bold text-brand-ink sm:text-4xl">
+            {restaurant.name}
+          </h1>
+          {showFollowButton && (
+            <FollowButton
+              brandId={restaurant.id}
+              restaurantName={restaurant.name}
+              isRegisteredUser={isRegisteredUser}
+              initialFollowed={isFollowed}
+              currentPath={currentPath}
+              wrapperClassName="mt-1 shrink-0"
+            />
+          )}
+        </div>
 
         {restaurant.cuisine_tags.length > 0 && (
           <div className="flex flex-col gap-1.5">

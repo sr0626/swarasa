@@ -2,6 +2,7 @@
 // "Restaurants (`restaurant_brand`)".
 import { apiFetch, toQueryString } from "./client";
 import type { PaginatedResponse, PaginationParams } from "@/types/common";
+import type { FollowOut } from "@/types/follow";
 import type { LocationSummary } from "@/types/location";
 import type {
   CreateRestaurantInput,
@@ -120,6 +121,39 @@ export async function deleteRestaurant(
 ): Promise<void> {
   return apiFetch<void>(
     `/restaurants/${id}`,
+    { method: "DELETE" },
+    { accessToken }
+  );
+}
+
+/**
+ * POST /restaurants/{id}/follow — auth: registered_user only
+ * (docs/API_CONTRACTS.md "Follows (`user_follow`)"). Idempotent server-side
+ * — following a brand the caller already follows just returns the existing
+ * follow, no error.
+ */
+export async function followRestaurant(
+  id: number,
+  accessToken: string
+): Promise<FollowOut> {
+  return apiFetch<FollowOut>(
+    `/restaurants/${id}/follow`,
+    { method: "POST" },
+    { accessToken }
+  );
+}
+
+/**
+ * DELETE /restaurants/{id}/follow — auth: registered_user only. Idempotent
+ * — unfollowing a brand the caller doesn't currently follow is a no-op 204,
+ * not an error.
+ */
+export async function unfollowRestaurant(
+  id: number,
+  accessToken: string
+): Promise<void> {
+  return apiFetch<void>(
+    `/restaurants/${id}/follow`,
     { method: "DELETE" },
     { accessToken }
   );
