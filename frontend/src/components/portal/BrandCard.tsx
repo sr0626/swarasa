@@ -109,7 +109,7 @@ export default function BrandCard({
 
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-brand-border px-4 py-2.5">
                   <LocationTierBadge isPaid={location.is_paid} paidUntil={location.paid_until} />
-                  <LocationStatusBadge isActive={location.is_active} />
+                  <LocationStatusBadge status={location.status} />
                   <LocationManagersSummary managers={managers} error={managersError} />
                 </div>
               </li>

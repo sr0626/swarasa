@@ -3,14 +3,16 @@
 // owner branch). Moved out of app/portal/dashboard/page.tsx when the separate
 // owner dashboard was folded into /account (2026-09-19).
 //
-// Each location row surfaces tier/billing status, active/inactive state, and
-// assigned managers (docs/PROJECT_PLAN.csv "Owner dashboard: richer restaurant
-// table"). Tier and active/inactive come from `is_paid`/`paid_until`/
-// `is_active` on `LocationSummary` (frontend/src/types/location.ts -- see the
-// flagged contract gap there: `paid_until` and `is_active` aren't serialized
-// by the backend yet, so those two only render their "unknown"/default state
-// today). Managers come from the existing `GET /locations/{id}/managers`.
-// Read-only status display only -- no Stripe billing management UI (Phase 2).
+// Each location row surfaces tier/billing status, product-state lifecycle
+// (`status`), and assigned managers (docs/PROJECT_PLAN.csv "Owner dashboard:
+// richer restaurant table" / "Location status lifecycle"). Tier and status
+// come from `is_paid`/`paid_until`/`status`/`is_active` on `LocationSummary`
+// (frontend/src/types/location.ts), all real, always-serialized backend
+// fields. `GET /restaurants/{id}/locations` additionally surfaces the
+// owning owner's own non-active locations here, not just active ones.
+// Managers come from the existing `GET /locations/{id}/managers`.
+// Read-only status display only -- interactive status changes live on the
+// location editor (LocationStatusControl.tsx), not this dashboard list.
 import { ApiError } from "@/lib/api/client";
 import { getMyRestaurants, getRestaurantLocations } from "@/lib/api/restaurants";
 import { getLocationById, getLocationManagers } from "@/lib/api/locations";
@@ -86,10 +88,19 @@ async function loadManagersForLocation(
  * `NearestLocationOut` on `/search` — out of scope here (frontend-only
  * task), left for a follow-up.
  */
-async function loadTodayStatusForLocation(location: LocationSummary): Promise<ConsoleTodayStatus> {
+async function loadTodayStatusForLocation(
+  location: LocationSummary,
+  accessToken: string
+): Promise<ConsoleTodayStatus> {
   if (location.is_open_now === true) return { kind: "open_now" };
   try {
-    const detail = await getLocationById(location.id);
+    // Pass accessToken: `GET /locations/{id}` now 404s a non-active
+    // location for a caller without access (docs/PROJECT_PLAN.csv
+    // "Location status lifecycle") — this loader runs for the owner's OWN
+    // locations (including their own hidden ones, surfaced by
+    // `GET /restaurants/{id}/locations` to the owning owner), so it needs
+    // the same caller-aware read the editor page uses, not an anonymous one.
+    const detail = await getLocationById(location.id, accessToken);
     return describeConsoleTodayStatus(location.is_open_now, detail.hours, detail.timezone);
   } catch {
     // Best-effort — the tile still renders correctly via the other bucket
@@ -105,7 +116,7 @@ async function loadLocationExtras(
 ): Promise<LocationWithManagers> {
   const [{ managers, managersError }, todayStatus] = await Promise.all([
     loadManagersForLocation(location, accessToken),
-    loadTodayStatusForLocation(location),
+    loadTodayStatusForLocation(location, accessToken),
   ]);
   return { location, managers, managersError, todayStatus };
 }

@@ -398,6 +398,46 @@ async def _run_csv_bulk_import(csv_content: str) -> dict:
         await dispose_engine()
 
 
+@_command("dev_set_location_status")
+def _run_dev_set_location_status(event: dict) -> dict:
+    """DEV-ONLY: force-set a single location's `status`, bypassing the
+    normal self-service/reopen-request APIs -- for manually exercising the
+    status lifecycle on dev (including seeding one `coming_soon` example
+    location). See app/scripts/dev_set_location_status.py.
+
+    Event payload shape:
+        {"_management_command": "dev_set_location_status",
+         "location_id": 123, "status": "coming_soon"}
+    """
+    from app.db.session import dispose_engine
+    from app.scripts.dev_set_location_status import (
+        DevSetLocationStatusError,
+        run_dev_set_location_status,
+    )
+
+    location_id = event.get("location_id")
+    new_status = event.get("status")
+    if not isinstance(location_id, int) or not new_status:
+        return {
+            "ok": False,
+            "command": "dev_set_location_status",
+            "error": "Event payload needs an integer 'location_id' and a 'status' string.",
+        }
+
+    # Same same-loop-disposal reasoning as _run_seed_dev_data above.
+    async def _run_and_dispose() -> dict:
+        try:
+            return await run_dev_set_location_status(location_id, new_status)
+        finally:
+            await dispose_engine()
+
+    try:
+        result = asyncio.run(_run_and_dispose())
+    except DevSetLocationStatusError as exc:
+        return {"ok": False, "command": "dev_set_location_status", "error": str(exc)}
+    return {"ok": True, "command": "dev_set_location_status", **result}
+
+
 @_command("alembic_upgrade")
 def _run_alembic_upgrade(event: dict) -> dict:
     from app.scripts.run_migrations import run_upgrade

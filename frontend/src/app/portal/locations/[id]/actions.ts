@@ -23,7 +23,9 @@ import {
   updateLocation,
   updateLocationHours,
   updateLocationPhoto,
+  updateLocationStatus,
 } from "@/lib/api/locations";
+import { submitReopenRequest } from "@/lib/api/locationReopen";
 import { getServerSession } from "@/lib/auth/session";
 import { geocodeAddress } from "@/lib/geocode";
 import {
@@ -34,6 +36,10 @@ import {
   updateLocationHoursSchema,
   updateLocationSchema,
 } from "@/lib/validation/location";
+import {
+  createReopenRequestSchema,
+  updateLocationStatusSchema,
+} from "@/lib/validation/locationReopen";
 import type {
   LocationDetail,
   LocationHour,
@@ -42,6 +48,7 @@ import type {
   PhotoUploadUrlResponse,
   UpdateLocationHoursInput,
 } from "@/types/location";
+import type { ReopenRequestResponse } from "@/types/locationReopen";
 import type { UserRole } from "@/types/auth";
 
 type ActionResult<T> = { ok: true; data: T; notice?: string } | { ok: false; error: string };
@@ -380,5 +387,77 @@ export async function removeLocationManagerAction(
     return { ok: true, data: null };
   } catch (error) {
     return { ok: false, error: messageFor(error, "Could not remove this manager.") };
+  }
+}
+
+/**
+ * POST /locations/{id}/status — owner (or admin) self-service status
+ * change. Manager-restricted here too (docs/PROJECT_PLAN.csv "Location
+ * status lifecycle": "manager should NOT be able to change status,
+ * owner-only") — the backend's `require_location_owner_or_admin`
+ * dependency enforces the same thing server-side, this is just the same
+ * "fail fast with a clear message" belt-and-suspenders pattern as
+ * `assignLocationManagerAction` above.
+ */
+export async function updateLocationStatusAction(
+  locationId: number,
+  status: unknown
+): Promise<ActionResult<LocationDetail>> {
+  const auth = await requireLocationSession();
+  if (!auth.ok) return auth;
+  if (auth.role !== "owner" && auth.role !== "admin") {
+    return { ok: false, error: "Only the owner or an admin can change a location's status." };
+  }
+
+  const parsed = updateLocationStatusSchema.safeParse({ status });
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid status." };
+  }
+
+  try {
+    const location = await updateLocationStatus(locationId, parsed.data, auth.accessToken);
+    revalidateLocationPaths(locationId);
+    return { ok: true, data: location };
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 409) {
+      return {
+        ok: false,
+        error:
+          "This location is closed pending admin review — submit a reopen request instead of changing its status directly.",
+      };
+    }
+    return { ok: false, error: messageFor(error, "Could not update this location's status.") };
+  }
+}
+
+/**
+ * POST /locations/{id}/reopen-requests — owner-only (the only path back
+ * to `active` from `closed_pending_reopen`; see
+ * app/services/location_reopen_service.py).
+ */
+export async function submitReopenRequestAction(
+  locationId: number,
+  notes: string
+): Promise<ActionResult<ReopenRequestResponse>> {
+  const auth = await requireLocationSession();
+  if (!auth.ok) return auth;
+  if (auth.role !== "owner") {
+    return { ok: false, error: "Only the location's owner can request a reopen." };
+  }
+
+  const parsed = createReopenRequestSchema.safeParse({ notes: notes || undefined });
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Please check your notes and try again." };
+  }
+
+  try {
+    const request = await submitReopenRequest(locationId, parsed.data, auth.accessToken);
+    revalidateLocationPaths(locationId);
+    return { ok: true, data: request };
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 409) {
+      return { ok: false, error: error.message };
+    }
+    return { ok: false, error: messageFor(error, "Could not submit the reopen request.") };
   }
 }

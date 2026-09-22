@@ -787,6 +787,70 @@ Infra to revisit if this pattern gets used often enough to want it).*
 
 ## Database & Data Model
 
+**Location status lifecycle: a single `status` column (not a DB enum) replacing the old `is_active` boolean, kept alive as a derived `hybrid_property`; one asymmetric transition (`closed_pending_reopen` -> `active`) requires admin approval, everything else is freely self-service**
+2026-09-22 | Combined schema+backend+frontend decision (root CLAUDE.md
+"Decision-Making Autonomy"), closing the product need for more than a
+binary "listed or not" state — an owner needs to mark a new location
+"coming soon" (distinct from a deliberate hide, so it isn't confused
+with one in the console) and to signal "permanently closed" in a way
+that can't be silently un-done by mistake.
+
+- **Four states, one plain `String` column, not a stored Postgres
+  `ENUM` type:** `active` \| `owner_deactivated` \| `coming_soon` \|
+  `closed_pending_reopen`. Root CLAUDE.md's Architect guardrails forbid
+  a stored *tier* enum specifically (`is_paid` stays boolean by
+  explicit product decision) but say nothing about a status/lifecycle
+  enum elsewhere — `claim_request.status` and `listing_report.status`
+  already use exactly this pattern (plain `String`, allowed values
+  documented in a comment, no DB-level `ENUM`) and passed prior
+  Architect review. A DB-level `ENUM` would need a migration to add a
+  5th value later; plain `String` doesn't. See
+  `app/models/restaurant_location.py` module docstring for the full
+  write-up and `docs/DATA_MODEL.md` "restaurant_location".
+- **`is_active` is kept, not renamed, as a Python-level
+  `hybrid_property` derived from `status`** (`True` only when
+  `status == "active"`) rather than a hard rename across the ~15 call
+  sites across services/scripts/tests that read or write it. There is
+  no state where "hidden" and "not active" diverge — every non-`active`
+  status is equally invisible to a caller without access — so the old
+  boolean's meaning maps cleanly onto the new column with zero
+  behavior change for existing callers. Writing `location.is_active =
+  False` maps to `status = "owner_deactivated"` (the closest existing
+  status to the old blanket soft-hide); new code that needs a *specific*
+  hidden state sets `.status` directly instead.
+- **One asymmetric transition, enforced in the service layer, not the
+  schema:** every pair of statuses is freely self-service both ways
+  through `POST /locations/{id}/status` (owner or admin, no manager
+  path) EXCEPT the one-way trip out of `closed_pending_reopen` — an
+  owner who closes a location can't self-reopen it; only an
+  admin-approved `location_reopen_request` (shaped like
+  `claim_request` — submission + admin approve/reject, real side effect
+  on approval) can move it back to `active`. This mirrors "closing an
+  account requires re-verification to reopen" patterns elsewhere and
+  gives admin a checkpoint on a location that was deliberately taken
+  down, without blocking the freely-reversible day-to-day toggles
+  (temporarily hiding a listing, marking a new one "coming soon").
+  *Rejected: making `closed_pending_reopen` -> `active` also
+  self-service (loses the admin checkpoint that's the whole point of a
+  distinct "closed" state vs. just reusing `owner_deactivated`)*.
+- **Manager cannot change status — owner or admin only.** Root
+  CLAUDE.md's Permission model scopes a manager to location-level
+  content edits (info, hours, photos), not the location's own
+  existence/visibility as a product — the same reasoning that already
+  keeps `POST /locations/{id}/managers` and `POST /locations` owner-only
+  (`docs/API_CONTRACTS.md` "Deliberately left owner-only"). A manager
+  can still *see* a hidden location they're assigned to (so they can
+  keep setting it up), just not change its status.
+- **`GET /locations/{id}` becomes status-aware** (a real gap closed by
+  this change, not a new feature): previously this public endpoint
+  returned a hidden location's full detail to any caller regardless of
+  status. Now a non-`active` location 404s (never 403 — an unauthorized
+  caller can't distinguish "doesn't exist" from "exists but hidden",
+  same posture as the claim-flow 404/403 pattern) unless the caller is
+  the owning owner, an admin, or an actively assigned manager. See
+  `docs/API_CONTRACTS.md` "GET /locations/{id}" "Status-aware
+  visibility".
+
 **CSV bulk restaurant import: `website` is brand-level, geocoding happens on the human's machine (not inside the Lambda), CSV extends the existing `bulk_import_restaurants` command rather than forking a new one**
 2026-09-17 | Combined schema+backend decision (root CLAUDE.md
 "Decision-Making Autonomy"), closing the user request "upload a CSV with

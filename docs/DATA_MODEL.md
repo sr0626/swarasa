@@ -124,11 +124,17 @@ convention for a URL column in this schema.
 | paid_until | timestamptz, nullable | NULL when free |
 | stripe_sub_item_id | varchar(255) unique, nullable | One Stripe Subscription Item per paid location (root CLAUDE.md "Billing model") |
 | is_verified | boolean default false, not null | Admin-reviewed at seed/claim time (DECISIONS.md "Data seeding"). Drives search default sort ("verified first") |
-| is_active | boolean default true, not null | Soft-hide (e.g. permanently closed) without deleting the row |
+| status | varchar(24) default 'active', not null, **indexed** | Product-state lifecycle (migration 0008, replaces the old plain `is_active` boolean — see DECISIONS.md "Location status lifecycle"): `active` \| `owner_deactivated` \| `coming_soon` \| `closed_pending_reopen`. `active` is the only publicly visible state. `is_active` (below) is kept as a Python-level `hybrid_property` derived from this column, not a second stored column — reads/writes `status == 'active'` |
 | created_at | timestamptz, not null | |
 | updated_at | timestamptz, not null | |
 
-Indexes: `brand_id`; `geom` (GIST, `ix_restaurant_location_geom`).
+`is_active` (backward-compat, derived — not a stored column since
+migration 0008): `true` only when `status == 'active'`. Old call sites
+reading/writing the boolean keep working unchanged; new code that needs
+a specific hidden state sets `status` directly.
+
+Indexes: `brand_id`; `geom` (GIST, `ix_restaurant_location_geom`);
+`status` (`ix_restaurant_location_status`).
 
 **Judgment call:** `geom` is not populated by a DB trigger. Keeping
 `lat`/`lng` -> `geom` sync as an application-layer concern (Backend
@@ -526,6 +532,42 @@ convention before writing the seed script or the open/closed
 computation — the alternative common convention (0=Sunday) would
 silently shift every lookup by a day if assumed differently on the two
 sides.
+
+---
+
+## location_reopen_request
+
+*(Added by migration `0008_location_status_lifecycle` — backs
+`docs/API_CONTRACTS.md` "Location reopen requests
+(`location_reopen_request`)" and DECISIONS.md "Location status
+lifecycle". Same shape/index pattern as `claim_request` above: a
+submission row plus admin approve/reject, real side effect on approval.)*
+
+| Column | Type | Notes |
+|---|---|---|
+| id | bigint PK | |
+| location_id | bigint FK -> restaurant_location, not null | `ON DELETE CASCADE` |
+| requested_by_user_id | varchar(36), not null | Cognito `sub` of the submitting owner — same pattern as `claim_request.claimant_user_id` |
+| notes | text, nullable | Owner-authored optional context (e.g. "renovation finished") |
+| status | varchar(16) default 'pending_review', not null | `pending_review` \| `approved` \| `rejected` — matches `claim_request.status` exactly |
+| submitted_at | timestamptz, not null | |
+| reviewed_by | varchar(64), nullable | Admin Cognito `sub` |
+| reviewed_at | timestamptz, nullable | |
+| reviewer_notes | text, nullable | Usable on approval too, not reject-only — matches `claim_request.reviewer_notes` |
+| created_at | timestamptz, not null | |
+| updated_at | timestamptz, not null | |
+
+Indexes:
+- `ix_location_reopen_request_location_id` on `location_id`
+- `ix_location_reopen_request_requested_by_user_id` on `requested_by_user_id`
+- `ix_location_reopen_request_status_submitted` on (`status`, `submitted_at`) — cheap ordered scan for the admin review queue
+- `uq_location_reopen_request_pending_location`: **partial unique index** on `location_id` `WHERE status = 'pending_review'` — at most one pending reopen request per location at a time
+
+Approving a request is the only path that writes
+`restaurant_location.status` back to `active` from
+`closed_pending_reopen` — every other status transition is
+self-service via `POST /locations/{id}/status`. Rejecting never
+writes to `restaurant_location` at all, only to this table.
 
 ---
 

@@ -6,6 +6,7 @@
 // Server Component.
 import Link from "next/link";
 import BrandCard from "@/components/portal/BrandCard";
+import ComingSoonLocationsPanel from "@/components/portal/ComingSoonLocationsPanel";
 import { primaryLinkClass } from "@/components/account/accountShared";
 import InfoPanel from "@/components/ui/InfoPanel";
 import { PlusIcon } from "@/components/ui/icons";
@@ -42,6 +43,8 @@ export default function OwnerRestaurantsSection({
           Add a restaurant
         </Link>
       </header>
+
+      {!loadError && <ComingSoonLocationsPanel brands={brands} />}
 
       {loadError && <InfoPanel title="Couldn't load your restaurants" body={loadError} />}
 

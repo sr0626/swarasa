@@ -11,6 +11,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
+from app.models.location_manager import LocationManager
 from app.models.restaurant_brand import RestaurantBrand
 from app.models.restaurant_location import RestaurantLocation
 from app.schemas.hours import HourEntryIn, HoursResponse
@@ -77,6 +78,7 @@ async def _location_to_out(db: AsyncSession, location: RestaurantLocation) -> Lo
         is_verified=location.is_verified,
         is_paid=location.is_paid,
         paid_until=location.paid_until,
+        status=location.status,
         is_active=location.is_active,
         is_open_now=is_open_now,
         hours=[
@@ -104,14 +106,75 @@ async def _location_to_out(db: AsyncSession, location: RestaurantLocation) -> Lo
     )
 
 
-async def get_location(db: AsyncSession, location_id: int) -> LocationOut:
+async def _caller_may_view_hidden_location(
+    db: AsyncSession, location: RestaurantLocation, current_user
+) -> bool:
+    """Can `current_user` see this location's detail even though its
+    status hides it from the public (docs/PROJECT_PLAN.csv row for this
+    task: `GET /locations/{id}` must 404 a hidden location for anyone
+    without real access — owner, admin, or an assigned manager, matching
+    the task's explicit "still visible to the owner/admin/assigned
+    manager" requirement).
+
+    Broader than `_caller_may_see_inactive_locations` below (which backs
+    the LIST endpoint and intentionally excludes manager — see that
+    function's own docstring): the single-location detail page is exactly
+    where an assigned manager legitimately needs to open a location the
+    owner has marked `coming_soon` or `owner_deactivated` to keep setting
+    it up, so the manager branch is included here. `current_user` is
+    `None` for an anonymous caller (always False).
+    """
+    if current_user is None:
+        return False
+    if current_user.role == "admin":
+        return True
+    if current_user.role == "owner":
+        owner = await auth_service.get_owner_account_by_sub(db, current_user.cognito_sub)
+        brand = await db.get(RestaurantBrand, location.brand_id)
+        return owner is not None and brand is not None and brand.owner_id == owner.id
+    if current_user.role == "manager":
+        result = await db.execute(
+            select(LocationManager).where(
+                LocationManager.user_id == current_user.cognito_sub,
+                LocationManager.location_id == location.id,
+                LocationManager.is_active == True,  # noqa: E712
+            )
+        )
+        return result.scalar_one_or_none() is not None
+    return False
+
+
+async def get_location(
+    db: AsyncSession, location_id: int, current_user=None
+) -> LocationOut:
+    """`GET /locations/{id}` — public by default, but now status-aware
+    (docs/PROJECT_PLAN.csv row for this task: this endpoint used to return
+    a hidden location's full detail to ANY caller regardless of status,
+    which is the gap this closes). A hidden location (any status except
+    `active`) 404s for a caller without access — never a 403, so a caller
+    without rights can't distinguish "doesn't exist" from "exists but
+    hidden," same posture as the claim-flow 404/403 pattern in
+    `frontend/src/app/portal/locations/[id]/page.tsx`. `current_user` is
+    `None` for the (very common) anonymous/public caller.
+    """
     location = await db.get(RestaurantLocation, location_id)
     if location is None:
+        raise AppError(404, "Location not found", "not_found")
+    if not location.is_active and not await _caller_may_view_hidden_location(
+        db, location, current_user
+    ):
         raise AppError(404, "Location not found", "not_found")
     return await _location_to_out(db, location)
 
 
 async def get_location_or_404(db: AsyncSession, location_id: int) -> RestaurantLocation:
+    """Unfiltered internal lookup — used by write paths (update, hours,
+    photos, status, manager assignment) that already have their own
+    ownership/assignment auth dependency upstream (`require_location_*` in
+    `app/dependencies/auth.py`), which checks brand/manager ownership
+    regardless of the location's status. Deliberately NOT status-aware —
+    only the public-facing `get_location` above hides a location by
+    status."""
     location = await db.get(RestaurantLocation, location_id)
     if location is None:
         raise AppError(404, "Location not found", "not_found")
@@ -238,17 +301,28 @@ async def update_location(
         new_val=new_val,
     )
     await db.commit()
-    return await get_location(db, location.id)
+    # `current_user` passed through (not the public-default `None`) — the
+    # caller here already proved write access via `require_location_write_
+    # access` upstream, and the location may be in a hidden status (e.g. a
+    # manager finishing up a `coming_soon` location), which would otherwise
+    # make `get_location`'s own visibility check 404 its own successful
+    # write's response.
+    return await get_location(db, location.id, current_user)
 
 
 async def delete_location(db: AsyncSession, location_id: int, current_user) -> None:
-    """Soft delete — sets is_active=false (docs/API_CONTRACTS.md "DELETE
-    /locations/{id}"). Nothing is actually removed.
+    """Soft delete — sets status=owner_deactivated via the `is_active`
+    backward-compat setter (docs/API_CONTRACTS.md "DELETE /locations/{id}";
+    app/models/restaurant_location.py "Location status lifecycle").
+    Nothing is actually removed. Unchanged behaviour from before this
+    task — this endpoint predates the 4-state model and keeps its old
+    "soft-hide, one flag" semantics; the new `update_location_status`
+    below is the status-aware entry point for the other three states.
     """
     location = await get_location_or_404(db, location_id)
-    old_val = {"is_active": location.is_active}
+    old_val = {"status": location.status}
     location.is_active = False
-    new_val = {"is_active": location.is_active}
+    new_val = {"status": location.status}
     await audit_service.log(
         db,
         table_name="restaurant_location",
@@ -260,6 +334,53 @@ async def delete_location(db: AsyncSession, location_id: int, current_user) -> N
         new_val=new_val,
     )
     await db.commit()
+
+
+async def update_location_status(
+    db: AsyncSession, location_id: int, new_status: str, current_user
+) -> LocationOut:
+    """`POST /locations/{id}/status` — owner/admin self-service status
+    change (docs/API_CONTRACTS.md "POST /locations/{id}/status"). Auth is
+    `require_location_owner_or_admin` at the router — no manager path, per
+    this task's own instructions ("owner can toggle ... self-service",
+    "owner (or admin) marks a NEW location ...").
+
+    The one asymmetric rule in the whole status model lives here: a
+    location already `closed_pending_reopen` cannot be moved to anything
+    else through this endpoint — reopening requires an admin-approved
+    `location_reopen_request` instead (see location_reopen_service.py).
+    Re-posting the SAME status is always a harmless no-op (idempotent),
+    checked before the lock so retrying an already-applied change never
+    409s.
+    """
+    location = await get_location_or_404(db, location_id)
+
+    if new_status == location.status:
+        return await get_location(db, location.id, current_user)
+
+    if location.status == RestaurantLocation.STATUS_CLOSED_PENDING_REOPEN:
+        raise AppError(
+            409,
+            "This location is closed pending admin review — submit a reopen "
+            "request instead of changing its status directly.",
+            "reopen_requires_admin",
+        )
+
+    old_val = {"status": location.status}
+    location.status = new_status
+    new_val = {"status": location.status}
+    await audit_service.log(
+        db,
+        table_name="restaurant_location",
+        record_id=location.id,
+        action="update",
+        actor_id=current_user.cognito_sub,
+        actor_role=current_user.role,
+        old_val=old_val,
+        new_val=new_val,
+    )
+    await db.commit()
+    return await get_location(db, location.id, current_user)
 
 
 async def list_locations_for_brand(
@@ -285,7 +406,12 @@ async def list_locations_for_brand(
 
     filters = [RestaurantLocation.brand_id == brand_id]
     if not include_inactive:
-        filters.append(RestaurantLocation.is_active == True)  # noqa: E712
+        # "Inactive" here still means any non-`active` status — all three
+        # hidden statuses (owner_deactivated/coming_soon/closed_pending_
+        # reopen) are equally invisible to a caller without access, same
+        # as the old boolean (app/models/restaurant_location.py "Location
+        # status lifecycle" — there is no partially-visible hidden state).
+        filters.append(RestaurantLocation.status == RestaurantLocation.STATUS_ACTIVE)
 
     total = (
         await db.execute(select(func.count()).select_from(RestaurantLocation).where(*filters))
@@ -316,6 +442,7 @@ async def list_locations_for_brand(
                 is_verified=row.is_verified,
                 is_paid=row.is_paid,
                 paid_until=row.paid_until,
+                status=row.status,
                 is_active=row.is_active,
                 is_open_now=is_open_now,
             )

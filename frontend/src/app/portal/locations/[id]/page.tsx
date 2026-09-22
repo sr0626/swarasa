@@ -20,6 +20,8 @@ import LocationAboutForm from "@/components/portal/LocationAboutForm";
 import LocationHoursEditor from "@/components/portal/LocationHoursEditor";
 import LocationPhotoManager from "@/components/portal/LocationPhotoManager";
 import LocationManagerAssignment from "@/components/portal/LocationManagerAssignment";
+import LocationStatusControl from "@/components/portal/LocationStatusControl";
+import LocationStatusBadge from "@/components/portal/LocationStatusBadge";
 import NewListingNotice, { parseNewListingParam } from "@/components/portal/NewListingNotice";
 import InfoPanel from "@/components/ui/InfoPanel";
 import type { LocationDetail, LocationManager } from "@/types/location";
@@ -80,11 +82,19 @@ export default async function PortalLocationPage({ params, searchParams }: Locat
 
   let location: LocationDetail;
   try {
-    location = await getLocationById(locationId);
+    // Pass the caller's access token: `GET /locations/{id}` is public by
+    // default but caller-aware (docs/PROJECT_PLAN.csv "Location status
+    // lifecycle") — a non-active location 404s for anyone without real
+    // access. Without the token here, the owner/admin/assigned manager
+    // viewing THEIR OWN hidden (owner_deactivated/coming_soon/
+    // closed_pending_reopen) location would incorrectly hit the same 404
+    // as the public.
+    location = await getLocationById(locationId, session.accessToken);
   } catch {
-    // Public endpoint — a thrown error here means the location genuinely
-    // doesn't exist (or the API is unreachable, treated the same way
-    // rather than a confusing partial page).
+    // A thrown error here means the location genuinely doesn't exist, or
+    // this caller has no access to it (or the API is unreachable, treated
+    // the same way rather than a confusing partial page) — never
+    // distinguishable from outside, same posture as the 403 check below.
     return <NotFoundOrNoAccess role={session.role} />;
   }
 
@@ -100,6 +110,7 @@ export default async function PortalLocationPage({ params, searchParams }: Locat
   }
 
   const isOwner = session.role === "owner";
+  const isAdmin = session.role === "admin";
   const back = backTarget(session.role);
   // Only owners create listings; ignore the flag for anyone else.
   const newListing = isOwner ? parseNewListingParam(searchParams?.new) : null;
@@ -121,6 +132,16 @@ export default async function PortalLocationPage({ params, searchParams }: Locat
         {newListing && <NewListingNotice mapPosition={newListing} />}
 
         <div className="mt-6 flex flex-col gap-6">
+          {isOwner || isAdmin ? (
+            <LocationStatusControl locationId={location.id} initialStatus={location.status} />
+          ) : (
+            // Manager: read-only — status control is owner/admin only
+            // (docs/PROJECT_PLAN.csv "Location status lifecycle").
+            <section className="flex items-center justify-between rounded-brand-card border border-brand-border bg-white p-5 shadow-brand-card sm:p-6">
+              <h2 className="font-display text-lg font-bold text-brand-ink">Listing status</h2>
+              <LocationStatusBadge status={location.status} />
+            </section>
+          )}
           <LocationInfoForm location={location} />
           <LocationAboutForm locationId={location.id} about={location.about} specialties={location.specialties} />
           <LocationHoursEditor locationId={location.id} hours={location.hours} />
