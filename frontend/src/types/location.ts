@@ -5,6 +5,19 @@ import type { ConsoleTodayStatus } from "@/lib/consoleLocationStatus";
 /** 0=Monday..6=Sunday, per docs/API_CONTRACTS.md GET /locations/{id} notes. */
 export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
+/**
+ * Product-state lifecycle — see backend/app/models/restaurant_location.py
+ * "Location status lifecycle". `active` is the only publicly visible
+ * state; the other three are self-service (owner/admin) except that a
+ * `closed_pending_reopen` location can only get back to `active` through
+ * an admin-approved reopen request (see `@/types/locationReopen.ts`).
+ */
+export type LocationStatus =
+  | "active"
+  | "owner_deactivated"
+  | "coming_soon"
+  | "closed_pending_reopen";
+
 export interface LocationHour {
   day_of_week: DayOfWeek;
   open_time?: string;
@@ -34,27 +47,26 @@ export interface LocationSummary {
   is_verified: boolean;
   is_paid: boolean;
   /**
-   * FLAGGED CONTRACT GAP (found 2026-09-17 building the owner dashboard's
-   * tier/status columns — docs/PROJECT_PLAN.csv "Owner dashboard: richer
-   * restaurant table"): `paid_until` is a stored `restaurant_location`
-   * column (docs/DATA_MODEL.md, root CLAUDE.md "Tier model") but is not
-   * yet serialized by `GET /restaurants/{id}/locations` or
-   * `GET /locations/{id}` — `LocationSummaryOut`/`LocationOut`
-   * (backend/app/schemas/restaurant.py, backend/app/schemas/location.py)
-   * both omit it. Declared here as optional so the dashboard renders it
-   * the moment Backend adds it, with no further frontend change —
-   * `undefined` in every real response today.
+   * RESOLVED (was a flagged contract gap — docs/PROJECT_PLAN.csv "Owner
+   * dashboard: richer restaurant table" / "Serialize paid_until/is_active
+   * on location endpoints..."): `paid_until`/`status`/`is_active` are now
+   * always serialized by both `GET /restaurants/{id}/locations` and
+   * `GET /locations/{id}` (backend/app/schemas/restaurant.py
+   * LocationSummaryOut, backend/app/schemas/location.py LocationOut).
+   * `paid_until` is `null` on the free tier.
    */
-  paid_until?: string | null;
+  paid_until: string | null;
   /**
-   * Same contract gap as `paid_until` above — also a stored column, also
-   * not yet serialized by either location response schema. Additionally,
-   * `list_locations_for_brand` (backend/app/services/location_service.py)
-   * filters to `is_active == True` only, so a deactivated location is
-   * excluded from this list entirely today, not just missing this field.
-   * `undefined`/always-true in practice until Backend closes both gaps.
+   * Product-state lifecycle — see `LocationStatus` above. This list
+   * endpoint still filters to `active`-only for a public/no-access caller
+   * (`location_service.list_locations_for_brand`), but now additionally
+   * surfaces the owning owner's/admin's own non-active locations (any of
+   * the three hidden statuses, not just the old single
+   * `owner_deactivated`-shaped boolean).
    */
-  is_active?: boolean;
+  status: LocationStatus;
+  /** Backward-compat derived flag — `true` only when `status === "active"`. */
+  is_active: boolean;
   /** true / false / null (hours unknown) — a display lookup, never a filter. */
   is_open_now: boolean | null;
 }
@@ -107,11 +119,21 @@ export interface LocationDetail {
   longitude: number | null;
   is_verified: boolean;
   is_paid: boolean;
+  paid_until: string | null;
+  /** Product-state lifecycle — see `LocationStatus` above. */
+  status: LocationStatus;
+  /** Backward-compat derived flag — `true` only when `status === "active"`. */
+  is_active: boolean;
   is_open_now: boolean | null;
   hours: LocationHour[];
   cover_photo_url: string | null;
   /** Up to 2 entries when is_paid=false, up to 10 when is_paid=true. */
   gallery_photos: GalleryPhoto[];
+}
+
+/** Body for POST /locations/{id}/status. */
+export interface UpdateLocationStatusInput {
+  status: LocationStatus;
 }
 
 /** Body for POST /locations. */

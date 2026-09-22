@@ -15,15 +15,49 @@ import type {
   UpdateLocationHoursInput,
   UpdateLocationHoursResponse,
   UpdateLocationInput,
+  UpdateLocationStatusInput,
   UpdatePhotoInput,
 } from "@/types/location";
 
-/** GET /locations/{id} — public. */
-export async function getLocationById(id: number): Promise<LocationDetail> {
+/**
+ * GET /locations/{id} — public by default, but caller-aware: a hidden
+ * location (any status other than `active`) 404s for anyone without real
+ * access, UNLESS `accessToken` is passed AND that caller is the owner,
+ * admin, or an assigned manager (see `location_service.get_location` /
+ * `_caller_may_view_hidden_location`, backend/app/services/location_service.py).
+ * Pass `accessToken` whenever the caller is signed in and might legitimately
+ * need to see their own hidden location (the portal location editor, the
+ * owner/manager console's own tiles) — omit it for a genuinely public/SSR
+ * read (the public restaurant page), where an anonymous 404 on a hidden
+ * location is the correct, intended behavior.
+ */
+export async function getLocationById(
+  id: number,
+  accessToken?: string
+): Promise<LocationDetail> {
   return apiFetch<LocationDetail>(
     `/locations/${id}`,
     { method: "GET" },
-    { revalidateSeconds: 60 }
+    { accessToken, revalidateSeconds: accessToken ? undefined : 60 }
+  );
+}
+
+/**
+ * POST /locations/{id}/status — auth: owner (owns parent brand) or admin,
+ * no manager path (docs/PROJECT_PLAN.csv "Location status lifecycle";
+ * backend/app/routers/locations.py). The one asymmetric rule (no
+ * self-service exit from `closed_pending_reopen`) is enforced server-side —
+ * this call 409s the same way any other invalid transition would.
+ */
+export async function updateLocationStatus(
+  id: number,
+  input: UpdateLocationStatusInput,
+  accessToken: string
+): Promise<LocationDetail> {
+  return apiFetch<LocationDetail>(
+    `/locations/${id}/status`,
+    { method: "POST", body: JSON.stringify(input) },
+    { accessToken }
   );
 }
 

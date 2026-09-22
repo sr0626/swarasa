@@ -37,15 +37,25 @@ migrations — generate migration files only"). Content matches
 `app/models/location_reopen_request.py` exactly. Revision id kept short
 (`alembic_version.version_num` is VARCHAR(32) — see 0002's header).
 
-NOTE (multi-head heads-up, per this task's own instructions): another
-agent in this same wave may also add a migration off `0007_location_about_
-specialties` — if so this becomes a second head and the orchestrator
-reconciles the merge order/rebases the `down_revision` chain before both
-land on `main`. Nothing in this file assumes it is the only migration
-stacked on 0007.
+RECONCILED (was flagged as a NOTE in the original WIP commit as a
+multi-head heads-up — this is that reconciliation, done while merging
+origin/main into this branch): by the time `origin/main` was merged in,
+TWO other migrations had already landed off the same `0007_location_about_
+specialties` parent — `0008_platform_config` and `0008_user_profile` (both
+still `down_revision = "0007_location_about_specialties"` as merged,
+already a latent 2-head state on `main` before this branch touched
+anything). Rather than leave a 3rd unreconciled head or hand-edit those
+other two files (owned by different work, already merged to `main`), this
+migration's `down_revision` becomes a tuple of both existing heads,
+turning it into an Alembic merge revision: `alembic upgrade head` again
+resolves to exactly one head (`0008_location_status_lifecycle`) with all
+three lines of work applied. No operations from the other two migrations
+are touched or repeated here — this file still only performs the two
+`upgrade()` steps described above.
 
 Revision ID: 0008_location_status_lifecycle
-Revises: 0007_location_about_specialties
+Revises: 0008_platform_config, 0008_user_profile (merge; originally authored
+against 0007_location_about_specialties before the multi-head reconcile above)
 Create Date: 2026-09-22
 """
 from typing import Sequence, Union
@@ -55,7 +65,10 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "0008_location_status_lifecycle"
-down_revision: Union[str, None] = "0007_location_about_specialties"
+down_revision: Union[str, tuple[str, ...], None] = (
+    "0008_platform_config",
+    "0008_user_profile",
+)
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

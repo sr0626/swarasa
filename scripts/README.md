@@ -118,6 +118,20 @@ python3 scripts/dev_clear_manager_assignments.py --manager-email manager@example
 python3 scripts/dev_clear_manager_assignments.py --manager-email manager@example.com --location-ids 12 34
 ```
 
+### `dev_set_location_status.py`
+Force-sets a single `restaurant_location.status` (`active` |
+`owner_deactivated` | `coming_soon` | `closed_pending_reopen`) directly —
+for manually exercising the status lifecycle (search visibility,
+direct-URL 404s, owner console, "coming soon" section), including the
+`closed_pending_reopen -> active` transition the owner-facing API makes
+one-way. Also how to seed a one-off "coming soon" example location on dev.
+Dev database only. Reversible — run again with a different `--status`.
+
+```bash
+python3 scripts/dev_set_location_status.py --location-id 42 --status coming_soon
+python3 scripts/dev_set_location_status.py --location-id 42 --status active
+```
+
 ### `geocode_missing_locations.py`
 Backfills coordinates for active locations with NULL `geom` (invisible to geo
 search). Lists them via the `list_ungeocoded_locations` command, geocodes on

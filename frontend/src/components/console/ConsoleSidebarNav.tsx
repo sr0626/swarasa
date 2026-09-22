@@ -11,6 +11,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   ClipboardCheckIcon,
+  ClockIcon,
   FlagIcon,
   PlusIcon,
   StoreIcon,
@@ -25,6 +26,7 @@ const ICONS: Record<ConsoleNavIcon, (props: IconProps) => JSX.Element> = {
   reports: FlagIcon,
   store: StoreIcon,
   plus: PlusIcon,
+  clock: ClockIcon,
 };
 
 function isActive(pathname: string, href: string): boolean {

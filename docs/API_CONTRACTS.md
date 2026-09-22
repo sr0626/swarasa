@@ -307,6 +307,7 @@ Response:
       "is_verified": true,
       "is_paid": true,
       "paid_until": "2027-03-01T00:00:00Z",
+      "status": "active",
       "is_active": true,
       "is_open_now": true
     }
@@ -324,20 +325,28 @@ Summary shape only (no hours breakdown, no photos) — see
 deactivated locations") — same fields/semantics as `GET /locations/{id}`
 above.
 
-**Owner/admin see their own deactivated locations here too (added
-2026-09-17, same row):** this endpoint stays public by default and
-filters to `is_active=true` only for an anonymous caller (or any
+`status` added 2026-09-22 alongside the location status lifecycle (see
+`app/models/restaurant_location.py` "Location status lifecycle" and
+`docs/DECISIONS.md` "Location status lifecycle") — one of `active` |
+`owner_deactivated` | `coming_soon` | `closed_pending_reopen`. `is_active`
+stays on this response too, unchanged in meaning: it's now a derived
+`true` only when `status == "active"`, so existing callers reading the
+boolean keep working without a code change.
+
+**Owner/admin see their own non-active locations here too (added
+2026-09-17, extended 2026-09-22 from the single `is_active=false` state to
+all three hidden statuses):** this endpoint stays public by default and
+filters to `status="active"` only for an anonymous caller (or any
 authenticated caller who is not this brand's owner and not an admin) —
 that behavior is unchanged. If the request carries a valid bearer token
 AND the caller is either an admin, or an owner who owns `restaurant_brand
-{id}`, the `is_active` filter is dropped entirely and the response also
-includes that brand's deactivated (`is_active=false`) locations — there is
-no separate owner-scoped locations-list endpoint, so this is the one
-place an owner (via the dashboard) or admin can see a location they
-soft-deleted, as a first step toward eventually reactivating it (no
-reactivate endpoint exists yet — out of scope for this row). A manager or
-`registered_user` caller, and an owner who does not own this brand, still
-only sees active locations, same as a public caller.
+{id}`, the `status` filter is dropped entirely and the response also
+includes that brand's `owner_deactivated`/`coming_soon`/
+`closed_pending_reopen` locations. A manager or `registered_user` caller,
+and an owner who does not own this brand, still only sees active
+locations, same as a public caller — a manager's own visibility into a
+*specific* hidden location they're assigned to is instead handled by
+`GET /locations/{id}` below, not this list.
 
 ### POST /restaurants
 
@@ -400,7 +409,8 @@ Response: `204 No Content`. Audit: `audit_log` row (`action="delete"`).
 
 ### GET /locations/{id}
 
-Auth: none (public)
+Auth: none (public by default) — but caller-aware, see "Status-aware
+visibility" below.
 
 Response:
 ```json
@@ -423,6 +433,7 @@ Response:
   "is_verified": true,
   "is_paid": true,
   "paid_until": "2027-03-01T00:00:00Z",
+  "status": "active",
   "is_active": true,
   "is_open_now": true,
   "hours": [
@@ -440,10 +451,24 @@ Notes:
   own deactivated locations") are real `restaurant_location` columns
   that were already stored but not previously serialized on this
   response. `paid_until` is `null` on the free tier (root CLAUDE.md "Tier
-  model (is_paid)"). Unlike the list endpoint below, this single-location
-  lookup does **not** filter by `is_active` at all — a deactivated
-  location's detail is still returned here to any caller, unchanged by
-  this fix (pre-existing behavior; flagged, not in this change's scope).
+  model (is_paid)").
+- `status` (added 2026-09-22, `docs/DECISIONS.md` "Location status
+  lifecycle") — one of `active` | `owner_deactivated` | `coming_soon` |
+  `closed_pending_reopen`. `is_active` is now a derived `true` only when
+  `status == "active"` (a `hybrid_property` on the model, not a second
+  stored column — see `app/models/restaurant_location.py`).
+
+**Status-aware visibility (added 2026-09-22, closing a gap from the
+2026-09-17 row above — this endpoint used to return a hidden location's
+full detail to ANY caller regardless of status):** a non-`active`
+location 404s (never 403 — a caller without rights can't distinguish
+"doesn't exist" from "exists but hidden") UNLESS the caller is, per a
+valid bearer token: the owning owner, an admin, or a manager with an
+active `location_manager` assignment on this specific location. An
+`active` location is visible to everyone, as before. Pass the caller's
+access token whenever they might legitimately need their own hidden
+location (see `frontend/src/lib/api/locations.ts` `getLocationById`'s
+`accessToken` param) — omit it for a genuinely public/anonymous read.
 - `hours` is all 7 `restaurant_hours` rows for this location, `day_of_week`
   0=Monday..6=Sunday (see `docs/DATA_MODEL.md` judgment-call note — a
   day with no seeded row yet is simply absent from the array, which the
@@ -765,6 +790,155 @@ administering an existing resource — the same reasoning `POST
 /restaurants` (also owner-only, no admin path) already follows. Support
 access to an *existing* problematic manager assignment is already
 covered by the admin-parity `DELETE` above.
+
+**Note on this endpoint vs. the status lifecycle below (added
+2026-09-22):** this `DELETE` predates the 4-state `status` model and
+keeps its old "soft-hide, one flag" behavior unchanged — it sets
+`status=owner_deactivated` via the `is_active` backward-compat setter,
+same as before. `POST /locations/{id}/status` below is the new
+status-aware entry point for the other two self-service states
+(`coming_soon`, `closed_pending_reopen`); this `DELETE` is not being
+removed, just no longer the only way to hide a location.
+
+### POST /locations/{id}/status
+
+Auth: owner (owns parent brand) or admin — no manager path (manager
+cannot change a location's status; root CLAUDE.md "Permission model" +
+this feature's own scoping decision).
+
+Body:
+```json
+{ "status": "coming_soon" }
+```
+One of `active` | `owner_deactivated` | `coming_soon` |
+`closed_pending_reopen` (`docs/DECISIONS.md` "Location status
+lifecycle"). Response: `200`, same shape as `GET /locations/{id}`
+(with the caller's own access, so a caller changing their own location
+into a hidden status still gets the real detail back, not a 404 from
+the visibility check above).
+
+Every pair of statuses is freely self-service both ways through this
+endpoint **except** the one-way trip out of `closed_pending_reopen` —
+posting anything other than `closed_pending_reopen` itself while the
+location is already `closed_pending_reopen` returns `409
+reopen_requires_admin`; reopening requires an admin-approved
+`location_reopen_request` instead (see "Location reopen requests"
+below). Re-posting the location's current status is always a harmless
+no-op (`200`, not `409`), checked before the asymmetric-transition rule
+so retrying an already-applied change never fails.
+
+Audit: `audit_log` row (`action="update"`, `old_val`/`new_val` each
+`{"status": "..."}`).
+
+---
+
+## Location reopen requests (`location_reopen_request`)
+
+The only path that moves a `closed_pending_reopen` location back to
+`active` (`docs/DECISIONS.md` "Location status lifecycle"). Submission
+is owner-only, nested under the location it's about
+(`POST /locations/{id}/reopen-requests`, same pattern as
+`POST /locations/{id}/managers`); the admin-facing review queue
+(list/get/approve/reject) lives at its own top-level path,
+`/location-reopen-requests`, mirroring `/claim` and `/reports` (neither
+of which live under `/admin` either, despite being admin-reviewed).
+Shape mirrors `/claim` throughout: a submission row plus admin
+approve/reject, `reviewer_notes` usable on approval too (not
+reject-only), a partial unique index limiting a location to at most one
+*pending* request at a time.
+
+### POST /locations/{id}/reopen-requests
+
+Auth: owner (owns parent brand) only — no admin, no manager path.
+
+Body:
+```json
+{ "notes": "Renovation finished, reopening under the same menu." }
+```
+`notes` is optional.
+
+Only valid while the location is currently `closed_pending_reopen` —
+`409 not_closed_pending_reopen` otherwise. A second submission while one
+is already pending (`status="pending_review"`) returns `409
+reopen_request_already_pending` (the partial unique index).
+
+Response: `201`
+```json
+{
+  "request_id": 42,
+  "location_id": 456,
+  "status": "pending_review",
+  "notes": "Renovation finished, reopening under the same menu.",
+  "submitted_at": "2026-09-22T18:04:00Z",
+  "reviewed_at": null,
+  "reviewer_notes": null
+}
+```
+
+### GET /location-reopen-requests
+
+Auth: admin only. Admin review queue — oldest pending first.
+
+Query params: `status` (default `pending_review`), `page` (default 1),
+`page_size` (default 20, max 100).
+
+Response:
+```json
+{
+  "results": [
+    {
+      "request_id": 42,
+      "location_id": 456,
+      "brand_id": 123,
+      "brand_name": "Spice Route",
+      "brand_slug": "spice-route",
+      "location_address": "123 Main St, Plano, TX 75024",
+      "requested_by_user_id": "a1b2c3d4-...",
+      "requester_email": "owner@example.com",
+      "notes": "Renovation finished, reopening under the same menu.",
+      "status": "pending_review",
+      "submitted_at": "2026-09-22T18:04:00Z",
+      "reviewed_by": null,
+      "reviewed_at": null,
+      "reviewer_notes": null
+    }
+  ],
+  "page": 1,
+  "page_size": 20,
+  "total": 1
+}
+```
+`requester_email` is `null` when no `owner_account` row matches the
+requester (same nullability reasoning as `ClaimQueueItem.claimant_email`).
+
+### GET /location-reopen-requests/{id}
+
+Auth: the requesting owner (their own request) or admin (any). Same
+response shape as `POST /locations/{id}/reopen-requests`'s `201` above.
+
+### POST /location-reopen-requests/{id}/approve
+
+Auth: admin only.
+
+Body: `{ "reviewer_notes": "..." }` — optional.
+
+Real side effect: flips the location's `status` back to `active`
+(audit-logged, `table_name="restaurant_location"`), same "commit the
+effect, then the review record" ordering as `POST /claim/{id}/approve`.
+`409 request_not_pending` if the request has already been reviewed.
+Response: `200`, same shape as the submission response, `status:
+"approved"`.
+
+### POST /location-reopen-requests/{id}/reject
+
+Auth: admin only.
+
+Body: `{ "reviewer_notes": "..." }` — **required** (same as `POST
+/claim/{id}/reject`). The location's `status` is left unchanged
+(`closed_pending_reopen`) — a rejection never writes to
+`restaurant_location`, only to the request row itself.
+
+Response: `200`, `status: "rejected"`.
 
 ---
 
