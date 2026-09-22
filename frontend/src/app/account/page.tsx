@@ -12,22 +12,26 @@
 //
 // JUDGMENT CALL — role branching (flagged in this PR's description): the
 // task brief assumed `PATCH /auth/me` was editable by every role. The real
-// contract (docs/API_CONTRACTS.md "PATCH /auth/me") is "Auth: owner" only
-// (backend/app/routers/auth.py's `update_me` uses `Depends(require_owner)`).
-// So only an owner session gets the edit form; manager/admin/
-// registered_user get a read-only name/email display with a short note —
-// building an edit form that would just 403 for those roles would be
-// worse than not having one.
+// contract (docs/API_CONTRACTS.md "PATCH /auth/me") historically was
+// "Auth: owner" only; PR #83 broadened the route itself to any authenticated
+// role, but `owner_account` remains the only local record with a name to
+// edit, so admin/registered_user still get a read-only display (manager
+// now gets a real, generic name-only edit form -- see
+// components/account/NameEditForm.tsx and its cross-PR dependency note).
 //
-// ROLE LAYOUTS (2026-09-19): the page only fetches data and picks a view —
-// each role has its own layout under components/account/ (DinerAccountView,
+// ROLE LAYOUTS (2026-09-19, manager console added in the manager-console
+// redesign PR): the page only fetches data and picks a view — each role has
+// its own layout under components/account/ (DinerAccountView,
 // OwnerAccountView, ManagerAccountView, AdminAccountView), sharing the
-// summary/details/security/privacy pieces. Admin and owner views render
-// inside their console shell (banner + left menu). For an owner this page is
-// THE business page (stat tiles + restaurants + profile + security + data &
-// privacy): the separate owner dashboard was folded in (2026-09-19), and
-// /portal/dashboard now just redirects owners here. The server actions
-// (app/account/actions.ts) and the role gating are unchanged.
+// summary/details/security/privacy pieces. Admin, owner, and manager views
+// all render inside their own console shell (banner + left menu — see
+// components/console/ConsoleShell.tsx). For an owner this page is THE
+// business page (stat tiles + restaurants + profile + security + data &
+// privacy): the separate owner dashboard was folded in (2026-09-19). For a
+// manager this page is THE manager console (locations I manage + profile).
+// /portal/dashboard now just redirects both owner and manager here. The
+// server actions (app/account/actions.ts) and the role gating are
+// otherwise unchanged.
 import type { Metadata } from "next";
 import { requireSession } from "@/lib/auth/guards";
 import TopBar from "@/components/home/TopBar";
@@ -40,6 +44,7 @@ import {
   getMyManagedLocations,
 } from "@/lib/api/auth";
 import AdminShell from "@/components/admin/AdminShell";
+import ManagerShell from "@/components/portal/ManagerShell";
 import OwnerShell from "@/components/portal/OwnerShell";
 import AdminAccountView from "@/components/account/AdminAccountView";
 import DinerAccountView from "@/components/account/DinerAccountView";
@@ -145,6 +150,22 @@ export default async function AccountPage() {
     );
   }
 
+  // Managers get the manager console frame (banner + left menu, "My
+  // locations" / "Profile") -- the same ConsoleShell the owner and admin
+  // consoles use, via components/portal/ManagerShell.tsx.
+  if (me?.role === "manager") {
+    return (
+      <ManagerShell me={me} profile>
+        <ManagerAccountView
+          me={me}
+          locations={managedLocations}
+          locationsError={managedLocationsError}
+          latestDeletionRequest={latestDeletionRequest}
+        />
+      </ManagerShell>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-brand-bg">
       <TopBar />
@@ -165,15 +186,6 @@ export default async function AccountPage() {
             me={me}
             follows={follows}
             followsError={followsError}
-            latestDeletionRequest={latestDeletionRequest}
-          />
-        )}
-
-        {me?.role === "manager" && (
-          <ManagerAccountView
-            me={me}
-            locations={managedLocations}
-            locationsError={managedLocationsError}
             latestDeletionRequest={latestDeletionRequest}
           />
         )}

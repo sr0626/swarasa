@@ -8,6 +8,17 @@ export const updateAuthMeSchema = z.object({
 
 export type UpdateAuthMeFormValues = z.infer<typeof updateAuthMeSchema>;
 
+/**
+ * Name-only variant of `updateAuthMeSchema`, for roles with no `phone`
+ * field (manager, registered_user) -- see `updateMyProfile` in
+ * lib/api/auth.ts.
+ */
+export const updateMyProfileSchema = z.object({
+  full_name: z.string().trim().min(1, "Name is required").max(200),
+});
+
+export type UpdateMyProfileFormValues = z.infer<typeof updateMyProfileSchema>;
+
 const emailSchema = z
   .string()
   .trim()

@@ -16,11 +16,12 @@ import {
   exportMyData,
   requestDataDeletion,
   updateCurrentUser,
+  updateMyProfile,
 } from "@/lib/api/auth";
 import { getServerSession } from "@/lib/auth/session";
 import { requestDataDeletionSchema } from "@/lib/validation/account";
-import { updateAuthMeSchema } from "@/lib/validation/auth";
-import type { AuthMe } from "@/types/auth";
+import { updateAuthMeSchema, updateMyProfileSchema } from "@/lib/validation/auth";
+import type { AuthMe, UpdateMyProfileResult } from "@/types/auth";
 import type { DataDeletionRequest, DataExport } from "@/types/privacy";
 
 type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -66,6 +67,44 @@ export async function updateProfileAction(
     return { ok: true, data: account };
   } catch (error) {
     return { ok: false, error: messageFor(error, "Something went wrong saving your profile.") };
+  }
+}
+
+/**
+ * PATCH /auth/me, name-only -- backs `NameEditForm` for manager (and,
+ * eventually, registered_user) sessions. See `updateMyProfile`'s doc
+ * comment in lib/api/auth.ts for the cross-PR dependency: until the
+ * companion "registered-user editable name" PR adds a persistence record
+ * for these roles, the backend 404s with `no_editable_profile` and this
+ * action surfaces that as a friendly "not available yet" message rather
+ * than a raw error.
+ */
+export async function updateMyNameAction(
+  input: unknown
+): Promise<ActionResult<UpdateMyProfileResult>> {
+  const auth = await requireAccountSession();
+  if (!auth.ok) return auth;
+
+  const parsed = updateMyProfileSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Please check the form and try again.",
+    };
+  }
+
+  try {
+    const result = await updateMyProfile(parsed.data, auth.accessToken);
+    return { ok: true, data: result };
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      return {
+        ok: false,
+        error:
+          "Name editing isn't turned on for your account yet — check back soon, or contact support if it's urgent.",
+      };
+    }
+    return { ok: false, error: messageFor(error, "Something went wrong saving your name.") };
   }
 }
 

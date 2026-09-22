@@ -5,7 +5,12 @@
 // through typed functions").
 import { apiFetch, toQueryString } from "./client";
 import type { PaginatedResponse, PaginationParams } from "@/types/common";
-import type { AuthMe, UpdateAuthMeInput } from "@/types/auth";
+import type {
+  AuthMe,
+  UpdateAuthMeInput,
+  UpdateMyProfileInput,
+  UpdateMyProfileResult,
+} from "@/types/auth";
 import type { FollowedBrand } from "@/types/follow";
 import type { ManagedLocation } from "@/types/location";
 import type {
@@ -24,17 +29,50 @@ export async function getCurrentUser(accessToken: string): Promise<AuthMe> {
 }
 
 /**
- * PATCH /auth/me — auth: owner ONLY per the real contract
- * (docs/API_CONTRACTS.md "PATCH /auth/me": "Auth: owner"). Manager, admin,
- * and registered_user callers get a 403 — the account page only renders
- * this as an editable form for an owner session; see its own comment for
- * the full judgment call.
+ * PATCH /auth/me — full_name + phone, backing `ProfileEditForm`
+ * (owner-only in practice today). The route itself accepts any authenticated
+ * role (`update_me` in backend/app/routers/auth.py takes `get_current_user`,
+ * not `require_owner` — broadened in PR #83), but `owner_account` is still
+ * the only local record with a `phone` field, so a manager/admin/
+ * registered_user caller gets `404 no_editable_profile`, not the `403` an
+ * older version of this comment claimed. Fixed here while adding
+ * `updateMyProfile` below for the roles that DO have something to submit
+ * (name only, no phone) — see that function's comment.
  */
 export async function updateCurrentUser(
   input: UpdateAuthMeInput,
   accessToken: string
 ): Promise<AuthMe["owner_account"]> {
   return apiFetch<AuthMe["owner_account"]>(
+    "/auth/me",
+    { method: "PATCH", body: JSON.stringify(input) },
+    { accessToken }
+  );
+}
+
+/**
+ * PATCH /auth/me — name-only variant for roles with no `owner_account` row
+ * (manager, registered_user). Manager wiring: components/account/
+ * NameEditForm.tsx via `app/account/actions.ts`'s `updateMyNameAction`,
+ * added for the manager console redesign (this PR).
+ *
+ * CROSS-PR DEPENDENCY (flagged in this PR's description): today,
+ * `auth_service.update_me` still 404s (`no_editable_profile`) for every
+ * role except owner — there is no local table to persist a manager's or
+ * registered_user's name yet. A companion PR ("registered-user editable
+ * name", dispatched separately/in parallel) owns adding that persistence on
+ * the backend, for both roles at once, to avoid two competing schema
+ * changes for the same gap. Until that PR merges, calling this function
+ * from a manager session will 404 — expected, not a bug in this PR. Once it
+ * merges, this call starts succeeding with no frontend change needed here,
+ * since it already hits the real `PATCH /auth/me` route with the
+ * `{"full_name": "..."}` body shape that PR was asked to support.
+ */
+export async function updateMyProfile(
+  input: UpdateMyProfileInput,
+  accessToken: string
+): Promise<UpdateMyProfileResult> {
+  return apiFetch<UpdateMyProfileResult>(
     "/auth/me",
     { method: "PATCH", body: JSON.stringify(input) },
     { accessToken }
