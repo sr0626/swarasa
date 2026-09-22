@@ -23,7 +23,7 @@ export interface CreateClaimInput {
   supporting_document_url?: string | null;
 }
 
-/** Response for POST /claim and GET /claim/{id}. */
+/** Response for POST /claim, GET /claim/{id}, and the approve/reject actions. */
 export interface ClaimResponse {
   claim_id: number;
   brand_id: number;
@@ -34,6 +34,14 @@ export interface ClaimResponse {
   sla_due_at: string;
   reviewed_at?: string | null;
   reviewer_notes?: string | null;
+  /**
+   * Only ever set on the `POST /claim/{id}/approve` response: `true` = the
+   * claimant was added to the Cognito `owner` group (or was already a
+   * member), `false` = the approval succeeded but that grant attempt
+   * failed (the claimant may not have portal access yet), `null`/omitted =
+   * not applicable (e.g. reject, or plain GET).
+   */
+  owner_group_granted?: boolean | null;
 }
 
 /**
