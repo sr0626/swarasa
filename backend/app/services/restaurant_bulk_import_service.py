@@ -427,6 +427,18 @@ def parse_csv_rows(csv_content: str) -> list[dict]:
     geocoding failed for that row) come through as `None` -- same as the
     JSON path's `latitude`/`longitude` being omitted entirely.
 
+    The CSV's `type` column (human-facing name, see
+    scripts/bulk_import_restaurants_csv.py and docs/API_CONTRACTS.md) is
+    renamed to `cuisine_type` here -- `RestaurantCsvRowIn` has no `type`
+    field, only `cuisine_type`, and pydantic v2 silently drops unknown
+    extra keys on `model_validate` rather than erroring, so without this
+    rename every CSV-imported row's cuisine was silently discarded (no
+    exception, no warning -- see the regression test in
+    tests/unit/test_bulk_import_csv_parsing.py for the exact failure
+    this closes). Keep the CSV header itself as `type` -- that's the
+    documented, human-facing column name; `cuisine_type` is only the
+    internal Pydantic field name this function normalizes into.
+
     Raises `BulkImportError` for a batch-level structural problem (no
     header row, entirely missing required columns, or zero data rows) --
     NOT for a single bad row's values, which `RestaurantCsvRowIn`
@@ -468,6 +480,10 @@ def parse_csv_rows(csv_content: str) -> list[dict]:
                 # expected "US" default).
                 continue
             had_any_value = True
+            if key == "type":
+                # CSV-facing column name is `type`; the schema field is
+                # `cuisine_type` -- see this function's docstring.
+                key = "cuisine_type"
             cleaned[key] = value
 
         if "latitude" in cleaned:

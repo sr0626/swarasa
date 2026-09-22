@@ -1,21 +1,13 @@
 "use client";
 
-// Generic, name-only profile edit form for roles with no `owner_account`
-// row — manager today, registered_user once the companion PR ("registered-
-// user editable name", see lib/api/auth.ts's `updateMyProfile` doc comment)
-// adds the same backend persistence for diners. Deliberately generic (just
-// `currentName` in, the current name back out on save) rather than
-// manager-specific, so that companion PR can reuse this component for
-// DinerAccountView instead of building its own — same intent as
-// `updateMyProfile`/`updateMyNameAction` being shared, generalized pieces
-// rather than a manager-only one-off.
-//
-// Calls `PATCH /auth/me` via `updateMyNameAction` (app/account/actions.ts).
-// That route 404s with `no_editable_profile` for every role except owner
-// until the companion PR lands — the action already turns that into the
-// friendly message below, so this form doesn't need to special-case it.
+// Generic, name-only profile edit form for the manager console — mirrors
+// DinerAccountView's DisplayNameForm.tsx (same shared `updateDisplayNameAction`
+// / `updateMyProfile` backend path, see lib/api/auth.ts's doc comment). Kept
+// as its own small component rather than importing DisplayNameForm directly
+// so the manager console isn't coupled to a diner-page component; a later
+// pass could unify them if the duplication becomes a maintenance burden.
 import { useState } from "react";
-import { updateMyNameAction } from "@/app/account/actions";
+import { updateDisplayNameAction } from "@/app/account/actions";
 import { PencilIcon } from "@/components/ui/icons";
 
 export default function NameEditForm({
@@ -37,7 +29,7 @@ export default function NameEditForm({
     setSaving(true);
 
     try {
-      const result = await updateMyNameAction({ full_name: fullName.trim() });
+      const result = await updateDisplayNameAction({ full_name: fullName.trim() });
       if (result.ok) {
         setSaved(true);
       } else {

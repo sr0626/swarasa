@@ -24,15 +24,19 @@ export function initialsFor(name: string | null, email: string): string {
   return (email[0] ?? "?").toUpperCase();
 }
 
-/** Full name when the user has one, otherwise their email. */
+/** Full name when the user has one, otherwise their email. Reads the
+ * unified `full_name` field (docs/API_CONTRACTS.md "GET /auth/me") rather
+ * than `owner_account?.full_name` directly, so this works for every role
+ * that has a name set — owner (owner_account) or registered_user/manager
+ * (the generic user_profile table) alike. */
 export function displayNameFor(me: AuthMe): string {
-  return me.owner_account?.full_name?.trim() || me.email;
+  return me.full_name?.trim() || me.email;
 }
 
 /** First word of the name for friendly greetings; null when there is no name
  * (callers then greet without one rather than showing an email). */
 export function firstNameFor(me: AuthMe): string | null {
-  const full = me.owner_account?.full_name?.trim();
+  const full = me.full_name?.trim();
   return full ? (full.split(/\s+/)[0] ?? null) : null;
 }
 

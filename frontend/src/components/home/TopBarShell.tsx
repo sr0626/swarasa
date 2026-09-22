@@ -110,7 +110,7 @@ export default function TopBarShell({
                 deliberately NOT positioned so the bell's dropdown can anchor
                 to the header on mobile (see AdminNotificationsBell.tsx). */}
             {role === "admin" && <AdminNotificationsBell data={notifications} />}
-            <AccountMenu greetingName={greetingName} />
+            <AccountMenu greetingName={greetingName} role={role} />
           </div>
         ) : (
           <Link

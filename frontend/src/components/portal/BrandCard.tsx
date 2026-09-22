@@ -13,7 +13,7 @@
 import Link from "next/link";
 import { EyeIcon, LocationPinIcon, PencilIcon, StoreIcon } from "@/components/ui/icons";
 import { secondaryLinkClass } from "@/components/account/accountShared";
-import OpenStatusBadge from "@/components/ui/OpenStatusBadge";
+import LocationStatusChip from "@/components/console/LocationStatusChip";
 import LocationTierBadge from "@/components/portal/LocationTierBadge";
 import LocationStatusBadge from "@/components/portal/LocationStatusBadge";
 import LocationManagersSummary from "@/components/portal/LocationManagersSummary";
@@ -85,7 +85,7 @@ export default function BrandCard({
 
         {!locationsError && locations.length > 0 && (
           <ul className="flex flex-col gap-2">
-            {locations.map(({ location, managers, managersError }) => (
+            {locations.map(({ location, managers, managersError, todayStatus }) => (
               <li
                 key={location.id}
                 className="rounded-brand-control border border-brand-border bg-white"
@@ -102,7 +102,7 @@ export default function BrandCard({
                     </span>
                   </span>
                   <span className="flex shrink-0 items-center gap-3">
-                    <OpenStatusBadge isOpenNow={location.is_open_now} />
+                    <LocationStatusChip status={todayStatus} />
                     <PencilIcon className="h-4 w-4 text-brand-ink-subtle" />
                   </span>
                 </Link>

@@ -26,8 +26,10 @@ from app.models.listing_report import ListingReport
 from app.models.data_deletion_request import DataDeletionRequest
 from app.models.audit_log import AuditLog
 from app.models.platform_pricing import PlatformPricing
+from app.models.platform_config import PlatformConfig
 from app.models.admin_free_offer import AdminFreeOffer
 from app.models.restaurant_hours import RestaurantHours
+from app.models.user_profile import UserProfile
 
 __all__ = [
     "OwnerAccount",
@@ -43,6 +45,8 @@ __all__ = [
     "DataDeletionRequest",
     "AuditLog",
     "PlatformPricing",
+    "PlatformConfig",
     "AdminFreeOffer",
     "RestaurantHours",
+    "UserProfile",
 ]

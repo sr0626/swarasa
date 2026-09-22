@@ -10,6 +10,7 @@ import {
   buildCensusUrl,
   buildNominatimQueries,
   formatOneLineAddress,
+  geocodeFreeformQuery,
   geocodeWithProviders,
   isPlausibleUsCoordinate,
   parseCensusResponse,
@@ -246,6 +247,44 @@ test("chain: no request is made once the time budget is spent", async () => {
   };
   assert.equal(await geocodeWithProviders(ADDRESS, deps), null);
   assert.equal(requests, 1);
+});
+
+// --- geocodeFreeformQuery (search page's single location text box) -------
+
+test("geocodeFreeformQuery: empty/blank query short-circuits without a request", async () => {
+  const { deps, calls } = makeDeps(() => ({ body: censusHit }));
+  assert.equal(await geocodeFreeformQuery("", deps), null);
+  assert.equal(await geocodeFreeformQuery("   ", deps), null);
+  assert.equal(calls.length, 0);
+});
+
+test("geocodeFreeformQuery: Census hit on the query as typed, Nominatim untouched", async () => {
+  const { deps, calls } = makeDeps((url) => (isCensus(url) ? { body: censusHit } : { body: [] }));
+  const result = await geocodeFreeformQuery("Frisco, TX", deps);
+  assert.deepEqual(result, { latitude: 32.85, longitude: -96.9, precision: "street", source: "census" });
+  assert.equal(calls.length, 1);
+  assert.equal(new URL(calls[0]!.url).searchParams.get("address"), "Frisco, TX");
+});
+
+test("geocodeFreeformQuery: Census miss falls through to a single Nominatim request with the same text", async () => {
+  const { deps, calls } = makeDeps((url) =>
+    isCensus(url) ? { body: censusMiss } : { body: [{ lat: "33.15", lon: "-96.82" }] }
+  );
+  const result = await geocodeFreeformQuery("Frisco", deps);
+  assert.deepEqual(result, { latitude: 33.15, longitude: -96.82, precision: "street", source: "nominatim" });
+  assert.equal(calls.length, 2);
+  assert.equal(new URL(calls[1]!.url).searchParams.get("q"), "Frisco");
+});
+
+test("geocodeFreeformQuery: no provider matches -> null, never throws", async () => {
+  const { deps } = makeDeps(() => ({ body: censusMiss }));
+  assert.equal(await geocodeFreeformQuery("Nowhereville", deps), null);
+});
+
+test("geocodeFreeformQuery: Nominatim 429 is treated as no match, not retried", async () => {
+  const { deps, calls } = makeDeps((url) => (isCensus(url) ? { body: censusMiss } : { status: 429 }));
+  assert.equal(await geocodeFreeformQuery("75034", deps), null);
+  assert.equal(calls.length, 2);
 });
 
 test("normalizePhone", () => {

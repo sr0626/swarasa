@@ -39,6 +39,7 @@ import RestaurantInfoCard from "@/components/restaurant/RestaurantInfoCard";
 import ClaimCTA from "@/components/restaurant/ClaimCTA";
 import RestaurantAbout from "@/components/restaurant/RestaurantAbout";
 import EditListingBar from "@/components/restaurant/EditListingBar";
+import RestaurantBackLink from "@/components/restaurant/RestaurantBackLink";
 import TopBar from "@/components/home/TopBar";
 import type { LocationDetail } from "@/types/location";
 import type { RestaurantBrand } from "@/types/restaurant";
@@ -82,11 +83,11 @@ export async function generateMetadata({ params }: RestaurantPageProps): Promise
   const { restaurant, location } = data;
 
   // frontend/CLAUDE.md SEO Requirements meta title format:
-  // "{Restaurant Name} — Indian Restaurant in {City}, {State}"
+  // "{Restaurant Name} — Desi Restaurant in {City}, {State}"
   const cityState = location ? ` in ${location.city}, ${location.state}` : "";
 
   return {
-    title: `${restaurant.name} — Indian Restaurant${cityState}`,
+    title: `${restaurant.name} — Desi Restaurant${cityState}`,
     // "first 150 chars of restaurant `about` field" — description here is
     // the closest documented equivalent (no separate `about` field on
     // RestaurantBrand per docs/API_CONTRACTS.md). Nullable in practice
@@ -94,7 +95,7 @@ export async function generateMetadata({ params }: RestaurantPageProps): Promise
     // falls back to a generic line rather than crashing.
     description: restaurant.description
       ? restaurant.description.slice(0, 150)
-      : `${restaurant.name} — Indian Restaurant${cityState} on Swarasa.`,
+      : `${restaurant.name} — Desi Restaurant${cityState} on Swarasa.`,
     alternates: {
       canonical: `/restaurant/${restaurant.slug}`,
     },
@@ -180,6 +181,10 @@ export default async function RestaurantPage({ params }: RestaurantPageProps) {
         <TopBar />
 
         <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+          <div className="mb-2">
+            <RestaurantBackLink />
+          </div>
+
           {canEdit && location && <EditListingBar locationId={location.id} />}
 
           {/* Two columns from lg up; a single column below that. DOM order is

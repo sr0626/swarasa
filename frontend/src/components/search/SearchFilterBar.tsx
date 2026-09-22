@@ -24,9 +24,11 @@
 //
 // `q` (the "Cuisine, dish, or restaurant" box) IS sent to the API as the
 // free-text `q` param (2026-09-19): it matches restaurant names and cuisine
-// tags. `location` is still read from the URL and kept visible but NOT sent
-// -- there is no "resolve this city/ZIP to lat/lng" endpoint in Phase 1, so
-// there is nothing real to send it as.
+// tags. `location` is read from the URL by this component only as text (for
+// the input box and the URL); it is never sent to the API as text -- the
+// server component (SearchResults) geocodes it to lat/lng server-side
+// before calling GET /search, so this component doesn't need to know
+// anything about that.
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { FilterIcon, LocationPinIcon, SearchIcon, XIcon } from "@/components/ui/icons";

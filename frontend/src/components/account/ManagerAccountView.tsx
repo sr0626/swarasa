@@ -18,8 +18,9 @@ import DataPrivacySection from "@/components/account/DataPrivacySection";
 import ManagedLocationsPanel from "@/components/account/ManagedLocationsPanel";
 import NameEditForm from "@/components/account/NameEditForm";
 import SecurityCard from "@/components/account/SecurityCard";
+import { ROLE_LABEL, cardClass, displayNameFor } from "@/components/account/accountShared";
+import type { ManagedLocationWithStatus } from "@/lib/manager/loadManagedLocationStatuses";
 import type { AuthMe } from "@/types/auth";
-import type { ManagedLocation } from "@/types/location";
 import type { DataDeletionRequest } from "@/types/privacy";
 
 export default function ManagerAccountView({
@@ -29,7 +30,7 @@ export default function ManagerAccountView({
   latestDeletionRequest,
 }: {
   me: AuthMe;
-  locations: ManagedLocation[];
+  locations: ManagedLocationWithStatus[];
   locationsError: string | null;
   latestDeletionRequest: DataDeletionRequest | null;
 }) {
@@ -44,7 +45,7 @@ export default function ManagerAccountView({
           // ever did return one, prefer showing it over the generic form.
           <AccountDetailsCard me={me} stacked />
         ) : (
-          <NameEditForm currentName={null} email={me.email} />
+          <NameEditForm currentName={me.full_name} email={me.email} />
         )}
         <SecurityCard />
       </div>

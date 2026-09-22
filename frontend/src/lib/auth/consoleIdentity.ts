@@ -13,6 +13,7 @@ export async function loadConsoleIdentity(session: Session): Promise<AuthMe> {
       cognito_sub: session.cognitoSub,
       role: session.role,
       email: session.email,
+      full_name: null,
       owner_account: null,
     };
   }

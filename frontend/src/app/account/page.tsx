@@ -38,7 +38,12 @@ import TopBar from "@/components/home/TopBar";
 import { ApiError } from "@/lib/api/client";
 import { loadOwnerRestaurants, type OwnerRestaurants } from "@/lib/owner/loadOwnerRestaurants";
 import {
+  loadManagedLocationStatuses,
+  type ManagedLocationWithStatus,
+} from "@/lib/manager/loadManagedLocationStatuses";
+import {
   getCurrentUser,
+  getMyActivity,
   getMyDataDeletionRequests,
   getMyFollows,
   getMyManagedLocations,
@@ -51,9 +56,10 @@ import DinerAccountView from "@/components/account/DinerAccountView";
 import ManagerAccountView from "@/components/account/ManagerAccountView";
 import OwnerAccountView from "@/components/account/OwnerAccountView";
 import InfoPanel from "@/components/ui/InfoPanel";
+import type { OwnerActivity } from "@/types/activity";
 import type { AuthMe } from "@/types/auth";
+import type { PaginatedResponse } from "@/types/common";
 import type { FollowedBrand } from "@/types/follow";
-import type { ManagedLocation } from "@/types/location";
 import type { DataDeletionRequest } from "@/types/privacy";
 
 export const metadata: Metadata = {
@@ -88,12 +94,12 @@ export default async function AccountPage() {
     }
   }
 
-  let managedLocations: ManagedLocation[] = [];
+  let managedLocations: ManagedLocationWithStatus[] = [];
   let managedLocationsError: string | null = null;
   if (me && me.role === "manager") {
     try {
       const page = await getMyManagedLocations({ page: 1, page_size: 50 }, session.accessToken);
-      managedLocations = page.results;
+      managedLocations = await loadManagedLocationStatuses(page.results);
     } catch (error) {
       managedLocationsError =
         error instanceof ApiError
@@ -107,6 +113,22 @@ export default async function AccountPage() {
   let ownerRestaurants: OwnerRestaurants | null = null;
   if (me && me.role === "owner") {
     ownerRestaurants = await loadOwnerRestaurants(session.accessToken);
+  }
+
+  // Owners: first page of GET /auth/me/activity, rendered by
+  // OwnerActivitySection ("Load more" fetches subsequent pages via
+  // getMyActivityAction). Failure is scoped to this section only.
+  let activityPage: PaginatedResponse<OwnerActivity> | null = null;
+  let activityError: string | null = null;
+  if (me && me.role === "owner") {
+    try {
+      activityPage = await getMyActivity({ page: 1, page_size: 20 }, session.accessToken);
+    } catch (error) {
+      activityError =
+        error instanceof ApiError
+          ? error.message
+          : "Could not load recent activity. Please try again.";
+    }
   }
 
   // Best-effort — the privacy section still renders (just without a known
@@ -145,6 +167,8 @@ export default async function AccountPage() {
           brands={ownerRestaurants?.brands ?? []}
           restaurantsError={ownerRestaurants?.loadError ?? null}
           latestDeletionRequest={latestDeletionRequest}
+          activityPage={activityPage}
+          activityError={activityError}
         />
       </OwnerShell>
     );

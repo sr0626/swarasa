@@ -23,6 +23,10 @@ Dev's typed API client. Backed by:
     non-design addition (one small tracking table following the existing
     `claim_request` shape, one nullable timestamp column) rather than
     escalated.
+  - `backend/migrations/versions/20260922_0008_platform_config.py` — new
+    `platform_config` table (see below), seeded with the two manager/
+    location cap keys `location_manager_service` now reads instead of a
+    hardcoded constant.
 
 Ownership hierarchy (root `CLAUDE.md`):
 ```
@@ -438,6 +442,40 @@ Index: (`table_name`, `record_id`). Append-only — never updated or deleted (ro
 | created_at | timestamptz, not null | |
 
 Index: `effective_date`. Current price = the row with the latest `effective_date <= today` (DECISIONS.md "Pricing stored in platform_pricing table with effective dates"). No `updated_at` — rows are immutable snapshots; a price change is a new row, not an edit.
+
+---
+
+## platform_config
+
+| Column | Type | Notes |
+|---|---|---|
+| key | varchar(128) PK | e.g. `max_active_managers_per_location` |
+| value | text, not null | Parsed by the reading service (`app/services/platform_config_service.py`) into whatever type that key needs — today, always an int |
+| updated_at | timestamptz, not null | Set on insert and on every update |
+
+Generic key/value config table — see `app/models/platform_config.py`'s
+module docstring for the full Postgres-vs-DynamoDB judgment call (a
+DynamoDB table was explicitly requested; this reuses the
+`platform_pricing` precedent of "admin-configurable business number
+lives in a Postgres table" instead). `value` is `TEXT`, not typed per-key
+columns like `platform_pricing`, because this table is meant to hold
+whatever small config knobs come up over time without a migration per
+new knob.
+
+Seeded rows (migration `0008_platform_config`, unchanged existing
+defaults):
+| key | value |
+|---|---|
+| `max_active_managers_per_location` | `"2"` |
+| `max_active_locations_per_manager` | `"2"` |
+
+Read by `location_manager_service.assert_can_add_active_manager` (the
+per-location cap, unchanged behavior — DECISIONS.md "Assignable location
+managers capped at 2") and the new
+`assert_manager_not_over_location_cap` (the symmetric per-manager cap —
+DECISIONS.md "Symmetric manager-location cap"). No caching — see
+`platform_config_service`'s module docstring for why that's deliberate
+at this table's size/access pattern.
 
 ---
 

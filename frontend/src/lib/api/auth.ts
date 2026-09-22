@@ -8,9 +8,10 @@ import type { PaginatedResponse, PaginationParams } from "@/types/common";
 import type {
   AuthMe,
   UpdateAuthMeInput,
-  UpdateMyProfileInput,
-  UpdateMyProfileResult,
+  UpdateProfileInput,
+  UpdateProfileResult,
 } from "@/types/auth";
+import type { OwnerActivity } from "@/types/activity";
 import type { FollowedBrand } from "@/types/follow";
 import type { ManagedLocation } from "@/types/location";
 import type {
@@ -51,28 +52,23 @@ export async function updateCurrentUser(
 }
 
 /**
- * PATCH /auth/me — name-only variant for roles with no `owner_account` row
- * (manager, registered_user). Manager wiring: components/account/
- * NameEditForm.tsx via `app/account/actions.ts`'s `updateMyNameAction`,
- * added for the manager console redesign (this PR).
- *
- * CROSS-PR DEPENDENCY (flagged in this PR's description): today,
- * `auth_service.update_me` still 404s (`no_editable_profile`) for every
- * role except owner — there is no local table to persist a manager's or
- * registered_user's name yet. A companion PR ("registered-user editable
- * name", dispatched separately/in parallel) owns adding that persistence on
- * the backend, for both roles at once, to avoid two competing schema
- * changes for the same gap. Until that PR merges, calling this function
- * from a manager session will 404 — expected, not a bug in this PR. Once it
- * merges, this call starts succeeding with no frontend change needed here,
- * since it already hits the real `PATCH /auth/me` route with the
- * `{"full_name": "..."}` body shape that PR was asked to support.
+ * PATCH /auth/me — generalized display-name update for `registered_user`/
+ * `manager` callers (docs/API_CONTRACTS.md "PATCH /auth/me", generalized
+ * alongside the new `user_profile` table — see
+ * backend/app/models/user_profile.py). Separate from `updateCurrentUser`
+ * above (which is owner-only and returns the full `OwnerAccount` shape):
+ * this hits the same endpoint but only ever sends/receives `full_name` —
+ * the shape a registered_user/manager caller's write actually has. Safe to
+ * call for an owner session too (the backend still routes an owner caller
+ * to `owner_account`, `phone` simply stays untouched), but owner UI uses
+ * `updateCurrentUser` instead so it keeps getting `phone`/`id`/
+ * `stripe_customer_id` back.
  */
 export async function updateMyProfile(
-  input: UpdateMyProfileInput,
+  input: UpdateProfileInput,
   accessToken: string
-): Promise<UpdateMyProfileResult> {
-  return apiFetch<UpdateMyProfileResult>(
+): Promise<UpdateProfileResult> {
+  return apiFetch<UpdateProfileResult>(
     "/auth/me",
     { method: "PATCH", body: JSON.stringify(input) },
     { accessToken }
@@ -107,6 +103,23 @@ export async function getMyManagedLocations(
   const query = toQueryString({ page: params.page, page_size: params.page_size });
   return apiFetch<PaginatedResponse<ManagedLocation>>(
     `/auth/me/managed-locations${query}`,
+    { method: "GET" },
+    { accessToken }
+  );
+}
+
+/**
+ * GET /auth/me/activity — auth: owner only (docs/API_CONTRACTS.md
+ * "GET /auth/me/activity"). Owner-scoped read of `audit_log`, including
+ * manager edits made on the owner's behalf.
+ */
+export async function getMyActivity(
+  params: PaginationParams,
+  accessToken: string
+): Promise<PaginatedResponse<OwnerActivity>> {
+  const query = toQueryString({ page: params.page, page_size: params.page_size });
+  return apiFetch<PaginatedResponse<OwnerActivity>>(
+    `/auth/me/activity${query}`,
     { method: "GET" },
     { accessToken }
   );

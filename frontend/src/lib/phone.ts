@@ -2,13 +2,19 @@
 // editor. Pure — no I/O — so it's trivially unit-testable.
 //
 // Storage convention: `restaurant_location.phone` is a free-text
-// varchar(20) with no backend validation (backend/app/schemas/location.py),
-// but the frontend's existing validation (lib/validation/location.ts) has
-// always required E.164-shaped digits (`+?[1-9]\d{7,14}`), and the value is
-// rendered into `tel:` links (RestaurantInfoCard, RestaurantCard). So new
-// writes are normalised to E.164: US numbers become `+1XXXXXXXXXX`
-// (12 chars, fits varchar(20)); an explicit `+` international number is
-// kept as `+<digits>`.
+// varchar(20). It's required (non-empty) on `POST /locations` as of
+// 2026-09-22 (docs/PROJECT_PLAN.csv "Make location phone required"), same
+// standing as `name`; existing NULL-phone rows (seeded/imported) are left
+// alone -- the DB column itself stays nullable, see
+// backend/app/schemas/location.py LocationCreate.phone's judgment-call
+// note. `backend/app/schemas/location.py` now runs the exact same
+// normalisation as this file (`normalize_phone` there is a line-for-line
+// port of `normalizePhone` here — keep them in sync), so a number this
+// function accepts is accepted server-side too, and the value is rendered
+// into `tel:` links (RestaurantInfoCard, RestaurantCard). New writes are
+// normalised to E.164: US numbers become `+1XXXXXXXXXX` (12 chars, fits
+// varchar(20)); an explicit `+` international number is kept as
+// `+<digits>`.
 
 /** Returns the E.164 form of `input`, or `null` when it isn't a plausible number. */
 export function normalizePhone(input: string): string | null {
