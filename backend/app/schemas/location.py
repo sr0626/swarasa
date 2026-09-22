@@ -4,12 +4,23 @@ docs/API_CONTRACTS.md "Locations (restaurant_location)".
 from __future__ import annotations
 
 from datetime import datetime, time
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
 ABOUT_MAX_LENGTH = 1000
 SPECIALTIES_MAX_ITEMS = 8
 SPECIALTY_MAX_LENGTH = 40
+
+# See app/models/restaurant_location.py "Location status lifecycle" for the
+# full model. All four are legal *self-service* targets on
+# `POST /locations/{id}/status` — the asymmetric "can't self-exit
+# closed_pending_reopen" rule is enforced in location_service.py, not here
+# (this schema only validates that the value is one of the four known
+# statuses, same as ClaimStatus/ReportStatus elsewhere in this codebase).
+LocationStatusValue = Literal[
+    "active", "owner_deactivated", "coming_soon", "closed_pending_reopen"
+]
 
 
 class HoursOut(BaseModel):
@@ -59,12 +70,18 @@ class LocationOut(BaseModel):
     # paid_until/is_active on location endpoints..."). `None` when free
     # tier (root CLAUDE.md "Tier model (is_paid)").
     paid_until: datetime | None
-    # Soft-hide flag (restaurant_location.is_active) — was a real stored
-    # column that this response never serialized before. `GET
-    # /locations/{id}` itself is unchanged otherwise: it still returns a
-    # deactivated location's detail to ANY caller (no filtering here, same
-    # as before this change) — only `GET /restaurants/{id}/locations`
-    # (list) gained owner/admin-aware filtering, see location_service.py.
+    # Product-state lifecycle (app/models/restaurant_location.py "Location
+    # status lifecycle") — added alongside the enforcement change that
+    # made `GET /locations/{id}` actually 404 a hidden location for a
+    # caller without access (see location_service.get_location). A caller
+    # who legitimately sees this response (public + active, or
+    # owner/admin/assigned manager on any status) always gets the real
+    # status string here.
+    status: LocationStatusValue
+    # Backward-compat derived flag — True only when status == "active".
+    # kept alongside `status` (not replaced) since several existing
+    # frontend call sites already read this boolean; see the hybrid
+    # property of the same name on the model.
     is_active: bool
     is_open_now: bool | None
     hours: list[HoursOut]
@@ -142,3 +159,13 @@ class LocationUpdate(BaseModel):
         if len(cleaned) > SPECIALTIES_MAX_ITEMS:
             raise ValueError(f"at most {SPECIALTIES_MAX_ITEMS} specialties allowed")
         return cleaned or None
+
+
+class LocationStatusUpdate(BaseModel):
+    """Body for `POST /locations/{id}/status` — owner/admin self-service
+    status change. `location_service.update_location_status` is what
+    actually enforces the one asymmetric rule (no self-service transition
+    OUT of `closed_pending_reopen`); this schema only validates the value
+    shape."""
+
+    status: LocationStatusValue

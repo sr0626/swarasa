@@ -100,6 +100,13 @@ async def _fetch_candidates(
             RestaurantLocation.timezone,
             distance_expr.label("distance_mi"),
         )
+        # Excludes every hidden status (owner_deactivated/coming_soon/
+        # closed_pending_reopen), not just an old plain "inactive" flag —
+        # app/models/restaurant_location.py "Location status lifecycle".
+        # `RestaurantLocation.is_active` is a hybrid property equivalent to
+        # `status == 'active'`, so this filter is unchanged in SQL and
+        # correct against the new 4-state model with no edit required —
+        # verified via the model's own hybrid `.expression`, not assumed.
         .where(RestaurantLocation.is_active == True)  # noqa: E712
     )
     if q:

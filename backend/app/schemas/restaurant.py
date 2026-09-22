@@ -8,6 +8,7 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 from app.schemas.cuisine import CuisineTagOut
+from app.schemas.location import LocationStatusValue
 
 
 class RestaurantOut(BaseModel):
@@ -60,6 +61,10 @@ class LocationSummaryOut(BaseModel):
     # `false` for the owning owner or an admin caller, who additionally
     # see their own deactivated locations.
     paid_until: datetime | None
+    # Added alongside the location status lifecycle
+    # (app/models/restaurant_location.py) — same fields/semantics as
+    # LocationOut.status/is_active (backend/app/schemas/location.py).
+    status: LocationStatusValue
     is_active: bool
     is_open_now: bool | None
 
