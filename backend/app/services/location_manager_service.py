@@ -80,14 +80,32 @@ def _location_display_name(location_name: str | None, brand_name: str) -> str:
 
 
 async def _paid_active_assignments_for_manager(
-    db: AsyncSession, manager_sub: str
+    db: AsyncSession, manager_sub: str, *, exclude_location_id: int | None = None
 ) -> list[tuple[int, str, str]]:
     """(location_id, display_name, city) for each of this manager's
     current active assignments on `is_paid=true` locations — used both to
     count against the symmetric cap and to name the locations in the
     409's error message (task requirement: name the locations, not just
     the count).
+
+    `exclude_location_id` leaves out the location currently being assigned
+    to — relevant only for the (rare) case where the manager is already
+    actively assigned to THAT SAME location and this is really a duplicate
+    assignment attempt: without the exclusion, that location would count
+    itself toward "other locations", which could misreport
+    `manager_location_cap_reached` right at the cap boundary instead of
+    letting the more specific `already_active_manager` check (the unique
+    index catch in `assign_manager`) surface. Callers computing/displaying
+    a manager's *existing* portfolio in general (not mid-assignment) pass
+    nothing here.
     """
+    filters = [
+        LocationManager.user_id == manager_sub,
+        LocationManager.is_active == True,  # noqa: E712
+        RestaurantLocation.is_paid == True,  # noqa: E712
+    ]
+    if exclude_location_id is not None:
+        filters.append(RestaurantLocation.id != exclude_location_id)
     rows = (
         await db.execute(
             select(
@@ -99,11 +117,7 @@ async def _paid_active_assignments_for_manager(
             .select_from(LocationManager)
             .join(RestaurantLocation, RestaurantLocation.id == LocationManager.location_id)
             .join(RestaurantBrand, RestaurantBrand.id == RestaurantLocation.brand_id)
-            .where(
-                LocationManager.user_id == manager_sub,
-                LocationManager.is_active == True,  # noqa: E712
-                RestaurantLocation.is_paid == True,  # noqa: E712
-            )
+            .where(*filters)
             .order_by(RestaurantLocation.id)
         )
     ).all()
@@ -146,7 +160,9 @@ async def assert_manager_not_over_location_cap(
     cap = await platform_config_service.get_config_int(
         db, CONFIG_KEY_MAX_LOCATIONS_PER_MANAGER, MAX_ACTIVE_LOCATIONS_PER_MANAGER_PAID
     )
-    current = await _paid_active_assignments_for_manager(db, manager_sub)
+    current = await _paid_active_assignments_for_manager(
+        db, manager_sub, exclude_location_id=location.id
+    )
     if len(current) >= cap:
         names = ", ".join(f"{name} ({city})" for _, name, city in current[:cap])
         raise AppError(

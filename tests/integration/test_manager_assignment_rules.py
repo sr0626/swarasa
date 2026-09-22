@@ -189,6 +189,44 @@ async def test_manager_location_cap_not_triggered_by_free_tier_assignments(
 
 
 @pytest.mark.asyncio
+async def test_duplicate_assignment_on_paid_location_at_cap_boundary_is_already_active_not_cap_reached(
+    client, db_session, as_user, cognito_directory
+):
+    """Regression test for a self-review finding: the symmetric cap count
+    must EXCLUDE the target location itself. Set up a manager already
+    actively assigned to exactly 1 OTHER paid location plus the TARGET
+    paid location itself (2 active paid rows total, at the default cap of
+    2) and re-POST the same manager to the same target location. If the
+    cap count wrongly included the target location, this would 409 as
+    `manager_location_cap_reached` (count=2 >= cap=2) instead of the
+    correct, more specific `already_active_manager` — a duplicate-
+    assignment attempt should never be masked by the cap error."""
+    owner = await create_owner(db_session)
+    brand = await create_brand(db_session, owner_id=owner.id, is_claimed=True)
+    other_paid_location = await create_location(db_session, brand_id=brand.id, is_paid=True)
+    target_location = await create_location(db_session, brand_id=brand.id, is_paid=True)
+
+    manager_email = "duplicate-attempt-manager@example.com"
+    manager_sub = str(uuid.uuid4())
+    cognito_directory[manager_email] = manager_sub
+
+    await create_location_manager(
+        db_session, location_id=other_paid_location.id, user_id=manager_sub, is_active=True
+    )
+    await create_location_manager(
+        db_session, location_id=target_location.id, user_id=manager_sub, is_active=True
+    )
+    await db_session.commit()
+
+    as_user("owner", sub=owner.cognito_sub, email=owner.email)
+    response = await client.post(
+        f"/locations/{target_location.id}/managers", json={"manager_email": manager_email}
+    )
+    assert response.status_code == 409
+    assert response.json()["code"] == "already_active_manager"
+
+
+@pytest.mark.asyncio
 async def test_platform_config_row_drives_real_enforcement(
     client, db_session, as_user, cognito_directory
 ):
