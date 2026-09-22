@@ -17,12 +17,13 @@ import {
   getMyActivity,
   requestDataDeletion,
   updateCurrentUser,
+  updateMyProfile,
 } from "@/lib/api/auth";
 import { getServerSession } from "@/lib/auth/session";
 import { requestDataDeletionSchema } from "@/lib/validation/account";
-import { updateAuthMeSchema } from "@/lib/validation/auth";
+import { updateAuthMeSchema, updateDisplayNameSchema } from "@/lib/validation/auth";
 import type { OwnerActivity } from "@/types/activity";
-import type { AuthMe } from "@/types/auth";
+import type { AuthMe, UpdateProfileResult } from "@/types/auth";
 import type { PaginatedResponse } from "@/types/common";
 import type { DataDeletionRequest, DataExport } from "@/types/privacy";
 
@@ -69,6 +70,36 @@ export async function updateProfileAction(
     return { ok: true, data: account };
   } catch (error) {
     return { ok: false, error: messageFor(error, "Something went wrong saving your profile.") };
+  }
+}
+
+/**
+ * PATCH /auth/me — generalized display-name update for `registered_user`/
+ * `manager` (docs/PROJECT_PLAN.csv "Generic user display name for
+ * registered_user/manager"; see components/account/DisplayNameForm.tsx).
+ * Separate action from `updateProfileAction` above (which stays owner-only
+ * and posts `full_name` + `phone`) so each form only ever sends the shape
+ * its own role can actually persist.
+ */
+export async function updateDisplayNameAction(
+  input: unknown
+): Promise<ActionResult<UpdateProfileResult>> {
+  const auth = await requireAccountSession();
+  if (!auth.ok) return auth;
+
+  const parsed = updateDisplayNameSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Please check the form and try again.",
+    };
+  }
+
+  try {
+    const result = await updateMyProfile(parsed.data, auth.accessToken);
+    return { ok: true, data: result };
+  } catch (error) {
+    return { ok: false, error: messageFor(error, "Something went wrong saving your name.") };
   }
 }
 

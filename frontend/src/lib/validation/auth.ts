@@ -8,6 +8,21 @@ export const updateAuthMeSchema = z.object({
 
 export type UpdateAuthMeFormValues = z.infer<typeof updateAuthMeSchema>;
 
+/**
+ * Display-name-only form (registered_user/manager, via
+ * `updateMyProfile`/`DisplayNameForm.tsx`). Mirrors the backend's
+ * `full_name` validation (`backend/app/schemas/auth.py`
+ * `FULL_NAME_MAX_LENGTH = 255`) — max 255, not `updateAuthMeSchema`'s 200,
+ * since that field's 200 was never a backend-enforced limit, just this
+ * form's own choice; the new backend validator is the real source of
+ * truth so this one matches it exactly.
+ */
+export const updateDisplayNameSchema = z.object({
+  full_name: z.string().trim().min(1, "Name is required").max(255),
+});
+
+export type UpdateDisplayNameFormValues = z.infer<typeof updateDisplayNameSchema>;
+
 const emailSchema = z
   .string()
   .trim()

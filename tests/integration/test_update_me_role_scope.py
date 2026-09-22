@@ -1,5 +1,7 @@
 """Integration test: PATCH /auth/me — role scope (docs/PROJECT_PLAN.csv
-"Broaden PATCH /auth/me beyond owner-only").
+"Broaden PATCH /auth/me beyond owner-only", then further generalized by
+"Generic user display name for registered_user/manager" — see
+app/models/user_profile.py and app/services/auth_service.py::update_me).
 
 Found during PR #80's ("User profile / account details page") review:
 `update_me` was gated by `Depends(require_owner)` with no stated reason a
@@ -20,10 +22,14 @@ concern, not a backend DB write, and out of scope for this fix (inventing
 a new Postgres table is Architect's call, not Backend Dev's to make
 unilaterally).
 
-So the "correct, honest outcome" for the 3 non-owner roles is a `404` with
-an explicit `no_editable_profile` code — NOT the old `403`. The
-distinction matters: it's not a permissions problem (every authenticated
-role may call this route now), there's just nothing local to PATCH yet.
+So the "correct, honest outcome" for the 3 non-owner roles WAS a `404`
+with an explicit `no_editable_profile` code — NOT a `403`. That's still
+true for `admin` (see `test_admin_still_gets_honest_404`), but
+`registered_user`/`manager` now have a real place to write to: the new
+`user_profile` table (one row per Cognito `sub`, `full_name` only — see
+app/models/user_profile.py's docstring for why this exists instead of a
+Cognito `updateUserAttributes` call). `owner` is completely unaffected —
+still `owner_account`, still audit-logged, still lazily provisioned.
 
 Run against the real HTTP router + a real (SQLite) DB, same pattern as
 test_admin_location_parity.py / test_managed_locations.py.
@@ -34,7 +40,8 @@ import pytest
 from sqlalchemy import select
 
 from app.models.audit_log import AuditLog
-from factories import create_owner
+from app.models.user_profile import UserProfile
+from factories import create_owner, create_user_profile
 
 
 @pytest.mark.asyncio
@@ -114,21 +121,151 @@ async def test_first_time_owner_is_lazily_provisioned_on_patch(client, db_sessio
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("role", ["manager", "admin", "registered_user"])
-async def test_non_owner_roles_get_honest_404_not_403(client, role, as_user):
-    """The bug: these 3 roles used to get a blanket 403 purely from the
-    role gate (require_owner), even though there's no permissions problem —
-    they're just missing a local record to PATCH. Broadening the auth
-    dependency must not turn that into a silent no-op 200 either (root
-    CLAUDE.md posture: no fabricated data/success) — it must be an honest,
-    explicit 404 with a distinct code, not the old 403.
+async def test_admin_still_gets_honest_404(client, as_user):
+    """`admin` is the one role left with no local profile record to PATCH
+    (registered_user/manager gained `user_profile` — see the tests below).
+    Must stay a `404 no_editable_profile`, never a bare `403` (not a
+    permissions problem) and never a silent no-op `200` (root CLAUDE.md
+    posture: no fabricated success).
     """
-    as_user(role)
+    as_user("admin")
     response = await client.patch("/auth/me", json={"full_name": "Someone", "phone": "+14695550000"})
     assert response.status_code == 404, response.text
     body = response.json()
     assert body["code"] == "no_editable_profile"
     assert "detail" in body
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["registered_user", "manager"])
+async def test_registered_user_and_manager_can_set_and_read_back_full_name(client, db_session, role, as_user):
+    """The new generalized capability: registered_user/manager now have
+    somewhere to persist a display name (app/models/user_profile.py),
+    upserted via PATCH /auth/me and readable back via GET /auth/me's
+    unified `full_name` field -- no more 404.
+    """
+    user = as_user(role)
+
+    patch_response = await client.patch("/auth/me", json={"full_name": "Asha Verma"})
+    assert patch_response.status_code == 200, patch_response.text
+    assert patch_response.json() == {"full_name": "Asha Verma"}
+
+    get_response = await client.get("/auth/me")
+    assert get_response.status_code == 200, get_response.text
+    body = get_response.json()
+    assert body["full_name"] == "Asha Verma"
+    # owner_account stays null for these roles -- they have no business
+    # record, only the new generic profile row.
+    assert body["owner_account"] is None
+
+    row = (
+        await db_session.execute(
+            select(UserProfile).where(UserProfile.cognito_sub == user.cognito_sub)
+        )
+    ).scalar_one()
+    assert row.full_name == "Asha Verma"
+
+
+@pytest.mark.asyncio
+async def test_registered_user_can_update_an_existing_profile_row(client, db_session, as_user):
+    """Second PATCH is an update, not a duplicate insert -- exercises the
+    upsert's "existing row" branch (the test above only ever exercises
+    first-time creation).
+    """
+    user = as_user("registered_user")
+    await create_user_profile(db_session, cognito_sub=user.cognito_sub, full_name="Old Name")
+    await db_session.commit()
+
+    response = await client.patch("/auth/me", json={"full_name": "New Name"})
+    assert response.status_code == 200, response.text
+    assert response.json()["full_name"] == "New Name"
+
+    rows = (
+        await db_session.execute(
+            select(UserProfile).where(UserProfile.cognito_sub == user.cognito_sub)
+        )
+    ).scalars().all()
+    assert len(rows) == 1
+    assert rows[0].full_name == "New Name"
+
+
+@pytest.mark.asyncio
+async def test_manager_get_me_before_ever_setting_a_name(client, as_user):
+    """No user_profile row yet -- GET must return `full_name: null`, not
+    404/500 (get_user_profile_by_sub is a plain read, never lazily
+    provisioning, unlike the owner_account path)."""
+    as_user("manager")
+    response = await client.get("/auth/me")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["full_name"] is None
+    assert body["owner_account"] is None
+
+
+@pytest.mark.asyncio
+async def test_registered_user_empty_full_name_is_rejected(client, as_user):
+    as_user("registered_user")
+    response = await client.patch("/auth/me", json={"full_name": "   "})
+    assert response.status_code == 422, response.text
+
+
+@pytest.mark.asyncio
+async def test_registered_user_missing_full_name_is_rejected(client, as_user):
+    """user_profile has nothing else to write -- omitting full_name entirely
+    is a 400, not a silent no-op 200."""
+    as_user("registered_user")
+    response = await client.patch("/auth/me", json={})
+    assert response.status_code == 400, response.text
+    assert response.json()["code"] == "full_name_required"
+
+
+@pytest.mark.asyncio
+async def test_full_name_over_max_length_is_rejected(client, as_user):
+    as_user("registered_user")
+    response = await client.patch("/auth/me", json={"full_name": "x" * 256})
+    assert response.status_code == 422, response.text
+
+
+@pytest.mark.asyncio
+async def test_registered_user_profile_write_is_not_audit_logged(client, db_session, as_user):
+    """Deliberate: user_profile isn't on root CLAUDE.md's audited-entity
+    list (restaurant_brand, restaurant_location, menu_item, deal,
+    owner_account, location_manager), and audit_log.record_id is a
+    BigInteger that a Cognito `sub` string doesn't fit anyway -- see
+    app/models/user_profile.py and auth_service.update_me's docstrings.
+    """
+    as_user("registered_user")
+    response = await client.patch("/auth/me", json={"full_name": "Asha Verma"})
+    assert response.status_code == 200, response.text
+
+    rows = (
+        await db_session.execute(
+            select(AuditLog).where(AuditLog.table_name == "user_profile")
+        )
+    ).scalars().all()
+    assert rows == []
+
+
+@pytest.mark.asyncio
+async def test_owner_full_name_unaffected_by_generalization(client, db_session, as_user):
+    """Regression: the owner path must still go through owner_account only
+    -- no stray user_profile row created for an owner caller."""
+    owner = await create_owner(db_session, full_name="Priya Rao")
+    await db_session.commit()
+
+    as_user("owner", sub=owner.cognito_sub, email=owner.email)
+    response = await client.get("/auth/me")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["full_name"] == "Priya Rao"
+    assert body["owner_account"]["full_name"] == "Priya Rao"
+
+    profile_row = (
+        await db_session.execute(
+            select(UserProfile).where(UserProfile.cognito_sub == owner.cognito_sub)
+        )
+    ).scalar_one_or_none()
+    assert profile_row is None
 
 
 @pytest.mark.asyncio

@@ -18,13 +18,38 @@ export interface AuthMe {
   cognito_sub: string;
   role: UserRole;
   email: string;
+  // Unified display name regardless of backing source: owner_account.full_name
+  // for an owner, the new generic `user_profile.full_name` for
+  // registered_user/manager, null for admin (no local profile source yet
+  // for any role) -- see docs/API_CONTRACTS.md "GET /auth/me". Added so
+  // callers never need to know/branch on which table a role's name lives
+  // in; prefer this over `owner_account?.full_name` everywhere except the
+  // owner-only edit form, which still needs the full OwnerAccount shape
+  // (id/phone/stripe_customer_id).
+  full_name: string | null;
   owner_account: OwnerAccount | null;
 }
 
-/** Body for PATCH /auth/me. Always scoped to the authenticated caller. */
+/** Body for PATCH /auth/me (owner form). Always scoped to the authenticated caller. */
 export interface UpdateAuthMeInput {
   full_name: string;
   phone: string;
+}
+
+/**
+ * Body for the generalized PATCH /auth/me (registered_user/manager display
+ * name only -- see docs/API_CONTRACTS.md "PATCH /auth/me"). Owner also
+ * accepts this shape (phone is simply omitted/untouched), but owner UI
+ * uses `UpdateAuthMeInput`/`updateCurrentUser` instead, unchanged.
+ */
+export interface UpdateProfileInput {
+  full_name: string;
+}
+
+/** Response for the generalized PATCH /auth/me -- a registered_user/manager
+ * caller only ever gets `full_name` back (no owner_account fields apply). */
+export interface UpdateProfileResult {
+  full_name: string | null;
 }
 
 /**

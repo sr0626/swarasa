@@ -23,7 +23,7 @@ export default function AccountAvatar({
       aria-hidden="true"
       className={`flex shrink-0 items-center justify-center rounded-full border-white bg-brand-chip font-display font-bold text-brand-chip-ink shadow-brand-control ${SIZE_CLASS[size]} ${className}`}
     >
-      {initialsFor(me.owner_account?.full_name ?? null, me.email)}
+      {initialsFor(me.full_name, me.email)}
     </div>
   );
 }

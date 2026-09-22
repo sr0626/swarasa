@@ -46,20 +46,24 @@ import { getAdminNotifications } from "@/lib/api/adminNotifications";
 import type { AdminNotifications } from "@/types/adminNotifications";
 
 /**
- * Best-effort greeting name for a signed-in session: `owner_account.full_name`
- * when present, falling back to email — same fallback pattern
- * app/account/page.tsx (PR #80) already uses for its own greeting
- * (`me.owner_account?.full_name ?? me.email`). Unlike that page, a failed
- * `GET /auth/me` here must NOT blank out the whole header — it falls back
- * further, to the email already present on the verified JWT
- * (`Session.email`), so the account menu still renders (just without a
- * display name beyond the email) instead of silently reverting to the
- * signed-out nav.
+ * Best-effort greeting name for a signed-in session: `GET /auth/me`'s
+ * unified `full_name` (docs/API_CONTRACTS.md "GET /auth/me") when present,
+ * falling back to email — same fallback pattern app/account/page.tsx (PR
+ * #80) already uses via `accountShared.ts`'s `displayNameFor`. Updated
+ * (docs/PROJECT_PLAN.csv "Generic user display name for registered_user/
+ * manager") to read `me.full_name` instead of `me.owner_account?.full_name`
+ * directly — a registered_user/manager who has set a name via the new
+ * `/account` display-name form now shows it here too, not just owner.
+ * Unlike the account page, a failed `GET /auth/me` here must NOT blank out
+ * the whole header — it falls back further, to the email already present
+ * on the verified JWT (`Session.email`), so the account menu still renders
+ * (just without a display name beyond the email) instead of silently
+ * reverting to the signed-out nav.
  */
 async function resolveGreetingName(accessToken: string, fallbackEmail: string): Promise<string> {
   try {
     const me = await getCurrentUser(accessToken);
-    return me.owner_account?.full_name ?? me.email;
+    return me.full_name ?? me.email;
   } catch {
     return fallbackEmail;
   }

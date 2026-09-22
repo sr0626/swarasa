@@ -15,7 +15,7 @@ from app.dependencies.auth import (
 from app.dependencies.db import get_db
 from app.dependencies.pagination import Pagination, pagination_params
 from app.schemas.audit import OwnerActivityListResponse
-from app.schemas.auth import MeResponse, MeUpdateRequest, OwnerAccountOut
+from app.schemas.auth import MeResponse, MeUpdateRequest, OwnerAccountOut, ProfileOut
 from app.schemas.follow import FollowListResponse
 from app.schemas.location_manager import ManagedLocationListResponse
 from app.schemas.privacy import (
@@ -43,20 +43,24 @@ async def get_me(
     return await auth_service.get_me(db, current_user)
 
 
-@router.patch("/me", response_model=OwnerAccountOut)
+@router.patch("/me", response_model=OwnerAccountOut | ProfileOut)
 async def update_me(
     body: MeUpdateRequest,
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
-) -> OwnerAccountOut:
+) -> OwnerAccountOut | ProfileOut:
     """Any authenticated role, self-scoped (docs/PROJECT_PLAN.csv "Broaden
     PATCH /auth/me beyond owner-only") — same auth posture GET /auth/me
     already uses. `require_owner` was an oversight from when this route was
     first built with only owner accounts in mind, not a deliberate
-    restriction: there is no local editable profile record for
-    manager/admin/registered_user today (only `owner_account` has
-    `full_name`/`phone`), so `auth_service.update_me` still 404s those
-    three roles with an explicit `no_editable_profile` code — never a bare
+    restriction.
+
+    Generalized further (docs/PROJECT_PLAN.csv "Generic user display name
+    for registered_user/manager"): `owner` keeps writing `owner_account`
+    unchanged; `registered_user`/`manager` now upsert `full_name` into the
+    new `user_profile` table (see `app/models/user_profile.py`) instead of
+    404ing. `admin` still has no local profile record to write to, so it
+    still 404s with an explicit `no_editable_profile` code — never a bare
     403, which would (incorrectly) read as a permissions problem rather
     than "there's nothing here to update yet."
     """
