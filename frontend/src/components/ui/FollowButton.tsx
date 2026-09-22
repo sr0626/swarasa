@@ -82,7 +82,18 @@ export default function FollowButton({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const wrapperClasses = `relative inline-flex ${wrapperClassName ?? ""}`.trim();
+  // BUG FIX (found live 2026-09-22): always appending "relative" here and
+  // letting `wrapperClassName` follow it broke every corner-overlay caller
+  // (e.g. RestaurantCard's "absolute right-3 top-3") — Tailwind's generated
+  // CSS orders `.relative` after `.absolute`, so `relative` always won and
+  // the icon rendered in normal document flow instead of overlaid on the
+  // image. `absolute` (or any position utility a caller supplies) is itself
+  // a valid positioning context for the error tooltip below, so "relative"
+  // is only needed as the DEFAULT when the caller doesn't specify a
+  // position of its own (e.g. the inline detail-hero placement).
+  const wrapperClasses = wrapperClassName
+    ? `inline-flex ${wrapperClassName}`.trim()
+    : "relative inline-flex";
 
   if (!isRegisteredUser) {
     const next = safeNextPath(currentPath);
