@@ -35,6 +35,24 @@ export interface ClaimRequestExport {
   reviewed_at: string | null;
 }
 
+/**
+ * A "report a problem" submission attributed to the caller — matched by
+ * `listing_report.reporter_user_id` (their Cognito `sub`), not by
+ * `reporter_email` (free text any submitter, including an anonymous one,
+ * can type — see backend `ListingReportExportOut` docstring).
+ */
+export interface ListingReportExport {
+  report_id: number;
+  brand_id: number;
+  location_id: number | null;
+  category: string;
+  details: string;
+  reporter_email: string | null;
+  status: string;
+  submitted_at: string;
+  reviewed_at: string | null;
+}
+
 /** Actions the caller themselves performed — retained, never touched by a deletion request. */
 export interface AuditLogExport {
   table_name: string;
@@ -54,6 +72,7 @@ export interface DataExport {
   location_manager_assignments: LocationManagerExport[];
   follows: FollowExport[];
   claim_requests: ClaimRequestExport[];
+  listing_reports: ListingReportExport[];
   audit_log_entries: AuditLogExport[];
   notice: string;
 }
