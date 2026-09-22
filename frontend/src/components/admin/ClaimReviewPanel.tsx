@@ -37,13 +37,24 @@ export default function ClaimReviewPanel({
   statusFilter,
 }: ClaimReviewPanelProps) {
   const [claims, setClaims] = useState<ClaimQueueItem[]>(initialClaims);
+  // Claim ids whose approve response came back with `owner_group_granted:
+  // false` — the approval itself succeeded, but the claimant may not have
+  // portal access yet. Tracked separately from `claims` (not part of the
+  // API shape) so the warning can keep a card visible on-screen even after
+  // its status no longer matches the active filter tab.
+  const [ownerGroupWarnings, setOwnerGroupWarnings] = useState<Set<number>>(new Set());
 
   function handleResolved(updated: ClaimResponse) {
+    const needsWarning = updated.owner_group_granted === false;
+    if (needsWarning) {
+      setOwnerGroupWarnings((prev) => new Set(prev).add(updated.claim_id));
+    }
     setClaims((prev) =>
       prev.flatMap((c) => {
         if (c.claim_id !== updated.claim_id) return [c];
-        // Drop the card once it no longer matches the active filter.
-        if (updated.status !== statusFilter) return [];
+        // Drop the card once it no longer matches the active filter —
+        // unless it needs to stay put so the owner-group warning is seen.
+        if (updated.status !== statusFilter && !needsWarning) return [];
         return [
           {
             ...c,
@@ -71,7 +82,11 @@ export default function ClaimReviewPanel({
     <ul className="flex flex-col gap-4">
       {claims.map((claim) => (
         <li key={claim.claim_id}>
-          <ClaimCard claim={claim} onResolved={handleResolved} />
+          <ClaimCard
+            claim={claim}
+            onResolved={handleResolved}
+            ownerGroupWarning={ownerGroupWarnings.has(claim.claim_id)}
+          />
         </li>
       ))}
     </ul>
@@ -119,9 +134,14 @@ function ProofLink({ claim }: { claim: ClaimQueueItem }) {
 function ClaimCard({
   claim,
   onResolved,
+  ownerGroupWarning,
 }: {
   claim: ClaimQueueItem;
   onResolved: (claim: ClaimResponse) => void;
+  /** True if the approve response came back with `owner_group_granted:
+   * false` — approval succeeded, but the claimant may not have portal
+   * access yet. */
+  ownerGroupWarning: boolean;
 }) {
   const [approveNotes, setApproveNotes] = useState("");
   const [rejectNotes, setRejectNotes] = useState("");
@@ -251,6 +271,17 @@ function ClaimCard({
           className="mt-4 rounded-brand-control bg-brand-closed-bg px-3 py-2.5 text-sm text-brand-closed"
         >
           {actionError}
+        </p>
+      )}
+
+      {ownerGroupWarning && (
+        <p
+          role="status"
+          className="mt-4 rounded-brand-control bg-brand-chip px-3 py-2.5 text-sm text-brand-ink"
+        >
+          <span className="font-semibold">Approved, but the claimant could not be added to
+          the owner group automatically</span> — they may not have portal access yet. Contact
+          them or add the group manually.
         </p>
       )}
 
