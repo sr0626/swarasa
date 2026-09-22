@@ -39,6 +39,7 @@ import RestaurantInfoCard from "@/components/restaurant/RestaurantInfoCard";
 import ClaimCTA from "@/components/restaurant/ClaimCTA";
 import RestaurantAbout from "@/components/restaurant/RestaurantAbout";
 import EditListingBar from "@/components/restaurant/EditListingBar";
+import RestaurantBackLink from "@/components/restaurant/RestaurantBackLink";
 import TopBar from "@/components/home/TopBar";
 import type { LocationDetail } from "@/types/location";
 import type { RestaurantBrand } from "@/types/restaurant";
@@ -180,6 +181,10 @@ export default async function RestaurantPage({ params }: RestaurantPageProps) {
         <TopBar />
 
         <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+          <div className="mb-2">
+            <RestaurantBackLink />
+          </div>
+
           {canEdit && location && <EditListingBar locationId={location.id} />}
 
           {/* Two columns from lg up; a single column below that. DOM order is
