@@ -11,8 +11,8 @@ import DataPrivacySection from "@/components/account/DataPrivacySection";
 import ManagedLocationsPanel from "@/components/account/ManagedLocationsPanel";
 import SecurityCard from "@/components/account/SecurityCard";
 import { ROLE_LABEL, cardClass, displayNameFor } from "@/components/account/accountShared";
+import type { ManagedLocationWithStatus } from "@/lib/manager/loadManagedLocationStatuses";
 import type { AuthMe } from "@/types/auth";
-import type { ManagedLocation } from "@/types/location";
 import type { DataDeletionRequest } from "@/types/privacy";
 
 export default function ManagerAccountView({
@@ -22,7 +22,7 @@ export default function ManagerAccountView({
   latestDeletionRequest,
 }: {
   me: AuthMe;
-  locations: ManagedLocation[];
+  locations: ManagedLocationWithStatus[];
   locationsError: string | null;
   latestDeletionRequest: DataDeletionRequest | null;
 }) {

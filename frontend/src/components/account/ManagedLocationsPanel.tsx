@@ -12,19 +12,19 @@
 // Server Component — links only.
 import Link from "next/link";
 import { LocationPinIcon, PencilIcon } from "@/components/ui/icons";
-import OpenStatusBadge from "@/components/ui/OpenStatusBadge";
+import LocationStatusChip from "@/components/console/LocationStatusChip";
 import {
   cardClass,
   primaryLinkClass,
   secondaryLinkClass,
 } from "@/components/account/accountShared";
-import type { ManagedLocation } from "@/types/location";
+import type { ManagedLocationWithStatus } from "@/lib/manager/loadManagedLocationStatuses";
 
 export default function ManagedLocationsPanel({
   locations,
   loadError,
 }: {
-  locations: ManagedLocation[];
+  locations: ManagedLocationWithStatus[];
   loadError: string | null;
 }) {
   return (
@@ -66,7 +66,7 @@ export default function ManagedLocationsPanel({
 
       {!loadError && locations.length > 0 && (
         <ul className="mt-4 flex flex-col gap-3">
-          {locations.map((location) => {
+          {locations.map(({ location, todayStatus }) => {
             const label = location.location_name ?? location.address_line1;
             return (
               <li
@@ -82,7 +82,7 @@ export default function ManagedLocationsPanel({
                     </span>
                   </p>
                   <div className="mt-2 pl-6">
-                    <OpenStatusBadge isOpenNow={location.is_open_now} />
+                    <LocationStatusChip status={todayStatus} />
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
