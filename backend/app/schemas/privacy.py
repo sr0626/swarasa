@@ -40,6 +40,25 @@ class ClaimRequestExportOut(BaseModel):
     reviewed_at: datetime | None
 
 
+class ListingReportExportOut(BaseModel):
+    """A "report a problem" submission attributed to the caller — matched
+    by `listing_report.reporter_user_id` (their Cognito `sub`), NOT by
+    `reporter_email`: that field is free text any submitter (including an
+    anonymous one) can type, so it is not a reliable identity match — see
+    `app/services/privacy_service.py` module docstring.
+    """
+
+    report_id: int
+    brand_id: int
+    location_id: int | None
+    category: str
+    details: str
+    reporter_email: str | None
+    status: str
+    submitted_at: datetime
+    reviewed_at: datetime | None
+
+
 class AuditLogExportOut(BaseModel):
     """Actions the caller themselves performed, per DECISIONS.md "CCPA
     data export/deletion" — included for transparency, but retained (not
@@ -63,6 +82,7 @@ class DataExportOut(BaseModel):
     location_manager_assignments: list[LocationManagerExportOut]
     follows: list[FollowExportOut]
     claim_requests: list[ClaimRequestExportOut]
+    listing_reports: list[ListingReportExportOut]
     audit_log_entries: list[AuditLogExportOut]
     notice: str
 

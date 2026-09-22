@@ -1623,6 +1623,9 @@ Response: `200`
   "claim_requests": [
     { "claim_id": 789, "brand_id": 123, "status": "approved", "proof_method": "google_business_profile", "submitted_at": "2026-09-01T10:00:00Z", "reviewed_at": "2026-09-02T10:00:00Z" }
   ],
+  "listing_reports": [
+    { "report_id": 44, "brand_id": 123, "location_id": 42, "category": "hours_incorrect", "details": "Closed Mondays now.", "reporter_email": "owner@example.com", "status": "new", "submitted_at": "2026-09-18T10:00:00Z", "reviewed_at": null }
+  ],
   "audit_log_entries": [
     { "table_name": "restaurant_brand", "record_id": 123, "action": "update", "actor_role": "owner", "created_at": "2026-09-10T10:00:00Z" }
   ],
@@ -1630,10 +1633,14 @@ Response: `200`
 }
 ```
 `owner_account` is `null` if the caller has no local business record
-(same condition as `GET /auth/me`). `audit_log_entries` covers actions
-the caller themselves performed (`actor_id` match) — included for
-transparency, but per `notice` and DECISIONS.md, these are NOT touched
-by a data-deletion request.
+(same condition as `GET /auth/me`). `listing_reports` covers "report a
+problem" submissions matched by `reporter_user_id` (the caller's Cognito
+`sub`, set only when they were signed in when they submitted it) —
+**not** by `reporter_email`, since that field is free text any submitter
+(including an anonymous one) can type and is not a reliable identity
+match. `audit_log_entries` covers actions the caller themselves performed
+(`actor_id` match) — included for transparency, but per `notice` and
+DECISIONS.md, these are NOT touched by a data-deletion request.
 
 ### POST /auth/me/data-deletion
 
@@ -1656,7 +1663,7 @@ Response: `201`
   "status": "pending_review",
   "requester_role": "registered_user",
   "reason": "no longer using the app",
-  "data_scope": { "owner_account": 0, "location_manager_assignments": 0, "follows": 3, "claim_requests": 0, "claim_requests_pending": 0, "audit_log_entries": 0 },
+  "data_scope": { "owner_account": 0, "location_manager_assignments": 0, "follows": 3, "claim_requests": 0, "claim_requests_pending": 0, "listing_reports": 0, "audit_log_entries": 0 },
   "submitted_at": "2026-09-16T10:00:00Z",
   "reviewed_at": null,
   "reviewer_notes": null,
@@ -1701,8 +1708,10 @@ each table), then sets `status: "completed"`, `reviewed_by`,
 `reviewed_at`, `completed_at`. Writes `audit_log` entries for the
 `location_manager`/`owner_account` rows it changes (both on root
 CLAUDE.md's audit-required table list) — not for `user_follow` (hard-
-deleted) or `claim_request` (redacted only), neither of which is on that
-list.
+deleted), `claim_request` (redacted only), or `listing_report` (only
+`reporter_email` nulled out — `reporter_user_id` and the report's own
+content are left in place, same "attribution trail, not an access grant"
+reasoning `audit_log.actor_id` gets), none of which is on that list.
 
 Response: `200`, updated request shape (`status: "completed"`).
 
