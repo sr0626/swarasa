@@ -502,3 +502,23 @@ terraform apply -var-file=envs/dev.tfvars   # user  (infra/, swarasa-dev; api_la
 python3 scripts/geocode_missing_locations.py --dry-run   # user  (x several: 0/15 on old script, 429s, then 15/15 with Census)
 python3 scripts/geocode_missing_locations.py   # user  (aws lambda invoke set_location_coordinates: updated 15)
 ```
+
+## 2026-09-22
+```bash
+git push -u origin fix/desi-restaurant-copy   # claude
+git push -u origin fix/account-menu-role-aware-links   # claude
+git push -u origin fix/search-location-geocoding   # claude
+git push -u origin feat/dev-seed-multi-city-and-short-users   # claude
+git push -u origin feature/manager-caps-and-assignment-rules   # claude
+git push -u origin feat/restaurant-page-back-link-and-tag-labels   # claude
+git push -u origin fix/owner-console-hours-freshness-and-status   # claude
+git push -u origin fix/csv-import-cuisine-type-dropped   # claude
+git push -u origin feat/phone-required-field   # claude
+git push -u origin feature/owner-audit-report   # claude
+git push -u origin feat/follow-any-authenticated-role   # claude (PR #161, later closed unmerged)
+git push -u origin feature/generic-user-display-name   # claude
+git push -u origin feat/manager-console-redesign   # claude
+git push -u origin infra/amplify-contact-email   # claude (merged as #150)
+terraform plan -var-file=envs/dev.tfvars   # user  (infra/, swarasa-dev; contact_email in aws_amplify_app.frontend)
+terraform apply -var-file=envs/dev.tfvars   # user
+```
