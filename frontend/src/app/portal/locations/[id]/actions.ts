@@ -12,6 +12,7 @@
 // re-validates ownership/assignment server-side on every write (root
 // CLAUDE.md "Permission model") — these actions are a thin, safe bridge,
 // not a second source of truth for authorization.
+import { revalidatePath } from "next/cache";
 import { ApiError } from "@/lib/api/client";
 import {
   assignLocationManager,
@@ -65,6 +66,36 @@ async function requireLocationSession(): Promise<
 function messageFor(error: unknown, fallback: string): string {
   if (error instanceof ApiError) return error.message;
   return fallback;
+}
+
+/**
+ * Purges the Next.js Data Cache for every page that shows this location's
+ * data, after a successful info/about/hours save.
+ *
+ * Root cause (confirmed 2026-09-22): the owner console's restaurant tiles
+ * (`/account`) and this location's own editor page (`/portal/locations/
+ * {id}`) both read this location through PUBLIC GET endpoints
+ * (`GET /restaurants/{id}/locations` via
+ * `lib/owner/loadOwnerRestaurants.ts`, and `GET /locations/{id}` on
+ * `app/portal/locations/[id]/page.tsx` itself) — neither call attaches an
+ * access token, so `lib/api/client.ts`'s `apiFetch` never applies
+ * `cache: "no-store"` (that only kicks in `options.accessToken ?
+ * { cache: "no-store" } : {}`). Both instead use `next: { revalidate: 60 }`,
+ * so a save lands in the DB immediately but the next render within that
+ * 60s window still serves the stale Data Cache entry — that's the "doesn't
+ * show until a hard refresh" bug. PR #141's authenticated
+ * `cache: "no-store"` fix doesn't reach this path because these reads are
+ * public, unauthenticated GETs by design (the editor page's own access
+ * check happens via the separate `GET /locations/{id}/managers` call, not
+ * this one).
+ *
+ * `revalidatePath` purges the Next Data Cache for fetches made while
+ * rendering the given path, so the very next visit re-fetches fresh data
+ * regardless of the 60s window.
+ */
+function revalidateLocationPaths(locationId: number): void {
+  revalidatePath("/account");
+  revalidatePath(`/portal/locations/${locationId}`);
 }
 
 /**
@@ -126,6 +157,7 @@ export async function updateLocationInfoAction(
 
   try {
     const location = await updateLocation(locationId, update, auth.accessToken);
+    revalidateLocationPaths(locationId);
     return { ok: true, data: location, notice };
   } catch (error) {
     return { ok: false, error: messageFor(error, "Something went wrong saving these details.") };
@@ -154,6 +186,7 @@ export async function updateLocationAboutAction(
 
   try {
     const location = await updateLocation(locationId, parsed.data, auth.accessToken);
+    revalidateLocationPaths(locationId);
     return { ok: true, data: location };
   } catch (error) {
     return { ok: false, error: messageFor(error, "Something went wrong saving this section.") };
@@ -185,6 +218,7 @@ export async function updateLocationHoursAction(
       parsed.data as UpdateLocationHoursInput,
       auth.accessToken
     );
+    revalidateLocationPaths(locationId);
     return { ok: true, data: result.hours };
   } catch (error) {
     return { ok: false, error: messageFor(error, "Something went wrong saving hours.") };

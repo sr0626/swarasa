@@ -14,6 +14,7 @@
 import { ApiError } from "@/lib/api/client";
 import {
   exportMyData,
+  getMyActivity,
   requestDataDeletion,
   updateCurrentUser,
   updateMyProfile,
@@ -21,7 +22,9 @@ import {
 import { getServerSession } from "@/lib/auth/session";
 import { requestDataDeletionSchema } from "@/lib/validation/account";
 import { updateAuthMeSchema, updateDisplayNameSchema } from "@/lib/validation/auth";
+import type { OwnerActivity } from "@/types/activity";
 import type { AuthMe, UpdateProfileResult } from "@/types/auth";
+import type { PaginatedResponse } from "@/types/common";
 import type { DataDeletionRequest, DataExport } from "@/types/privacy";
 
 type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -97,6 +100,26 @@ export async function updateDisplayNameAction(
     return { ok: true, data: result };
   } catch (error) {
     return { ok: false, error: messageFor(error, "Something went wrong saving your name.") };
+  }
+}
+
+/**
+ * GET /auth/me/activity (owner only). Backs OwnerActivitySection's
+ * "Load more" button -- each click re-derives the session server-side and
+ * fetches the next page, same "keep the access token server-side" shape as
+ * every other action in this file.
+ */
+export async function getMyActivityAction(
+  page: number
+): Promise<ActionResult<PaginatedResponse<OwnerActivity>>> {
+  const auth = await requireAccountSession();
+  if (!auth.ok) return auth;
+
+  try {
+    const result = await getMyActivity({ page, page_size: 20 }, auth.accessToken);
+    return { ok: true, data: result };
+  } catch (error) {
+    return { ok: false, error: messageFor(error, "Could not load recent activity.") };
   }
 }
 

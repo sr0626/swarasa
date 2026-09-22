@@ -436,6 +436,48 @@ def _run_delete_user_data(event: dict) -> dict:
     return {"command": "delete_user_data", **result}
 
 
+@_command("dev_clear_manager_assignments")
+def _run_dev_clear_manager_assignments(event: dict) -> dict:
+    """DEV-ONLY: soft-remove one manager's active location_manager
+    assignments, by email, for exercising the manager cap / cross-owner /
+    reassignment paths by hand. See
+    app/scripts/dev_clear_manager_assignments.py.
+
+    Event payload shape:
+        {"_management_command": "dev_clear_manager_assignments",
+         "manager_email": "manager@example.com"}
+    Optional: "location_ids": [1, 2] (defaults to ALL of that manager's
+    active assignments).
+    """
+    from app.db.session import dispose_engine
+    from app.scripts.dev_clear_manager_assignments import (
+        ClearManagerAssignmentsError,
+        run_clear_manager_assignments,
+    )
+
+    manager_email = event.get("manager_email")
+    if not manager_email:
+        return {
+            "ok": False,
+            "command": "dev_clear_manager_assignments",
+            "error": "Event payload needs a 'manager_email' string.",
+        }
+    location_ids = event.get("location_ids")
+
+    # Same same-loop-disposal reasoning as _run_seed_dev_data above.
+    async def _run_and_dispose() -> dict:
+        try:
+            return await run_clear_manager_assignments(manager_email, location_ids)
+        finally:
+            await dispose_engine()
+
+    try:
+        result = asyncio.run(_run_and_dispose())
+    except ClearManagerAssignmentsError as exc:
+        return {"ok": False, "command": "dev_clear_manager_assignments", "error": str(exc)}
+    return {"ok": True, "command": "dev_clear_manager_assignments", **result}
+
+
 def run_management_command(event: dict, context: Any) -> dict:
     """Entry point called from `app.main.handler`. Never raises -- every
     outcome (including an unknown command or an unhandled exception from

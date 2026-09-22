@@ -43,9 +43,9 @@ export default function DinerAccountView({
               </h1>
               <p className="mt-1 text-sm text-brand-ink-muted">
                 {followsError
-                  ? "Your favorite Indian restaurants, all in one place."
+                  ? "Your favorite desi restaurants, all in one place."
                   : followCount === 0
-                    ? "Follow your favorite Indian restaurants to keep them close."
+                    ? "Follow your favorite desi restaurants to keep them close."
                     : `You follow ${followCount} restaurant${followCount === 1 ? "" : "s"}.`}
               </p>
             </div>

@@ -3,6 +3,7 @@ docs/API_CONTRACTS.md "Locations (restaurant_location)".
 """
 from __future__ import annotations
 
+import re
 from datetime import datetime, time
 
 from pydantic import BaseModel, Field, field_validator
@@ -10,6 +11,44 @@ from pydantic import BaseModel, Field, field_validator
 ABOUT_MAX_LENGTH = 1000
 SPECIALTIES_MAX_ITEMS = 8
 SPECIALTY_MAX_LENGTH = 40
+
+# Phone made required on LocationCreate 2026-09-22 (docs/PROJECT_PLAN.csv
+# "Make location phone required"). Normalisation mirrors
+# frontend/src/lib/phone.ts normalizePhone exactly, so a number accepted by
+# one layer is accepted (and formatted identically) by the other. The DB
+# column (restaurant_location.phone) stays a nullable varchar(20) — see
+# that JUDGMENT CALL note below on LocationCreate.phone for why no Alembic
+# migration was added here.
+_NANP_PATTERN = re.compile(r"^[2-9]\d{2}[2-9]\d{6}$")
+_INTL_PATTERN = re.compile(r"^[1-9]\d{7,14}$")
+
+
+def _is_nanp(ten_digits: str) -> bool:
+    """North American Numbering Plan: area code and exchange both start with 2-9."""
+    return bool(_NANP_PATTERN.match(ten_digits))
+
+
+def normalize_phone(value: str) -> str | None:
+    """Returns the E.164 form of `value`, or `None` when it isn't a
+    plausible number. Port of frontend/src/lib/phone.ts normalizePhone —
+    keep the two in sync.
+    """
+    trimmed = value.strip()
+    if not trimmed:
+        return None
+
+    has_plus = trimmed.startswith("+")
+    digits = re.sub(r"\D", "", trimmed)
+
+    if has_plus:
+        # Explicit country code. NANP (+1) numbers must be exactly 11 digits.
+        if digits.startswith("1"):
+            return f"+{digits}" if _is_nanp(digits[1:]) else None
+        return f"+{digits}" if _INTL_PATTERN.match(digits) else None
+
+    # No "+": treat as a US number, with or without a leading 1.
+    national = digits[1:] if len(digits) == 11 and digits.startswith("1") else digits
+    return f"+1{national}" if _is_nanp(national) else None
 
 
 class HoursOut(BaseModel):
@@ -83,10 +122,32 @@ class LocationCreate(BaseModel):
     state: str = Field(min_length=2, max_length=2)
     postal_code: str = Field(min_length=1, max_length=10)
     country: str = Field(default="US", min_length=2, max_length=2)
-    phone: str | None = None
+    # Required 2026-09-22 (docs/PROJECT_PLAN.csv "Make location phone
+    # required") — same standing as `address_line1`/`city`: a new location
+    # must carry a real, dialable number, not just diner-facing UI copy.
+    # JUDGMENT CALL: the DB column stays `nullable=True` rather than
+    # getting a NOT NULL migration. A NOT NULL constraint needs a backfill
+    # for existing/imported rows with `phone IS NULL` (CSV-imported
+    # locations build `RestaurantLocation` directly, bypassing this schema
+    # entirely — see restaurant_bulk_import_service.py — so they're
+    # unaffected either way and stay possibly-NULL). Enforcing "required"
+    # purely at this Pydantic layer is the standard, lower-risk choice: it
+    # blocks new bad writes immediately with no migration/backfill risk
+    # against real data, consistent with how other "required going
+    # forward" fields work in this codebase (about/specialties normalise
+    # instead of NOT NULL, too).
+    phone: str = Field(min_length=1, max_length=20)
     timezone: str = "America/Chicago"
     latitude: float | None = None
     longitude: float | None = None
+
+    @field_validator("phone")
+    @classmethod
+    def _validate_phone_create(cls, value: str) -> str:
+        normalized = normalize_phone(value)
+        if normalized is None:
+            raise ValueError("Enter a valid phone number, e.g. (972) 555-0142")
+        return normalized
 
 
 class LocationUpdate(BaseModel):
@@ -97,6 +158,16 @@ class LocationUpdate(BaseModel):
     state: str | None = None
     postal_code: str | None = None
     country: str | None = None
+    # Optional here for PATCH (omitting the key leaves the stored phone
+    # untouched, same as the other address fields above) -- but phone is
+    # required at the DB-write level going forward (LocationCreate above),
+    # so unlike those fields, an explicitly-provided `phone` must NOT be
+    # None/empty: that would silently clear a "required" field, the same
+    # bug class this schema already avoids for about/specialties by making
+    # clearing an explicit, documented behaviour rather than an accident.
+    # The validator below rejects `null` and `""` outright (422) instead of
+    # treating them as "clear" — omission is the only way to leave phone
+    # alone on a PATCH.
     phone: str | None = None
     timezone: str | None = None
     latitude: float | None = None
@@ -106,6 +177,20 @@ class LocationUpdate(BaseModel):
     # below) CLEARS the stored value -- see location_service.update_location.
     about: str | None = None
     specialties: list[str] | None = None
+
+    @field_validator("phone")
+    @classmethod
+    def _validate_phone_update(cls, value: str | None) -> str | None:
+        # Only runs when the client actually sent a `phone` key (Pydantic
+        # skips field validators for an unset field's default) -- so
+        # omitting phone entirely still reaches location_service.py
+        # untouched, exactly like the other _UPDATABLE_FIELDS.
+        if value is None:
+            raise ValueError("phone cannot be cleared; provide a value or omit the field")
+        normalized = normalize_phone(value)
+        if normalized is None:
+            raise ValueError("Enter a valid phone number, e.g. (972) 555-0142")
+        return normalized
 
     @field_validator("about")
     @classmethod

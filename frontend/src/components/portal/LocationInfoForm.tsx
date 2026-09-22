@@ -224,12 +224,11 @@ export default function LocationInfoForm({ location }: { location: LocationDetai
         </div>
 
         <div>
-          <label htmlFor="phone" className={labelClass}>
-            Phone <span className="font-normal text-brand-ink-subtle">(optional)</span>
-          </label>
+          <label htmlFor="phone" className={labelClass}>Phone</label>
           <input
             id="phone"
             type="tel"
+            required
             value={form.phone}
             onChange={(e) => set("phone", e.target.value)}
             className={inputClass}

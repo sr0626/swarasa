@@ -66,7 +66,7 @@ import { getRestaurantBySlug } from "@/lib/api/restaurants";
 export async function generateMetadata({ params }): Promise<Metadata> {
   const restaurant = await getRestaurantBySlug(params.slug);
   return {
-    title: `${restaurant.name} — Indian Restaurant`,
+    title: `${restaurant.name} — Desi Restaurant`,
     description: restaurant.about,
     // schema.org injected via JSON-LD in the page component
   };
@@ -162,7 +162,7 @@ function MenuSection({ location }: { location: Location }) {
 - Every listing page MUST include schema.org `Restaurant` JSON-LD
 - `sitemap.xml` generated at build time from all active locations
 - `robots.txt` allows all crawlers
-- Meta title format: `{Restaurant Name} — Indian Restaurant in {City}, {State}`
+- Meta title format: `{Restaurant Name} — Desi Restaurant in {City}, {State}`
 - Meta description: first 150 chars of restaurant `about` field
 - Canonical URLs on all pages
 

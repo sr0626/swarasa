@@ -315,3 +315,51 @@ export async function geocodeWithProviders(
 
   return null;
 }
+
+/**
+ * Best-effort geocode for a freeform place query typed by a visitor — a
+ * city ("Frisco"), "City, ST", or ZIP — used by the search page's single
+ * location text box, which (unlike `GeocodeAddress`) has no separate
+ * street/city/state/zip fields to build the structured-address fallback
+ * ladder in `geocodeWithProviders` from. Same two providers, same order
+ * (Census first, Nominatim fallback), but each is tried once with the
+ * query exactly as typed — there's no address to progressively relax.
+ * Both providers' `onelineaddress`/free-text `q` endpoints accept a bare
+ * city or ZIP as well as a full address, so this reuses them directly
+ * rather than a separate lookup path. Never throws; resolves to null on
+ * any miss, timeout, or error, same as `geocodeWithProviders`.
+ */
+export async function geocodeFreeformQuery(
+  query: string,
+  deps: GeocodeDeps
+): Promise<GeocodeResult | null> {
+  const q = query.trim();
+  if (!q) return null;
+  const started = deps.now();
+  const hasBudget = () => deps.now() - started + REQUEST_TIMEOUT_MS <= TOTAL_BUDGET_MS;
+
+  if (hasBudget()) {
+    const outcome = await fetchJson(deps, buildCensusUrl(q), {});
+    if (outcome.kind === "ok") {
+      const hit = parseCensusResponse(outcome.body);
+      // "street" is the closest fit of the three GeocodePrecision values
+      // for a place-level (not street-address-level) match — this result
+      // isn't consumed for its precision today, only its coordinates.
+      if (hit) return { ...hit, precision: "street", source: "census" };
+    }
+  }
+
+  if (hasBudget()) {
+    const outcome = await fetchJson(deps, buildNominatimUrl(q), {
+      "User-Agent": deps.userAgent,
+    });
+    if (outcome.kind === "ok") {
+      const hit = parseNominatimResponse(outcome.body);
+      if (hit) return { ...hit, precision: "street", source: "nominatim" };
+    }
+    // "rate_limited" (429) and "miss" both fall through to null below —
+    // same "treat as no match, never retry" posture as the structured chain.
+  }
+
+  return null;
+}

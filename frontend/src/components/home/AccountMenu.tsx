@@ -21,6 +21,7 @@ import { signOut } from "@aws-amplify/auth";
 import { ensureAmplifyConfigured } from "@/lib/auth/amplifyClient";
 import { stopSessionKeepAlive } from "@/lib/auth/sessionKeepAlive";
 import { ChevronDownIcon } from "@/components/ui/icons";
+import type { UserRole } from "@/types/auth";
 
 interface MenuItem {
   key: string;
@@ -29,7 +30,50 @@ interface MenuItem {
   onSelect?: () => void;
 }
 
-export default function AccountMenu({ greetingName }: { greetingName: string }) {
+/**
+ * Role-aware leading items (everything before Security/Logout, which are
+ * the same for every role). `/account` is a single page with in-page anchor
+ * sections per role view (components/account/*View.tsx) — owner's is
+ * `id="profile"` (components/account/OwnerAccountView.tsx, also backing
+ * OWNER_NAV_ITEMS' `/account#profile` in components/console/navItems.ts).
+ *
+ * owner/manager: two items, "Account" (top of page) and "Profile" (the
+ * `#profile` section). Manager gets the exact same links as owner even
+ * though components/account/ManagerAccountView.tsx doesn't render a
+ * matching `id="profile"` section yet (no ManagerShell/nav items exist
+ * yet, per OwnerShell.tsx's own comment) — `/account#profile` degrades to
+ * a plain `/account` load with no anchor to scroll to until that lands, so
+ * this needs no follow-up change once it does.
+ *
+ * registered_user: one item relabeled "My Favorites" — `/account` for a
+ * diner renders the followed-restaurants grid (components/account/
+ * DinerAccountView.tsx, PR #132), so "Profile" undersells what's there.
+ *
+ * admin: unchanged "Profile" — components/account/AdminAccountView.tsx
+ * has no in-page anchor sections and AdminShell already provides its own
+ * console navigation, so there's nothing to split.
+ */
+function leadingItemsFor(role: UserRole | null): MenuItem[] {
+  if (role === "owner" || role === "manager") {
+    return [
+      { key: "account", label: "Account", href: "/account" },
+      { key: "profile", label: "Profile", href: "/account#profile" },
+    ];
+  }
+  if (role === "registered_user") {
+    return [{ key: "profile", label: "My Favorites", href: "/account" }];
+  }
+  // admin, and any unexpected/null role — same single-item fallback as before.
+  return [{ key: "profile", label: "Profile", href: "/account" }];
+}
+
+export default function AccountMenu({
+  greetingName,
+  role,
+}: {
+  greetingName: string;
+  role: UserRole | null;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -77,7 +121,7 @@ export default function AccountMenu({ greetingName }: { greetingName: string }) 
   }
 
   const items: MenuItem[] = [
-    { key: "profile", label: "Profile", href: "/account" },
+    ...leadingItemsFor(role),
     { key: "security", label: "Security", href: "/account/security" },
     { key: "logout", label: loggingOut ? "Signing out…" : "Logout", onSelect: handleLogout },
   ];
