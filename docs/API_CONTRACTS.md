@@ -986,16 +986,18 @@ already established — rather than as a third `/restaurants/{id}/...`
 route (there is no single `{id}` to nest it under) or a new `/users`
 resource introduced for this one endpoint alone.
 
-Auth: `registered_user` only, all three routes below (root CLAUDE.md
-"Permission model" — "Registered user: read-only + follow + deals"; no
-owner/manager/admin use case exists for following a brand). New
-`require_registered_user` dependency in `backend/app/dependencies/auth.py`,
-same shape as `require_admin`/`require_owner` — none of the existing
-dependencies gate to this one role.
+**Auth updated 2026-09-22** (root CLAUDE.md "Permission model"): any
+authenticated role — owner, manager, admin, or registered_user — may call
+all three routes below, using the plain `get_current_user` dependency in
+`backend/app/dependencies/auth.py` (no role-specific dependency). Was
+`registered_user` only at launch; widened because an owner/manager
+following a restaurant is a diner-like action with no security
+implication, same as a registered_user doing it. Public (signed-out)
+callers still get 401.
 
 ### POST /restaurants/{id}/follow
 
-Auth: registered_user
+Auth: any authenticated role (owner, manager, admin, registered_user)
 
 **Idempotent**: following a brand the caller already follows returns the
 existing follow (its original `followed_at`, not a refreshed one) rather
@@ -1017,7 +1019,7 @@ Errors:
 | Status | Code | When |
 |---|---|---|
 | 404 | `not_found` | `brand_id` doesn't exist |
-| 403 | `forbidden` | Caller is not a `registered_user` |
+| 401 | `unauthorized` | Caller is not authenticated |
 
 Audit: none — `user_follow` is not on root CLAUDE.md's audit-required
 table list (restaurant_brand, restaurant_location, menu_item, deal,
@@ -1025,7 +1027,7 @@ owner_account, location_manager).
 
 ### DELETE /restaurants/{id}/follow
 
-Auth: registered_user
+Auth: any authenticated role (owner, manager, admin, registered_user)
 
 **Idempotent**, same posture as `DELETE /locations/{id}/managers/{id}`
 above: unfollowing a brand the caller doesn't currently follow (or that
@@ -1036,7 +1038,9 @@ Response: `204 No Content`.
 
 ### GET /auth/me/follows
 
-Auth: registered_user
+Auth: any authenticated role (owner, manager, admin, registered_user) —
+widened alongside the two routes above; inherently self-scoped to the
+caller regardless of role.
 
 Query params: `page`, `page_size` (default 20, max 100 — backend/CLAUDE.md
 "ALWAYS include pagination on list endpoints"; unlike

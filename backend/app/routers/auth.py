@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies.auth import (
     CurrentUser,
     get_current_user,
-    require_registered_user,
 )
 from app.dependencies.db import get_db
 from app.dependencies.pagination import Pagination, pagination_params
@@ -72,8 +71,16 @@ async def get_my_managed_locations(
 async def get_my_follows(
     pagination: Pagination = Depends(pagination_params),
     db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(require_registered_user),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> FollowListResponse:
+    """Auth: any authenticated role — widened alongside `POST`/`DELETE
+    /restaurants/{id}/follow` (root CLAUDE.md "Permission model", changed
+    2026-09-22). Not in the original task brief for this change, but left
+    on `registered_user` only would have meant an owner/manager who can now
+    follow a restaurant could never list what they follow — inherently
+    self-scoped (query already filters to `current_user.cognito_sub`), so
+    widening it has no access-control cost.
+    """
     return await follow_service.list_my_follows(db, current_user, pagination)
 
 

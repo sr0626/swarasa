@@ -1,9 +1,11 @@
 """Integration tests: `/restaurants/{id}/follow` and `/auth/me/follows` —
-see docs/API_CONTRACTS.md "Follows". Covers the role boundary
-(registered_user only), idempotency of both follow and unfollow, the
-404-on-unknown-brand case, and the paginated "my follows" list — the same
-shape of coverage tests/CLAUDE.md's "Integration test: manager permission
-boundary" pattern already establishes for `location_manager`.
+see docs/API_CONTRACTS.md "Follows". Covers the role boundary (ANY
+authenticated role — owner, manager, admin, registered_user; widened
+2026-09-22, was registered_user-only, see root CLAUDE.md "Permission
+model"), idempotency of both follow and unfollow, the 404-on-unknown-brand
+case, the paginated "my follows" list, and the 401-for-anonymous boundary
+— the same shape of coverage tests/CLAUDE.md's "Integration test: manager
+permission boundary" pattern already establishes for `location_manager`.
 """
 from __future__ import annotations
 
@@ -73,15 +75,50 @@ async def test_follow_unknown_brand_returns_404(client, db_session, as_user):
 
 
 @pytest.mark.asyncio
-async def test_owner_cannot_follow_a_brand(client, db_session, as_user):
-    """Root CLAUDE.md "Permission model": follow is a registered_user
-    capability, not an owner one."""
+async def test_owner_can_follow_a_brand(client, db_session, as_user):
+    """Root CLAUDE.md "Permission model" (changed 2026-09-22): follow is
+    open to any authenticated role, not just registered_user — an owner
+    following a restaurant (their own or someone else's) is a diner-like
+    action with no security implication."""
     brand = await create_brand(db_session)
     await db_session.commit()
 
-    as_user("owner")
+    user = as_user("owner")
     response = await client.post(f"/restaurants/{brand.id}/follow")
-    assert response.status_code == 403
+
+    assert response.status_code == 200, response.text
+    row = (
+        await db_session.execute(
+            select(UserFollow).where(
+                UserFollow.user_id == user.cognito_sub, UserFollow.brand_id == brand.id
+            )
+        )
+    ).scalar_one()
+    assert row is not None
+
+
+@pytest.mark.asyncio
+async def test_owner_can_follow_their_own_restaurant(client, db_session, as_user):
+    """Self-follow is deliberately not blocked — see
+    `app/services/follow_service.py::follow_brand`'s "self-follow" judgment
+    call docstring."""
+    owner = await create_owner(db_session)
+    brand = await create_brand(db_session, owner_id=owner.id)
+    await db_session.commit()
+
+    as_user("owner", sub=owner.cognito_sub)
+    response = await client.post(f"/restaurants/{brand.id}/follow")
+    assert response.status_code == 200, response.text
+
+
+@pytest.mark.asyncio
+async def test_admin_can_follow_a_brand(client, db_session, as_user):
+    brand = await create_brand(db_session)
+    await db_session.commit()
+
+    as_user("admin")
+    response = await client.post(f"/restaurants/{brand.id}/follow")
+    assert response.status_code == 200, response.text
 
 
 @pytest.mark.asyncio
@@ -123,13 +160,27 @@ async def test_unfollow_when_not_following_is_a_noop(client, db_session, as_user
 
 
 @pytest.mark.asyncio
-async def test_manager_cannot_unfollow(client, db_session, as_user):
+async def test_manager_can_follow_and_unfollow(client, db_session, as_user):
+    """Root CLAUDE.md "Permission model" (changed 2026-09-22): follow is
+    open to any authenticated role, not just registered_user."""
     brand = await create_brand(db_session)
     await db_session.commit()
 
-    as_user("manager")
-    response = await client.delete(f"/restaurants/{brand.id}/follow")
-    assert response.status_code == 403
+    user = as_user("manager")
+    follow_response = await client.post(f"/restaurants/{brand.id}/follow")
+    assert follow_response.status_code == 200, follow_response.text
+
+    unfollow_response = await client.delete(f"/restaurants/{brand.id}/follow")
+    assert unfollow_response.status_code == 204
+
+    remaining = (
+        await db_session.execute(
+            select(UserFollow).where(
+                UserFollow.user_id == user.cognito_sub, UserFollow.brand_id == brand.id
+            )
+        )
+    ).scalar_one_or_none()
+    assert remaining is None
 
 
 @pytest.mark.asyncio
@@ -177,12 +228,23 @@ async def test_list_my_follows_is_paginated(client, db_session, as_user):
 
 
 @pytest.mark.asyncio
-async def test_admin_cannot_list_own_follows_endpoint(client, db_session, as_user):
-    """Admin has no `user_follow` use case — same role gate as
-    follow/unfollow above."""
-    as_user("admin")
+async def test_owner_can_list_own_follows_endpoint(client, db_session, as_user):
+    """Widened 2026-09-22 alongside follow/unfollow — was registered_user
+    only. Inherently self-scoped regardless of role, same query as the
+    registered_user case above."""
+    brand = await create_brand(db_session)
+    await db_session.commit()
+
+    user = as_user("owner")
+    follow_response = await client.post(f"/restaurants/{brand.id}/follow")
+    assert follow_response.status_code == 200, follow_response.text
+
     response = await client.get("/auth/me/follows")
-    assert response.status_code == 403
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["total"] == 1
+    assert body["results"][0]["brand_id"] == brand.id
+    assert user.cognito_sub  # sanity: as_user actually produced an identity
 
 
 @pytest.mark.asyncio
@@ -191,4 +253,19 @@ async def test_follow_requires_auth(client, db_session, as_anonymous):
     await db_session.commit()
 
     response = await client.post(f"/restaurants/{brand.id}/follow")
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_unfollow_requires_auth(client, db_session, as_anonymous):
+    brand = await create_brand(db_session)
+    await db_session.commit()
+
+    response = await client.delete(f"/restaurants/{brand.id}/follow")
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_list_my_follows_requires_auth(client, db_session, as_anonymous):
+    response = await client.get("/auth/me/follows")
     assert response.status_code == 401

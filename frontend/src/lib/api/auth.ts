@@ -42,8 +42,9 @@ export async function updateCurrentUser(
 }
 
 /**
- * GET /auth/me/follows — auth: registered_user
- * (`require_registered_user` in backend/app/routers/auth.py).
+ * GET /auth/me/follows — auth: any authenticated role (owner, manager,
+ * admin, registered_user; widened 2026-09-22 alongside `POST`/`DELETE
+ * /restaurants/{id}/follow` — see root CLAUDE.md "Permission model").
  */
 export async function getMyFollows(
   params: PaginationParams,

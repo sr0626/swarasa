@@ -229,22 +229,6 @@ async def require_admin(
     return current_user
 
 
-async def require_registered_user(
-    current_user: CurrentUser = Depends(get_current_user),
-) -> CurrentUser:
-    """Auth: registered_user only — `POST`/`DELETE /restaurants/{id}/follow`,
-    `GET /auth/me/follows` (docs/API_CONTRACTS.md "Follows"). Root
-    CLAUDE.md's Permission model scopes "follow" to the `registered_user`
-    role specifically ("Registered user: read-only + follow + deals") — an
-    owner/manager/admin caller has no `user_follow` use case of their own
-    here, same reasoning as `require_owner`/`require_admin` gating their
-    own routes to exactly one role rather than "any authenticated user."
-    """
-    if current_user.role != "registered_user":
-        raise AppError(403, "Registered user access required", "forbidden")
-    return current_user
-
-
 async def require_owner_or_admin(
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),

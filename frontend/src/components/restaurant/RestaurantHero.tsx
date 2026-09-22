@@ -14,6 +14,13 @@
 // The open/closed status is deliberately NOT overlaid on the photo any more:
 // the sidebar info card carries it (RestaurantInfoCard), so repeating it
 // here would just be noise.
+//
+// `followSlot` (added 2026-09-22): an optional pre-rendered FollowButton
+// (components/restaurant/FollowButton.tsx, a Client Component) next to the
+// restaurant name — passed in as a node rather than this Server Component
+// importing/rendering FollowButton itself, so the follow-or-not decision
+// (does a session exist at all) stays in the page, not duplicated here.
+import type { ReactNode } from "react";
 import DefaultRestaurantImage from "@/components/ui/DefaultRestaurantImage";
 import RestaurantPhotoCarousel, {
   type CarouselPhoto,
@@ -26,6 +33,9 @@ interface RestaurantHeroProps {
   /** Full location detail for the brand's primary location — null when the
    * brand has no locations yet (an unclaimed, address-less seed row). */
   location: LocationDetail | null;
+  /** Follow/unfollow control, shown only for a signed-in caller — null for
+   * a signed-out visitor. */
+  followSlot?: ReactNode;
 }
 
 /** Cover first, then gallery in display order; a cover that is also a
@@ -42,7 +52,11 @@ function collectPhotos(name: string, location: LocationDetail | null): CarouselP
   return urls.map((url, index) => ({ url, alt: `${name} photo ${index + 1}` }));
 }
 
-export default function RestaurantHero({ restaurant, location }: RestaurantHeroProps) {
+export default function RestaurantHero({
+  restaurant,
+  location,
+  followSlot,
+}: RestaurantHeroProps) {
   const photos = collectPhotos(restaurant.name, location);
 
   return (
@@ -66,9 +80,12 @@ export default function RestaurantHero({ restaurant, location }: RestaurantHeroP
       )}
 
       <div className="mt-5 flex flex-col gap-3">
-        <h1 className="font-display text-3xl font-bold text-brand-ink sm:text-4xl">
-          {restaurant.name}
-        </h1>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="font-display text-3xl font-bold text-brand-ink sm:text-4xl">
+            {restaurant.name}
+          </h1>
+          {followSlot}
+        </div>
 
         {restaurant.cuisine_tags.length > 0 && (
           <div className="flex flex-wrap gap-1.5">

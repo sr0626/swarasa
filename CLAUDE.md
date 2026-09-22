@@ -163,6 +163,14 @@ Every write request must be validated server-side:
 - Admin: full platform access
 - Registered user: read-only + follow + deals
 - Public: read-only (no deals)
+- Follow a restaurant (`POST`/`DELETE /restaurants/{id}/follow`, `GET
+  /auth/me/follows`): any authenticated role — owner, manager, admin, or
+  registered_user (changed 2026-09-22, was registered_user-only). An
+  owner/manager following a restaurant they don't own/manage (or even one
+  they do) is a diner-like action with no security implication, same as a
+  registered_user doing it. Public (signed-out) callers still cannot
+  follow — this widens which authenticated roles can, not who needs to be
+  signed in at all.
 
 ## Coding Conventions
 

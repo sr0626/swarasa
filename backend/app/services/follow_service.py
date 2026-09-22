@@ -35,6 +35,22 @@ async def follow_brand(db: AsyncSession, brand_id: int, current_user) -> FollowO
     unique constraint would reject a duplicate insert anyway; checking
     first avoids relying on that as the only path and keeps the "already
     following" case from touching the DB at all).
+
+    JUDGMENT CALL — self-follow (owner/manager following their own
+    restaurant), flagged for review: not blocked. Now that any
+    authenticated role can call this endpoint (root CLAUDE.md "Permission
+    model", changed 2026-09-22), an owner or manager COULD follow a brand
+    they themselves own/manage. Deliberately not special-cased: (1) it's
+    harmless — `user_follow` only ever drives "show me what I follow" and
+    (eventually) deal-alert notifications, nothing access-control-sensitive
+    turns on it; (2) detecting "is this caller the owner/an assigned
+    manager of this exact brand" here would mean re-deriving ownership
+    (a brand-level join, or a location_manager scan across every location
+    of the brand) purely to reject an action that does no harm if allowed;
+    (3) plenty of real products let a business owner follow/favorite their
+    own listing. If product later wants this blocked (e.g. to keep
+    `is_claimed` brands' own owner out of their own follower/deal-alert
+    count), add the check here, not in the router.
     """
     brand = await db.get(RestaurantBrand, brand_id)
     if brand is None:

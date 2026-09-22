@@ -33,12 +33,14 @@ import { notFound } from "next/navigation";
 import { ApiError } from "@/lib/api/client";
 import { getRestaurantBySlug, getRestaurantLocations } from "@/lib/api/restaurants";
 import { getLocationById, getLocationManagers } from "@/lib/api/locations";
+import { getMyFollows } from "@/lib/api/auth";
 import { getServerSession } from "@/lib/auth/session";
 import RestaurantHero from "@/components/restaurant/RestaurantHero";
 import RestaurantInfoCard from "@/components/restaurant/RestaurantInfoCard";
 import ClaimCTA from "@/components/restaurant/ClaimCTA";
 import RestaurantAbout from "@/components/restaurant/RestaurantAbout";
 import EditListingBar from "@/components/restaurant/EditListingBar";
+import FollowButton from "@/components/restaurant/FollowButton";
 import TopBar from "@/components/home/TopBar";
 import type { LocationDetail } from "@/types/location";
 import type { RestaurantBrand } from "@/types/restaurant";
@@ -158,6 +160,41 @@ async function canEditListing(location: LocationDetail | null): Promise<boolean>
   }
 }
 
+/**
+ * Whether to show a follow button, and whether it should start in the
+ * "Following" state — any authenticated role can follow as of 2026-09-22
+ * (root CLAUDE.md "Permission model"), so this only checks for a session,
+ * not a specific role.
+ *
+ * FLAGGED LIMITATION: there is no "am I following brand X" endpoint
+ * (docs/API_CONTRACTS.md "Follows" only has the list-all-my-follows GET,
+ * no filter by brand_id) — so initial state is read off the caller's own
+ * follows list, same page_size (100, the documented max) the account page
+ * already uses for the same purpose (app/account/page.tsx). A caller
+ * following more than 100 restaurants could see a stale "Follow" (not
+ * "Following") state here for their oldest follows; harmless either way
+ * since the POST is idempotent and clicking it again is a no-op. A
+ * failure to load the list still shows the button (in the "Follow" state)
+ * rather than hiding it — the button remains usable even if this
+ * best-effort check fails.
+ */
+async function loadFollowState(brandId: number): Promise<{
+  canFollow: boolean;
+  isFollowing: boolean;
+}> {
+  const session = await getServerSession();
+  if (!session) return { canFollow: false, isFollowing: false };
+  try {
+    const page = await getMyFollows({ page: 1, page_size: 100 }, session.accessToken);
+    return {
+      canFollow: true,
+      isFollowing: page.results.some((follow) => follow.brand_id === brandId),
+    };
+  } catch {
+    return { canFollow: true, isFollowing: false };
+  }
+}
+
 export default async function RestaurantPage({ params }: RestaurantPageProps) {
   const data = await loadRestaurantPageData(params.slug);
   if (!data) {
@@ -167,6 +204,7 @@ export default async function RestaurantPage({ params }: RestaurantPageProps) {
   const canEdit = await canEditListing(location);
   const session = await getServerSession();
   const isAdmin = session?.role === "admin";
+  const followState = await loadFollowState(restaurant.id);
 
   return (
     <>
@@ -189,7 +227,18 @@ export default async function RestaurantPage({ params }: RestaurantPageProps) {
               left column. */}
           <div className="flex flex-col gap-8 lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:grid-rows-[auto_1fr] lg:gap-x-10">
             <div className="lg:col-start-1 lg:row-start-1">
-              <RestaurantHero restaurant={restaurant} location={location} />
+              <RestaurantHero
+                restaurant={restaurant}
+                location={location}
+                followSlot={
+                  followState.canFollow ? (
+                    <FollowButton
+                      brandId={restaurant.id}
+                      initialIsFollowing={followState.isFollowing}
+                    />
+                  ) : null
+                }
+              />
             </div>
 
             <aside
