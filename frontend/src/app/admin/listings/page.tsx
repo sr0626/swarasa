@@ -2,22 +2,31 @@
 // "Under construction" placeholder with a real page against real,
 // already-documented endpoints: the admin-scoped `GET /restaurants`
 // (docs/API_CONTRACTS.md "GET /restaurants" — admin caller sees every
-// brand, with an optional `owner_id` filter) and the public
+// brand, with owner/name/status/tier/city/claimed filters) and the public
 // `GET /restaurants/{id}/locations` for each brand's locations, loaded
 // server-side the same way `portal/dashboard/page.tsx` loads an owner's
 // own brands' locations. Moderation actions (delete a brand, deactivate a
 // location) run through real Server Actions in `actions.ts` against
 // `DELETE /restaurants/{id}` and `DELETE /locations/{id}` — no fabricated
 // data, no invented backend endpoint.
+//
+// Filtering is server-driven, same pattern as `/search`: every filter
+// lives in the URL query string, this page reads it with `searchParams`
+// and re-queries the backend — never a client-side filter of an
+// already-fetched page of rows. The filter bar, active-filter chips, and
+// pagination controls themselves live in `AdminListingsPanel.tsx` (this
+// page stays a thin data-fetching shell); see that file for the actual
+// `<form method="get">` / query-string-building code.
 import type { Metadata } from "next";
-import Link from "next/link";
 import { requireSession } from "@/lib/auth/guards";
 import { ApiError } from "@/lib/api/client";
 import { mapWithConcurrency } from "@/lib/concurrency";
 import { getMyRestaurants, getRestaurantLocations } from "@/lib/api/restaurants";
 import AdminListingsPanel, {
+  type AdminListingsFilters,
   type BrandWithLocations,
 } from "@/components/admin/AdminListingsPanel";
+import type { LocationStatus } from "@/types/location";
 import type { RestaurantBrand } from "@/types/restaurant";
 
 export const metadata: Metadata = {
@@ -30,14 +39,47 @@ const PAGE_SIZE = 20;
 // connection-pool storm fix (PR #101), same reasoning.
 const LISTINGS_FETCH_CONCURRENCY = 5;
 
+const LOCATION_STATUSES: readonly LocationStatus[] = [
+  "active",
+  "owner_deactivated",
+  "coming_soon",
+  "closed_pending_reopen",
+];
+
 interface AdminListingsPageProps {
-  searchParams: { page?: string; owner_id?: string };
+  searchParams: {
+    page?: string;
+    owner_id?: string;
+    owner_email?: string;
+    name?: string;
+    status?: string;
+    is_paid?: string;
+    city?: string;
+    is_claimed?: string;
+  };
 }
 
 function parsePositiveInt(value: string | undefined): number | undefined {
   if (!value) return undefined;
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function parseStatus(value: string | undefined): LocationStatus | undefined {
+  return LOCATION_STATUSES.find((s) => s === value);
+}
+
+/** "true"/"false" only — anything else (missing, malformed) is "no filter",
+ * same permissive-omission handling as the other optional filters here. */
+function parseTriState(value: string | undefined): boolean | undefined {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return undefined;
+}
+
+function trimmedOrUndefined(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
 }
 
 /** Same N+1-but-bounded-by-page-size pattern as
@@ -70,13 +112,21 @@ export default async function AdminListingsPage({ searchParams }: AdminListingsP
 
   const page = parsePositiveInt(searchParams.page) ?? 1;
   const ownerId = parsePositiveInt(searchParams.owner_id);
+  const filters: AdminListingsFilters = {
+    ownerEmail: trimmedOrUndefined(searchParams.owner_email),
+    name: trimmedOrUndefined(searchParams.name),
+    status: parseStatus(searchParams.status),
+    isPaid: parseTriState(searchParams.is_paid),
+    city: trimmedOrUndefined(searchParams.city),
+    isClaimed: parseTriState(searchParams.is_claimed),
+  };
 
   let brands: RestaurantBrand[] = [];
   let total = 0;
   let loadError: string | null = null;
   try {
     const result = await getMyRestaurants(
-      { page, page_size: PAGE_SIZE, ownerId },
+      { page, page_size: PAGE_SIZE, ownerId, ...filters },
       session.accessToken
     );
     brands = result.results;
@@ -100,104 +150,28 @@ export default async function AdminListingsPage({ searchParams }: AdminListingsP
         Listings
       </h1>
       <p className="mt-2 text-sm text-brand-ink-muted">
-        Every restaurant on the platform, across all owners. Delete a listing entirely
-        or deactivate one of its locations.
+        Every restaurant on the platform, across all owners. Filter to find one, then delete a
+        listing entirely or deactivate one of its locations.
       </p>
 
-      <form
-        method="get"
-        className="mt-6 flex flex-wrap items-end gap-2 rounded-brand-card border border-brand-border bg-white p-4"
-      >
-        <div>
-          <label htmlFor="owner_id" className="text-sm font-semibold text-brand-ink">
-            Filter by owner ID
-          </label>
-          <input
-            id="owner_id"
-            name="owner_id"
-            type="number"
-            min={1}
-            defaultValue={searchParams.owner_id ?? ""}
-            placeholder="e.g. 55"
-            className="mt-2 w-40 rounded-brand-control border border-brand-border bg-white px-3 py-2 text-sm text-brand-ink placeholder:text-brand-placeholder focus:border-brand-accent focus:outline-none"
-          />
-        </div>
-        <button
-          type="submit"
-          className="flex min-h-[40px] items-center justify-center rounded-brand-control bg-brand-ink px-4 text-sm font-semibold text-brand-bg transition hover:bg-brand-ink/90"
-        >
-          Apply
-        </button>
-        {ownerId && (
-          <Link
-            href="/admin/listings"
-            className="flex min-h-[40px] items-center justify-center rounded-brand-control border border-brand-border px-4 text-sm font-semibold text-brand-ink-muted transition hover:bg-brand-chip"
-          >
-            Clear
-          </Link>
-        )}
-      </form>
-
-      <div className="mt-6">
-        {loadError ? (
-          <p className="rounded-brand-control bg-brand-closed-bg px-3 py-2.5 text-sm text-brand-closed">
-            {loadError}
-          </p>
-        ) : (
-          <AdminListingsPanel initialBrands={brandsWithLocations} />
-        )}
-      </div>
-
-      {!loadError && totalPages > 1 && (
-        <nav
-          aria-label="Listings pages"
-          className="mt-8 flex items-center justify-center gap-3 text-sm"
-        >
-          <PageLink page={page - 1} ownerId={ownerId} disabled={page <= 1}>
-            &larr; Previous
-          </PageLink>
-          <span className="text-brand-ink-subtle">
-            Page {page} of {totalPages}
-          </span>
-          <PageLink page={page + 1} ownerId={ownerId} disabled={page >= totalPages}>
-            Next &rarr;
-          </PageLink>
-        </nav>
+      {loadError ? (
+        <p className="mt-6 rounded-brand-control bg-brand-closed-bg px-3 py-2.5 text-sm text-brand-closed">
+          {loadError}
+        </p>
+      ) : (
+        // Keyed on every filter + page so a filter/page change remounts
+        // with fresh data rather than reusing the previous view's local
+        // `useState(initialBrands)` — same pattern as
+        // admin/claims/page.tsx's `ClaimReviewPanel key={`${tab}-${page}`}`.
+        <AdminListingsPanel
+          key={JSON.stringify({ ...filters, ownerId, page })}
+          initialBrands={brandsWithLocations}
+          filters={filters}
+          total={total}
+          page={page}
+          totalPages={totalPages}
+        />
       )}
     </section>
-  );
-}
-
-function PageLink({
-  page,
-  ownerId,
-  disabled,
-  children,
-}: {
-  page: number;
-  ownerId: number | undefined;
-  disabled: boolean;
-  children: React.ReactNode;
-}) {
-  const params = new URLSearchParams();
-  if (page > 1) params.set("page", String(page));
-  if (ownerId) params.set("owner_id", String(ownerId));
-  const qs = params.toString();
-  const href = qs ? `/admin/listings?${qs}` : "/admin/listings";
-
-  if (disabled) {
-    return (
-      <span className="rounded-brand-control border border-brand-border px-3 py-2 text-brand-ink-subtle/40">
-        {children}
-      </span>
-    );
-  }
-  return (
-    <Link
-      href={href}
-      className="rounded-brand-control border border-brand-border px-3 py-2 text-brand-ink-muted transition hover:bg-brand-chip"
-    >
-      {children}
-    </Link>
   );
 }

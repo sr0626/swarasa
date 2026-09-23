@@ -202,10 +202,27 @@ validated JWT, never the request body/query string).
 
 Admin caller: optional `owner_id` query param.
 
+**Filters added 2026-09-22 for the admin listings management page
+(`/admin/listings`)** — `owner_email`, `name`, `status`, `is_paid`,
+`city`, `is_claimed`. Every one of these follows the exact same
+admin-only, silently-ignored-for-an-owner-caller rule as `owner_id`
+above: an owner caller's result stays "my own brands," full stop, no
+matter what any of these params say. All provided filters (including
+`owner_id`) combine with **AND** — same independent-facets convention as
+`GET /search`'s `cuisine[]`/`dietary[]`/`type[]` (see that section
+above); there is no OR-within-a-filter case here since every param below
+is single-valued, unlike `/search`'s array facets.
+
 Query params:
 | Param | Type | Notes |
 |---|---|---|
 | owner_id | int, optional | **Admin only** — ignored (never applied) for an owner caller, who is always filtered to their own `owner_id` regardless of this param. Omitted for an admin caller returns all brands. |
+| owner_email | string, optional, max 255 | **Admin only.** Case-insensitive substring match against the brand owner's `owner_account.email`. A brand with no owner (unclaimed, `owner_id IS NULL`) never matches a non-empty `owner_email`. |
+| name | string, optional, max 255 | **Admin only.** Case-insensitive substring match against `restaurant_brand.name`. |
+| status | string, optional | **Admin only.** One of `active` / `owner_deactivated` / `coming_soon` / `closed_pending_reopen` (`restaurant_location.status`, see app/models/restaurant_location.py "Location status lifecycle"); 422 on any other value. **Matches a brand if ANY of its locations currently has this status** — a brand with one `active` and one `coming_soon` location matches `status=coming_soon`. |
+| is_paid | bool, optional | **Admin only.** JUDGMENT CALL: **matches a brand if ANY of its locations has this `is_paid` value** — same "any location" rule as `status`/`city` here, chosen for consistency rather than requiring every location to match (a multi-location brand with one paid and one free location matches both `is_paid=true` and `is_paid=false`). |
+| city | string, optional, max 120 | **Admin only.** Case-insensitive **exact** match (not substring — deliberately stricter than `name`/`owner_email`, since city names are short, well-known values an admin types precisely, not a fuzzy search) against `restaurant_location.city`. JUDGMENT CALL: **matches a brand if ANY of its locations is in that city** — a brand can have locations in multiple cities (e.g. Plano and Dallas); filtering by `city=plano` returns it, and so does `city=dallas`, same as `status`/`is_paid` above. |
+| is_claimed | bool, optional | **Admin only.** Exact match against `restaurant_brand.is_claimed` (brand-level field, no "any location" ambiguity). |
 | page | int, optional, default 1 | |
 | page_size | int, optional, default 20, max 100 | |
 

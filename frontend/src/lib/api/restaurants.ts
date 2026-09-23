@@ -3,19 +3,41 @@
 import { apiFetch, toQueryString } from "./client";
 import type { PaginatedResponse, PaginationParams } from "@/types/common";
 import type { FollowOut } from "@/types/follow";
-import type { LocationSummary } from "@/types/location";
+import type { LocationSummary, LocationStatus } from "@/types/location";
 import type {
   CreateRestaurantInput,
   RestaurantBrand,
   UpdateRestaurantInput,
 } from "@/types/restaurant";
 
+/** Admin-only filters on `GET /restaurants` (docs/API_CONTRACTS.md "GET
+ * /restaurants" filters, added alongside the `/admin/listings` filter
+ * bar) — every field here is silently ignored server-side for a
+ * non-admin (owner) caller, same as `ownerId` above. All provided
+ * filters combine with AND. */
+export interface AdminRestaurantListFilters {
+  ownerId?: number;
+  /** Case-insensitive substring match against the owner's email. */
+  ownerEmail?: string;
+  /** Case-insensitive substring match against the brand name. */
+  name?: string;
+  /** Matches a brand if ANY of its locations has this status. */
+  status?: LocationStatus;
+  /** Matches a brand if ANY of its locations has this is_paid value. */
+  isPaid?: boolean;
+  /** Case-insensitive exact match; matches a brand if ANY of its
+   * locations is in this city. */
+  city?: string;
+  isClaimed?: boolean;
+}
+
 /**
  * GET /restaurants — auth: owner or admin (docs/API_CONTRACTS.md, added
  * 2026-09-13 to unblock the owner portal dashboard). Owner caller: always
  * implicitly filtered to their own `owner_id` server-side — no query param
  * can widen this. Admin caller: optional `ownerId` filter, omitted returns
- * all brands.
+ * all brands. `AdminRestaurantListFilters`' other fields are likewise
+ * admin-only.
  *
  * FLAGGED CONTRACT GAP (see this PR's description): there is no manager
  * path for this endpoint at all — "Auth: owner or admin" only. A manager
@@ -23,11 +45,17 @@ import type {
  * assigned locations; the dashboard page handles that role separately.
  */
 export async function getMyRestaurants(
-  params: PaginationParams & { ownerId?: number } = {},
+  params: PaginationParams & AdminRestaurantListFilters = {},
   accessToken: string
 ): Promise<PaginatedResponse<RestaurantBrand>> {
   const query = toQueryString({
     owner_id: params.ownerId,
+    owner_email: params.ownerEmail,
+    name: params.name,
+    status: params.status,
+    is_paid: params.isPaid,
+    city: params.city,
+    is_claimed: params.isClaimed,
     page: params.page,
     page_size: params.page_size,
   });
