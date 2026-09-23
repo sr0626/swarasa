@@ -53,6 +53,13 @@ export default async function SearchResults({ filters, page, location, query }: 
     lng = geocoded.longitude;
   }
 
+  // Session is resolved first so a signed-in registered_user's token can ride
+  // along on the search itself: the backend records that search in their
+  // activity history (docs/API_CONTRACTS.md "Activity tracking"). Everyone
+  // else calls it anonymously, exactly as before.
+  const session = await getServerSession();
+  const trackedToken = session?.role === "registered_user" ? session.accessToken : undefined;
+
   // Resolved once per results render, not per tile — see
   // lib/follow/viewerFollowState.ts for the client-side-match approach and
   // its documented limitation.
@@ -67,10 +74,13 @@ export default async function SearchResults({ filters, page, location, query }: 
       // Free-text box: matches restaurant name or cuisine tag (backend `q`).
       q: query.trim() || undefined,
       has_deals_today: filters.dealsToday || undefined,
+      // Typed location text, for the viewer's search history only — sent
+      // only when tracking (keeps anonymous requests on the shared cache key).
+      loc: trackedToken ? trimmedLocation || undefined : undefined,
       page,
       page_size: SEARCH_PAGE_SIZE,
-    }).catch(() => null),
-    getServerSession().then(getViewerFollowState),
+    }, trackedToken).catch(() => null),
+    getViewerFollowState(session),
   ]);
 
   if (!data) {
@@ -115,6 +125,7 @@ export default async function SearchResults({ filters, page, location, query }: 
             isRegisteredUser={followState.isRegisteredUser}
             isFollowed={followState.followedBrandIds.has(item.brand_id)}
             currentPath={currentPath}
+            clickSource="search_results"
           />
         ))}
       </div>

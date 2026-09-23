@@ -20,6 +20,12 @@ export interface SearchParams {
    * carries its own `nearest_location.has_deal_today` badge signal
    * regardless of whether this filter was used. */
   has_deals_today?: boolean;
+  /**
+   * The location text the visitor typed (city/ZIP) — sent ONLY on a signed-in
+   * registered_user's search, purely so their search history can show it
+   * (never affects results; docs/API_CONTRACTS.md "GET /search" `loc`).
+   */
+  loc?: string;
   page?: number;
   page_size?: number;
 }

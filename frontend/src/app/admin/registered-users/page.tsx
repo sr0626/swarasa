@@ -15,6 +15,10 @@
 // minutes behind a diner's actual most recent request (the throttle
 // window) and reads "Never" for anyone who signed up but has had no
 // tracked activity yet -- not the same as "signed up a long time ago".
+//
+// Each row links to the per-user activity view ([userSub]/page.tsx): that
+// diner's recorded searches and restaurant-tile clicks (12-month retention,
+// docs/DECISIONS.md "Registered-user activity tracking").
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import Link from "next/link";
@@ -112,7 +116,7 @@ export default async function RegisteredUsersPage({ searchParams }: RegisteredUs
       ) : (
         <>
           <div className="mt-6 overflow-x-auto rounded-brand-card border border-brand-border bg-white shadow-brand-card">
-            <table className="w-full min-w-[640px] text-left text-sm">
+            <table className="w-full min-w-[760px] text-left text-sm">
               <thead>
                 <tr className="border-b border-brand-border text-xs font-semibold uppercase tracking-wide text-brand-ink-subtle">
                   <th scope="col" className="px-4 py-3">
@@ -127,12 +131,15 @@ export default async function RegisteredUsersPage({ searchParams }: RegisteredUs
                   <th scope="col" className="px-4 py-3">
                     Last visited
                   </th>
+                  <th scope="col" className="px-4 py-3">
+                    Activity
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {data.results.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-4 py-6 text-center text-brand-ink-subtle">
+                    <td colSpan={5} className="px-4 py-6 text-center text-brand-ink-subtle">
                       No registered users yet.
                     </td>
                   </tr>
@@ -148,6 +155,14 @@ export default async function RegisteredUsersPage({ searchParams }: RegisteredUs
                       </td>
                       <td className="px-4 py-3 text-brand-ink-muted">
                         {formatDateTime(user.last_seen_at)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <Link
+                          href={`/admin/registered-users/${encodeURIComponent(user.cognito_sub)}`}
+                          className="font-semibold text-brand-accent underline-offset-2 hover:underline"
+                        >
+                          Searches &amp; clicks
+                        </Link>
                       </td>
                     </tr>
                   ))

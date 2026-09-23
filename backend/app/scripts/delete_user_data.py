@@ -35,6 +35,7 @@ from app.models.claim_request import ClaimRequest
 from app.models.data_deletion_request import DataDeletionRequest
 from app.models.location_manager import LocationManager
 from app.models.owner_account import OwnerAccount
+from app.models.user_activity_event import UserActivityEvent
 from app.models.user_follow import UserFollow
 from app.services.cognito_service import find_sub_by_email
 
@@ -83,6 +84,7 @@ async def _delete_rows(db: AsyncSession, sub: str) -> dict:
         ("location_manager", LocationManager, LocationManager.user_id),
         ("claim_request", ClaimRequest, ClaimRequest.claimant_user_id),
         ("user_follow", UserFollow, UserFollow.user_id),
+        ("user_activity_event", UserActivityEvent, UserActivityEvent.user_sub),
         (
             "data_deletion_request",
             DataDeletionRequest,

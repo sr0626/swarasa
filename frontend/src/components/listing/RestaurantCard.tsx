@@ -8,8 +8,9 @@
 // numeric rating is omitted. The star glyph the design calls for is still
 // built (`StarIcon`) and used on the "Featured" ribbon instead, so the
 // icon requirement is met without inventing a number.
-import Link from "next/link";
 import type { SearchResultItem } from "@/types/search";
+import type { ActivitySource } from "@/types/userActivity";
+import TrackedTileLink from "@/components/listing/TrackedTileLink";
 import { formatPhone } from "@/lib/formatPhone";
 import DealBadge from "@/components/ui/DealBadge";
 import DefaultRestaurantImage from "@/components/ui/DefaultRestaurantImage";
@@ -41,6 +42,11 @@ interface RestaurantCardProps {
    * — passed straight through to FollowButton as its sign-in return path.
    * Required whenever `showFollowButton` is true. */
   currentPath?: string;
+  /** Which surface renders this card. When set AND the viewer is a signed-in
+   * registered user (`isRegisteredUser`), clicking the card is recorded in
+   * their activity history (lib/activity/tileClick.ts). Never tracks anyone
+   * else. */
+  clickSource?: ActivitySource;
 }
 
 export default function RestaurantCard({
@@ -49,6 +55,7 @@ export default function RestaurantCard({
   isRegisteredUser = false,
   isFollowed = false,
   currentPath = "/search",
+  clickSource,
 }: RestaurantCardProps) {
   const { nearest_location } = item;
   const visibleTags = item.cuisine_tags.slice(0, 3);
@@ -67,7 +74,19 @@ export default function RestaurantCard({
     // sit absolutely positioned over the image's top-right corner without
     // living inside the card's own Link.
     <div className="group relative flex flex-col overflow-hidden rounded-brand-card border border-brand-border bg-white shadow-brand-card transition hover:shadow-brand-card-hover">
-      <Link href={`/restaurant/${item.slug}`} className="flex flex-col">
+      <TrackedTileLink
+        href={`/restaurant/${item.slug}`}
+        className="flex flex-col"
+        track={
+          isRegisteredUser && clickSource
+            ? {
+                brand_id: item.brand_id,
+                location_id: nearest_location.location_id,
+                source: clickSource,
+              }
+            : undefined
+        }
+      >
         <div className="relative h-40 w-full shrink-0 overflow-hidden bg-brand-warm-gradient">
           {coverPhoto ? (
             // eslint-disable-next-line @next/next/no-img-element -- remote
@@ -113,7 +132,7 @@ export default function RestaurantCard({
             </p>
           )}
         </div>
-      </Link>
+      </TrackedTileLink>
 
       {showFollowButton && (
         <FollowButton
