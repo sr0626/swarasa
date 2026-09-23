@@ -1,7 +1,7 @@
 // manager's assigned locations — GET /auth/me/managed-locations
 // (docs/API_CONTRACTS.md, added alongside PR #78 to close the manager
 // location-discovery gap). Task-focused: each row leads with the location and
-// its open status, with prominent Edit, Menu and Deals actions (the routes a manager
+// its open status, with prominent Edit, Deals and Menu actions (Deals first: it's the one managers/owners update most often) (the routes a manager
 // actually works in: /portal/locations/{id} and /portal/locations/{id}/menu).
 //
 // No "View public page" action: ManagedLocation carries neither the brand
@@ -101,13 +101,6 @@ export default function ManagedLocationsPanel({
                     <PencilIcon className="h-4 w-4" />
                     Edit
                   </Link>
-                  <Link
-                    href={`/portal/locations/${location.id}/menu`}
-                    aria-label={`Menu for ${label}`}
-                    className={secondaryLinkClass}
-                  >
-                    Menu
-                  </Link>
                   {/* Deals live in the location editor's "Deals & specials"
                       section; /deals redirects to it (same pattern as Menu). */}
                   <Link
@@ -116,6 +109,13 @@ export default function ManagedLocationsPanel({
                     className={secondaryLinkClass}
                   >
                     Deals
+                  </Link>
+                  <Link
+                    href={`/portal/locations/${location.id}/menu`}
+                    aria-label={`Menu for ${label}`}
+                    className={secondaryLinkClass}
+                  >
+                    Menu
                   </Link>
                 </div>
               </li>
