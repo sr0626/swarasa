@@ -20,6 +20,7 @@ import {
   deleteLocationPhoto,
   getLocationPhotoUploadUrl,
   removeLocationManager,
+  removeLocationPermanently,
   updateLocation,
   updateLocationHours,
   updateLocationPhoto,
@@ -459,5 +460,36 @@ export async function submitReopenRequestAction(
       return { ok: false, error: error.message };
     }
     return { ok: false, error: messageFor(error, "Could not submit the reopen request.") };
+  }
+}
+
+/**
+ * DELETE /locations/{id}/permanent — owner (owns parent brand) or admin.
+ * Real, irreversible row delete, distinct from `updateLocationStatusAction`
+ * above (which only ever hides/shows the location). The backend's own
+ * guardrails (docs/API_CONTRACTS.md "DELETE /locations/{id}/permanent") do
+ * the real enforcement server-side; this just passes the resulting 409
+ * message straight through rather than guessing at a friendlier one, since
+ * the backend's messages already name the exact blocker (still active, an
+ * active manager, a pending claim, a pending reopen request).
+ *
+ * Unlike every other action here, there is no `LocationDetail` to return
+ * on success — the location is gone. Callers should navigate away (see
+ * `LocationStatusControl.tsx`) rather than re-render this page.
+ */
+export async function removeLocationAction(locationId: number): Promise<ActionResult<null>> {
+  const auth = await requireLocationSession();
+  if (!auth.ok) return auth;
+  if (auth.role !== "owner" && auth.role !== "admin") {
+    return { ok: false, error: "Only the owner or an admin can remove a location." };
+  }
+
+  try {
+    await removeLocationPermanently(locationId, auth.accessToken);
+    revalidatePath("/account");
+    revalidatePath("/admin/listings");
+    return { ok: true, data: null };
+  } catch (error) {
+    return { ok: false, error: messageFor(error, "Could not remove this location.") };
   }
 }

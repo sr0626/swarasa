@@ -105,6 +105,26 @@ export async function deleteLocation(
   );
 }
 
+/**
+ * DELETE /locations/{id}/permanent — auth: owner (owns parent brand) or
+ * admin. Real, irreversible row delete — NOT the soft-hide `deleteLocation`
+ * above. Backend guardrails (docs/API_CONTRACTS.md "DELETE
+ * /locations/{id}/permanent"): the location must already be non-`active`,
+ * have no active manager assignment, and no pending claim or reopen
+ * request — each surfaces as its own `409` with a distinct `code`, message
+ * passed through as-is by the caller (see `removeLocationAction`).
+ */
+export async function removeLocationPermanently(
+  id: number,
+  accessToken: string
+): Promise<void> {
+  return apiFetch<void>(
+    `/locations/${id}/permanent`,
+    { method: "DELETE" },
+    { accessToken }
+  );
+}
+
 /** PUT /locations/{id}/hours — full week replacement. */
 export async function updateLocationHours(
   id: number,

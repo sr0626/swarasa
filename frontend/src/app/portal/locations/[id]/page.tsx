@@ -133,7 +133,11 @@ export default async function PortalLocationPage({ params, searchParams }: Locat
 
         <div className="mt-6 flex flex-col gap-6">
           {isOwner || isAdmin ? (
-            <LocationStatusControl locationId={location.id} initialStatus={location.status} />
+            <LocationStatusControl
+              locationId={location.id}
+              initialStatus={location.status}
+              backHref={back.href}
+            />
           ) : (
             // Manager: read-only — status control is owner/admin only
             // (docs/PROJECT_PLAN.csv "Location status lifecycle").

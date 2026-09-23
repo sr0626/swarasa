@@ -85,6 +85,26 @@ async def delete_location(
     await location_service.delete_location(db, location_id, current_user)
 
 
+@router.delete(
+    "/{location_id}/permanent",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+)
+async def remove_location(
+    location_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_location_owner_or_admin),
+) -> None:
+    """Real, irreversible row delete — NOT the soft-hide `DELETE
+    /locations/{id}` above. Same auth as that route
+    (`require_location_owner_or_admin`); see
+    `location_service.remove_location` for the guardrails (must already be
+    non-`active`, no active manager assignment, no pending claim or reopen
+    request) and docs/API_CONTRACTS.md "DELETE /locations/{id}/permanent".
+    """
+    await location_service.remove_location(db, location_id, current_user)
+
+
 @router.post("/{location_id}/status", response_model=LocationOut)
 async def update_location_status(
     location_id: int,

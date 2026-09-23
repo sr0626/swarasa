@@ -27,13 +27,15 @@
 // resubmit once, get the 409 again, to re-discover it) — acceptable for a
 // low-frequency admin-reviewed flow, flagged here as a smallest-correct-
 // design tradeoff rather than a bug.
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
+  removeLocationAction,
   submitReopenRequestAction,
   updateLocationStatusAction,
 } from "@/app/portal/locations/[id]/actions";
 import LocationStatusBadge from "@/components/portal/LocationStatusBadge";
-import { ClockIcon, EyeOffIcon } from "@/components/ui/icons";
+import { ClockIcon, EyeOffIcon, TrashIcon } from "@/components/ui/icons";
 import type { LocationStatus } from "@/types/location";
 import type { ReopenRequestResponse } from "@/types/locationReopen";
 
@@ -46,10 +48,18 @@ const SELF_SERVICE_OPTIONS: ReadonlyArray<{ value: LocationStatus; label: string
 export default function LocationStatusControl({
   locationId,
   initialStatus,
+  backHref,
 }: {
   locationId: number;
   initialStatus: LocationStatus;
+  /** Where to send the caller after a successful permanent removal — this
+   * page can no longer render itself once the location is gone. Owner ->
+   * `/account`, admin -> `/admin/listings` (see `backTarget` in
+   * `/portal/locations/[id]/page.tsx`, the same destination the page's own
+   * "back" link already uses). */
+  backHref: string;
 }) {
+  const router = useRouter();
   const [status, setStatus] = useState<LocationStatus>(initialStatus);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,6 +70,10 @@ export default function LocationStatusControl({
   const [reopenAlreadyPending, setReopenAlreadyPending] = useState(false);
   const [reopenSubmitting, setReopenSubmitting] = useState(false);
   const [reopenError, setReopenError] = useState<string | null>(null);
+
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
 
   async function applyStatus(next: LocationStatus) {
     setError(null);
@@ -105,6 +119,25 @@ export default function LocationStatusControl({
     } finally {
       setReopenSubmitting(false);
     }
+  }
+
+  async function handleRemove() {
+    if (!confirmingRemove) {
+      setConfirmingRemove(true);
+      return;
+    }
+    setRemoveError(null);
+    setRemoving(true);
+    const result = await removeLocationAction(locationId);
+    if (result.ok) {
+      // The location no longer exists — this page can't re-render itself,
+      // so leave it for wherever the caller came from.
+      router.push(backHref);
+      return;
+    }
+    setRemoving(false);
+    setRemoveError(result.error);
+    setConfirmingRemove(false);
   }
 
   return (
@@ -228,6 +261,47 @@ export default function LocationStatusControl({
                 </p>
               )}
             </form>
+          )}
+        </div>
+      )}
+
+      {status !== "active" && (
+        <div className="mt-5 border-t border-brand-border pt-4">
+          <p className="flex items-start gap-2 text-sm text-brand-ink-muted">
+            <TrashIcon className="mt-0.5 h-4 w-4 shrink-0 text-brand-closed" />
+            Removing this location permanently deletes it — unlike every other control above,
+            this can&apos;t be undone and the location can&apos;t be recovered. Any past manager
+            assignments for it are removed too.
+          </p>
+          <button
+            type="button"
+            onClick={handleRemove}
+            disabled={removing}
+            className={
+              confirmingRemove
+                ? "mt-3 flex min-h-[44px] items-center justify-center gap-2 rounded-brand-control bg-brand-closed px-4 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                : "mt-3 flex min-h-[44px] items-center justify-center gap-2 rounded-brand-control border border-brand-closed px-4 text-sm font-semibold text-brand-closed transition hover:bg-brand-closed-bg disabled:cursor-not-allowed disabled:opacity-60"
+            }
+          >
+            {removing
+              ? "Removing..."
+              : confirmingRemove
+              ? "Confirm — permanently remove this location"
+              : "Remove this location"}
+          </button>
+          {confirmingRemove && (
+            <button
+              type="button"
+              onClick={() => setConfirmingRemove(false)}
+              className="mt-1 block text-center text-xs font-medium text-brand-ink-subtle underline"
+            >
+              Cancel
+            </button>
+          )}
+          {removeError && (
+            <p className="mt-3 rounded-brand-control bg-brand-closed-bg px-3 py-2.5 text-sm text-brand-closed">
+              {removeError}
+            </p>
           )}
         </div>
       )}
