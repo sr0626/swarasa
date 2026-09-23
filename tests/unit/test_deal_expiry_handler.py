@@ -44,3 +44,34 @@ def test_system_actor_constants_are_self_describing():
     audit_log.actor_id for "system:" should find this Lambda's rows."""
     assert deal_expiry.SYSTEM_ACTOR_ROLE == "system"
     assert deal_expiry.SYSTEM_ACTOR_ID.startswith("system:")
+
+
+async def test_expire_deals_disposes_engine_even_when_the_query_fails(monkeypatch):
+    """Regression (found live 2026-09-23): a failed run (e.g. the `deal`
+    table not migrated yet) used to skip `dispose_engine()`, leaving a
+    connection bound to that invocation's closed event loop cached in the
+    warm container — every later invocation then failed with "attached to
+    a different loop", masking the real error."""
+    import pytest
+
+    from app.db import session as db_session
+
+    disposed: list[bool] = []
+
+    async def _fake_dispose() -> None:
+        disposed.append(True)
+
+    class _BoomSession:
+        async def __aenter__(self):
+            raise RuntimeError("relation \"deal\" does not exist")
+
+        async def __aexit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(db_session, "dispose_engine", _fake_dispose)
+    monkeypatch.setattr(db_session, "get_session_factory", lambda: (lambda: _BoomSession()))
+
+    with pytest.raises(RuntimeError, match="does not exist"):
+        await deal_expiry._expire_deals()
+
+    assert disposed == [True]
