@@ -19,11 +19,23 @@ export interface SearchFilters {
   cuisine: string[];
   dietary: string[];
   type: string[];
+  /**
+   * "Deals today" filter (docs/API_CONTRACTS.md "GET /search"
+   * `has_deals_today`) — a single boolean toggle, not a multi-select tag
+   * facet, so it deliberately lives outside `FILTER_PARAMS`/`FilterParam`
+   * (which `TagFilterPanel`/`ActiveFilters` assume are array-valued). See
+   * `toggleDealsToday` below for its own toggle helper, parallel to
+   * `toggleFilter` for the tag facets.
+   */
+  dealsToday: boolean;
 }
 
 export const FILTER_PARAMS: readonly FilterParam[] = ["cuisine", "dietary", "type"];
 
-export const EMPTY_FILTERS: SearchFilters = { cuisine: [], dietary: [], type: [] };
+/** URL query param for the "Deals today" toggle. */
+export const DEALS_TODAY_PARAM = "deals_today";
+
+export const EMPTY_FILTERS: SearchFilters = { cuisine: [], dietary: [], type: [], dealsToday: false };
 
 /** Tag slugs are lower_snake (docs/TAXONOMY.md). URL input is untrusted,
  * so anything else is dropped rather than forwarded to the API. */
@@ -48,7 +60,7 @@ function toList(value: string | string[] | undefined): string[] {
  * one as string — both parse to the same shape, so the legacy single
  * `?cuisine=north_indian` link keeps working. */
 export function parseFilters(searchParams: RawSearchParams): SearchFilters {
-  const parsed: SearchFilters = { cuisine: [], dietary: [], type: [] };
+  const parsed: SearchFilters = { cuisine: [], dietary: [], type: [], dealsToday: false };
   for (const param of FILTER_PARAMS) {
     const seen = new Set<string>();
     for (const raw of toList(searchParams[param])) {
@@ -58,11 +70,18 @@ export function parseFilters(searchParams: RawSearchParams): SearchFilters {
     }
     parsed[param] = Array.from(seen);
   }
+  parsed.dealsToday = firstOf(searchParams[DEALS_TODAY_PARAM]) === "true";
   return parsed;
 }
 
+function firstOf(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
 export function countFilters(filters: SearchFilters): number {
-  return filters.cuisine.length + filters.dietary.length + filters.type.length;
+  return (
+    filters.cuisine.length + filters.dietary.length + filters.type.length + (filters.dealsToday ? 1 : 0)
+  );
 }
 
 export function isSelected(filters: SearchFilters, param: FilterParam, name: string): boolean {
@@ -80,6 +99,12 @@ export function toggleFilter(
   return { ...filters, [param]: next };
 }
 
+/** Flips the "Deals today" toggle, parallel to `toggleFilter` for the
+ * array-valued tag facets above. */
+export function toggleDealsToday(filters: SearchFilters): SearchFilters {
+  return { ...filters, dealsToday: !filters.dealsToday };
+}
+
 export interface SearchHrefInput {
   location?: string;
   query?: string;
@@ -95,6 +120,7 @@ export function buildSearchHref({ location, query, filters, page }: SearchHrefIn
   for (const param of FILTER_PARAMS) {
     for (const name of filters[param]) params.append(param, name);
   }
+  if (filters.dealsToday) params.set(DEALS_TODAY_PARAM, "true");
   if (page && page > 1) params.set("page", String(page));
   const qs = params.toString();
   return qs ? `/search?${qs}` : "/search";

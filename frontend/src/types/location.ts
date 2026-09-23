@@ -1,6 +1,7 @@
 // Types for `restaurant_location` and its sub-resources (hours, photos),
 // matching docs/API_CONTRACTS.md "Locations (`restaurant_location`)".
 import type { ConsoleTodayStatus } from "@/lib/consoleLocationStatus";
+import type { DealPublic } from "@/types/deal";
 
 /** 0=Monday..6=Sunday, per docs/API_CONTRACTS.md GET /locations/{id} notes. */
 export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6;
@@ -129,6 +130,23 @@ export interface LocationDetail {
   cover_photo_url: string | null;
   /** Up to 2 entries when is_paid=false, up to 10 when is_paid=true. */
   gallery_photos: GalleryPhoto[];
+  /** Public "does this location have an active deal today" signal —
+   * unconditionally present, including for an anonymous caller
+   * (backend/app/schemas/location.py `LocationOut.has_deal_today`). Free
+   * tier feature — never gated on `is_paid`. */
+  has_deal_today: boolean;
+  /**
+   * Content-gated: `null` when the caller may not view deal content (public,
+   * signed-out, or a signed-in caller with no relationship to this
+   * location) regardless of `has_deal_today`; `[]` when visible-but-none
+   * (shouldn't normally co-occur with `has_deal_today: true`, but not
+   * assumed); a real array when visible-and-present. See
+   * `deal_service.caller_may_view_deal_content_for_location` — true for a
+   * signed-in `registered_user`/`admin`, or the location's own
+   * owner/assigned manager. Only populated when `getLocationById` is
+   * called WITH an access token (see that function's own doc comment).
+   */
+  deals_today: DealPublic[] | null;
 }
 
 /** Body for POST /locations/{id}/status. */

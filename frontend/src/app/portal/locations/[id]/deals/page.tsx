@@ -1,7 +1,8 @@
-// Route reserved per frontend/CLAUDE.md's Directory Structure. Deals
-// feed/deal cards are explicitly Phase 2 ("Do NOT Build Yet") — this
-// placeholder only makes the route exist/navigable, it does not implement
-// the feature.
+// Deals are managed inside the location editor itself (its "Deals &
+// specials" section, alongside hours and photos) — this route only exists
+// so the path reserved in frontend/CLAUDE.md's Directory Structure keeps
+// working. Same role gate as the editor; the editor re-checks access.
+import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/guards";
 
 interface LocationDealsPageProps {
@@ -9,12 +10,6 @@ interface LocationDealsPageProps {
 }
 
 export default async function LocationDealsPage({ params }: LocationDealsPageProps) {
-  await requireSession(["owner", "manager"]);
-
-  return (
-    <main>
-      <h1>Deals — Location {params.id}</h1>
-      <p>Phase 2 feature — route reserved, not implemented yet.</p>
-    </main>
-  );
+  await requireSession(["owner", "manager", "admin"]);
+  redirect(`/portal/locations/${encodeURIComponent(params.id)}#deals`);
 }

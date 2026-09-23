@@ -39,9 +39,11 @@ import RestaurantHero from "@/components/restaurant/RestaurantHero";
 import RestaurantInfoCard from "@/components/restaurant/RestaurantInfoCard";
 import ClaimCTA from "@/components/restaurant/ClaimCTA";
 import RestaurantAbout from "@/components/restaurant/RestaurantAbout";
+import RestaurantDeals from "@/components/restaurant/RestaurantDeals";
 import EditListingBar from "@/components/restaurant/EditListingBar";
 import RestaurantBackLink from "@/components/restaurant/RestaurantBackLink";
 import TopBar from "@/components/home/TopBar";
+import type { Session } from "@/types/auth";
 import type { LocationDetail } from "@/types/location";
 import type { RestaurantBrand } from "@/types/restaurant";
 
@@ -56,7 +58,22 @@ interface RestaurantPageData {
   location: LocationDetail | null;
 }
 
-async function loadRestaurantPageData(slug: string): Promise<RestaurantPageData | null> {
+/**
+ * `accessToken` is passed through to `getLocationById` so a signed-in
+ * caller's own deal-content access (per `deal_service.
+ * caller_may_view_deal_content_for_location`) is correctly reflected in
+ * `location.deals_today` — omitted entirely (never even an anonymous
+ * empty-string) for `generateMetadata`, which has no viewer-specific
+ * content to render and shouldn't pay for a session lookup it doesn't
+ * need. Passing a token here does NOT widen who can see a hidden
+ * (non-`active`) location: that's a separate, role-checked gate
+ * (`_caller_may_view_hidden_location`) that a random signed-in
+ * registered_user's token still fails, same as before this change.
+ */
+async function loadRestaurantPageData(
+  slug: string,
+  accessToken?: string
+): Promise<RestaurantPageData | null> {
   let restaurant: RestaurantBrand;
   try {
     restaurant = await getRestaurantBySlug(slug);
@@ -70,7 +87,7 @@ async function loadRestaurantPageData(slug: string): Promise<RestaurantPageData 
   const locations = await getRestaurantLocations(restaurant.id, { page: 1, page_size: 1 });
   const primaryLocationSummary = locations.results[0] ?? null;
   const location = primaryLocationSummary
-    ? await getLocationById(primaryLocationSummary.id)
+    ? await getLocationById(primaryLocationSummary.id, accessToken)
     : null;
 
   return { restaurant, location };
@@ -148,9 +165,8 @@ function buildRestaurantSchema(restaurant: RestaurantBrand, location: LocationDe
  * convenience, never a security boundary; the backend re-validates every
  * write regardless.
  */
-async function canEditListing(location: LocationDetail | null): Promise<boolean> {
+async function canEditListing(location: LocationDetail | null, session: Session | null): Promise<boolean> {
   if (!location) return false;
-  const session = await getServerSession();
   if (!session || !["owner", "manager", "admin"].includes(session.role)) return false;
   try {
     await getLocationManagers(location.id, {}, session.accessToken);
@@ -161,13 +177,17 @@ async function canEditListing(location: LocationDetail | null): Promise<boolean>
 }
 
 export default async function RestaurantPage({ params }: RestaurantPageProps) {
-  const data = await loadRestaurantPageData(params.slug);
+  // Fetched once, up front, and threaded through everywhere below that
+  // needs viewer identity (deal content gating, edit-access probe, follow
+  // state) — previously `canEditListing` re-fetched its own session
+  // independently of this same call a few lines down.
+  const session = await getServerSession();
+  const data = await loadRestaurantPageData(params.slug, session?.accessToken);
   if (!data) {
     notFound();
   }
   const { restaurant, location } = data;
-  const canEdit = await canEditListing(location);
-  const session = await getServerSession();
+  const canEdit = await canEditListing(location, session);
   const isAdmin = session?.role === "admin";
   const followState = await getViewerFollowState(session);
 
@@ -226,6 +246,14 @@ export default async function RestaurantPage({ params }: RestaurantPageProps) {
             </aside>
 
             <div className="flex min-w-0 flex-col gap-8 lg:col-start-1 lg:row-start-2">
+              {/* Near the top of the main column, right under the hero —
+                  task requirement (2026-09-23). Content gating already
+                  happened server-side in `loadRestaurantPageData` (which
+                  location.deals_today is) — see RestaurantDeals.tsx. */}
+              {location && (
+                <RestaurantDeals hasDealToday={location.has_deal_today} dealsToday={location.deals_today} />
+              )}
+
               {restaurant.description && (
                 <section aria-labelledby="about-heading">
                   <h2 id="about-heading" className="font-display text-xl font-bold text-brand-ink">
@@ -243,10 +271,6 @@ export default async function RestaurantPage({ params }: RestaurantPageProps) {
               {location && (
                 <RestaurantAbout about={location.about} specialties={location.specialties} />
               )}
-
-              {/* INSERTION POINT (unused): future Deals section (Phase 2).
-                  Do not add placeholder or fake deals; render nothing when
-                  the location has none. */}
 
               <div className="flex flex-col items-start gap-3 rounded-brand-card border border-brand-border bg-white p-5 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm text-brand-ink-muted">

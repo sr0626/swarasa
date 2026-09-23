@@ -31,12 +31,13 @@
 // anything about that.
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { FilterIcon, LocationPinIcon, SearchIcon, XIcon } from "@/components/ui/icons";
+import { FilterIcon, LocationPinIcon, SearchIcon, TagIcon, XIcon } from "@/components/ui/icons";
 import { ActiveFilters, TagFilterPanel } from "@/components/search/TagFilterPanel";
 import {
   buildSearchHref,
   countFilters,
   EMPTY_FILTERS,
+  toggleDealsToday,
   toggleFilter,
   type FilterGroup,
   type FilterParam,
@@ -118,6 +119,10 @@ export default function SearchFilterBar({
     navigate(toggleFilter(filters, param, name));
   }
 
+  function handleToggleDealsToday() {
+    navigate(toggleDealsToday(filters));
+  }
+
   return (
     <div>
       <div ref={containerRef} className="relative mx-auto max-w-3xl">
@@ -125,27 +130,29 @@ export default function SearchFilterBar({
           onSubmit={handleSubmit}
           className="flex flex-col gap-3 rounded-brand-card border border-brand-border bg-white p-3 shadow-brand-card sm:flex-row sm:items-center sm:gap-2"
         >
-          {groups.length > 0 && (
-            <button
-              ref={triggerRef}
-              type="button"
-              aria-expanded={panelOpen}
-              aria-controls={PANEL_ID}
-              onClick={() => setPanelOpen((open) => !open)}
-              className="flex min-h-[44px] shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-brand-control border border-brand-border bg-white px-4 text-sm font-semibold text-brand-ink transition hover:bg-brand-chip"
-            >
-              <FilterIcon className="h-4 w-4" />
-              Filters
-              {activeCount > 0 && (
-                <span
-                  className="flex h-5 min-w-[20px] items-center justify-center rounded-brand-pill bg-brand-accent px-1.5 text-xs font-semibold text-white"
-                  aria-label={`${activeCount} active`}
-                >
-                  {activeCount}
-                </span>
-              )}
-            </button>
-          )}
+          {/* Always rendered now (previously gated on `groups.length > 0`):
+              the "Deals today" toggle below lives in this same panel and
+              isn't a tag facet, so the trigger has content even when the
+              tag taxonomy fetch comes back empty. */}
+          <button
+            ref={triggerRef}
+            type="button"
+            aria-expanded={panelOpen}
+            aria-controls={PANEL_ID}
+            onClick={() => setPanelOpen((open) => !open)}
+            className="flex min-h-[44px] shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-brand-control border border-brand-border bg-white px-4 text-sm font-semibold text-brand-ink transition hover:bg-brand-chip"
+          >
+            <FilterIcon className="h-4 w-4" />
+            Filters
+            {activeCount > 0 && (
+              <span
+                className="flex h-5 min-w-[20px] items-center justify-center rounded-brand-pill bg-brand-accent px-1.5 text-xs font-semibold text-white"
+                aria-label={`${activeCount} active`}
+              >
+                {activeCount}
+              </span>
+            )}
+          </button>
 
           <label className="flex flex-1 items-center gap-2 rounded-brand-control px-3 py-2.5 sm:border-r sm:border-brand-border">
             <LocationPinIcon className="h-5 w-5 shrink-0 text-brand-ink-subtle" />
@@ -180,61 +187,88 @@ export default function SearchFilterBar({
           </button>
         </form>
 
-        {groups.length > 0 && (
-          // Kept mounted (just hidden) so aria-controls always resolves and
-          // "Show all" expansions survive close/reopen. Full-width bottom
-          // sheet on mobile (so Done/Clear are always on-screen); popover
-          // anchored under the bar from `sm` up.
-          <div
-            id={PANEL_ID}
-            ref={panelRef}
-            role="region"
-            aria-label="Filter restaurants by tag"
-            tabIndex={-1}
-            className={`fixed inset-x-0 bottom-0 z-30 max-h-[80vh] flex-col overflow-hidden rounded-t-brand-card border border-brand-border bg-white shadow-brand-card-hover focus:outline-none sm:absolute sm:inset-x-auto sm:bottom-auto sm:left-0 sm:top-full sm:mt-2 sm:max-h-[70vh] sm:w-[34rem] sm:rounded-brand-card ${
-              panelOpen ? "flex" : "hidden"
-            } ${isPending ? "opacity-80" : ""}`}
-          >
-            <div className="flex items-center justify-between border-b border-brand-border py-1 pl-4 pr-2">
-              <h2 className="font-display text-base font-semibold text-brand-ink">Filters</h2>
-              <button
-                type="button"
-                onClick={closePanel}
-                aria-label="Close filters"
-                className="flex h-11 w-11 items-center justify-center rounded-brand-control text-brand-ink-subtle hover:bg-brand-chip"
-              >
-                <XIcon className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4">
-              <TagFilterPanel groups={groups} filters={filters} onToggle={handleToggle} />
-            </div>
-            <div className="flex items-center justify-between gap-3 border-t border-brand-border px-4 py-2">
-              <button
-                type="button"
-                onClick={() => navigate(EMPTY_FILTERS)}
-                disabled={activeCount === 0}
-                className="min-h-[44px] px-2 text-sm font-semibold text-brand-accent underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:text-brand-ink-subtle disabled:no-underline"
-              >
-                Clear all
-              </button>
-              <button
-                type="button"
-                onClick={closePanel}
-                className="min-h-[44px] rounded-brand-control bg-brand-ink px-6 text-sm font-semibold text-brand-bg transition hover:opacity-90"
-              >
-                Done
-              </button>
-            </div>
+        {/* Kept mounted (just hidden) so aria-controls always resolves and
+            "Show all" expansions survive close/reopen. Full-width bottom
+            sheet on mobile (so Done/Clear are always on-screen); popover
+            anchored under the bar from `sm` up. */}
+        <div
+          id={PANEL_ID}
+          ref={panelRef}
+          role="region"
+          aria-label="Filter restaurants"
+          tabIndex={-1}
+          className={`fixed inset-x-0 bottom-0 z-30 max-h-[80vh] flex-col overflow-hidden rounded-t-brand-card border border-brand-border bg-white shadow-brand-card-hover focus:outline-none sm:absolute sm:inset-x-auto sm:bottom-auto sm:left-0 sm:top-full sm:mt-2 sm:max-h-[70vh] sm:w-[34rem] sm:rounded-brand-card ${
+            panelOpen ? "flex" : "hidden"
+          } ${isPending ? "opacity-80" : ""}`}
+        >
+          <div className="flex items-center justify-between border-b border-brand-border py-1 pl-4 pr-2">
+            <h2 className="font-display text-base font-semibold text-brand-ink">Filters</h2>
+            <button
+              type="button"
+              onClick={closePanel}
+              aria-label="Close filters"
+              className="flex h-11 w-11 items-center justify-center rounded-brand-control text-brand-ink-subtle hover:bg-brand-chip"
+            >
+              <XIcon className="h-5 w-5" />
+            </button>
           </div>
-        )}
+          <div className="flex-1 overflow-y-auto p-4">
+            <div className="mb-5">
+              <h3 className="mb-2 font-display text-sm font-semibold text-brand-ink">Deals</h3>
+              <button
+                type="button"
+                aria-pressed={filters.dealsToday}
+                onClick={handleToggleDealsToday}
+                className={
+                  filters.dealsToday
+                    ? "flex min-h-[44px] items-center gap-2 rounded-brand-pill bg-brand-ink px-4 text-sm font-medium text-brand-bg transition sm:min-h-[36px]"
+                    : "flex min-h-[44px] items-center gap-2 rounded-brand-pill bg-brand-chip px-4 text-sm font-medium text-brand-chip-ink transition hover:bg-brand-chip/80 sm:min-h-[36px]"
+                }
+              >
+                <TagIcon className="h-4 w-4" />
+                Deals today
+              </button>
+            </div>
+            <TagFilterPanel groups={groups} filters={filters} onToggle={handleToggle} />
+          </div>
+          <div className="flex items-center justify-between gap-3 border-t border-brand-border px-4 py-2">
+            <button
+              type="button"
+              onClick={() => navigate(EMPTY_FILTERS)}
+              disabled={activeCount === 0}
+              className="min-h-[44px] px-2 text-sm font-semibold text-brand-accent underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:text-brand-ink-subtle disabled:no-underline"
+            >
+              Clear all
+            </button>
+            <button
+              type="button"
+              onClick={closePanel}
+              className="min-h-[44px] rounded-brand-control bg-brand-ink px-6 text-sm font-semibold text-brand-bg transition hover:opacity-90"
+            >
+              Done
+            </button>
+          </div>
+        </div>
       </div>
 
       {activeCount > 0 && (
         <div
-          className={`mx-auto mt-3 max-w-3xl transition-opacity ${isPending ? "opacity-60" : ""}`}
+          className={`mx-auto mt-3 flex max-w-3xl flex-wrap items-center gap-1.5 transition-opacity ${isPending ? "opacity-60" : ""}`}
           aria-busy={isPending}
         >
+          {filters.dealsToday && (
+            <button
+              type="button"
+              onClick={handleToggleDealsToday}
+              aria-label="Remove filter Deals today"
+              className="flex min-h-[36px] items-center gap-1.5 rounded-brand-pill border border-brand-border bg-white px-3 text-xs font-medium text-brand-ink transition hover:bg-brand-chip"
+            >
+              Deals today
+              <span aria-hidden="true" className="text-base leading-none text-brand-ink-subtle">
+                &times;
+              </span>
+            </button>
+          )}
           <ActiveFilters
             groups={groups}
             filters={filters}
