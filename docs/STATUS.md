@@ -30,6 +30,23 @@ to revisit later, not a final sign-off.
 ## Open PRs
 - None open as of 2026-09-23 (other than this batched docs PR itself).
 
+## Landed 2026-09-23, wave 6 (#192-#195)
+- Admin Owners report: `GET /admin/owners` + `/admin/owners` page, linked
+  from nav and the Overview tile (#192). Read-only; add-owner not built.
+- Soft-delete listing (#193): admin "Delete listing" stamps
+  `restaurant_brand.deleted_at` and auto-deactivates active locations to
+  `owner_deactivated`; admin restore endpoint + "Deleted listings" filter;
+  warning confirm dialog. Migration `0011`.
+- Registered-user activity tracking (#194): searches + tile clicks for
+  registered users only, 12-month retention, admin per-user view
+  (`/admin/registered-users/[userSub]`), covered by CCPA export/delete.
+  Migration `0012`.
+- Display name is set-once (#195): `PATCH /auth/me` returns 409
+  `name_locked`; admin change via `set_user_name` management command.
+- Live in dev: migrations 0009-0012 applied via `alembic_upgrade`
+  (2026-09-23).
+- Wave-5 docs batch merged (#191).
+
 ## Landed 2026-09-23, wave 5 (#172-#190)
 - **Deals engine live in dev** (deals reopened by the user 2026-09-23;
   payments/billing stay deferred). Deals are FREE-tier, no `is_paid` gate:
@@ -144,6 +161,13 @@ to revisit later, not a final sign-off.
   filters to active locations only (hidden/coming-soon ones don't show).
 - Admin new-user feed covers owner accounts only (no local diner user table;
   diner count/report are Cognito-backed via #180/#184).
+- Soft-deleted listings (#193): admin notification counts still include
+  items on deleted brands; approving a reopen request for a deleted
+  brand's location leaves it invisible until the brand is restored.
+- Activity tracking (#194): no per-user event cap; an admin viewing a
+  diner's activity is not audit-logged.
+- Admin owner/user directories are read-only reports (#184, #192); add
+  owner, manual confirm, disable/enable and password reset not built.
 - Social login not started. Payments/billing/refunds/payment reports
   deferred by decision. Deal alerts to followers not started.
 - `NEXT_PUBLIC_CONTACT_EMAIL` set in Amplify (#150, applied to dev).
