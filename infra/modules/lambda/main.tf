@@ -16,23 +16,6 @@ locals {
 }
 
 # -------------------------------------------------------------------
-# Placeholder zip — deal-expiry Lambda only. The API Lambda moved to a
-# container image (see DECISIONS.md "Containerization") and no longer uses
-# archive_file; this placeholder is unaffected and still zip-based.
-# lifecycle.ignore_changes ensures Terraform does not overwrite code
-# that CI/CD has deployed.
-# -------------------------------------------------------------------
-data "archive_file" "deal_expiry_placeholder" {
-  type        = "zip"
-  output_path = "/tmp/${var.project}-deal-expiry-placeholder.zip"
-
-  source {
-    content  = "def handler(event, context): print('deal expiry placeholder')\n"
-    filename = "placeholder.py"
-  }
-}
-
-# -------------------------------------------------------------------
 # CloudWatch Log Groups — created explicitly so Lambda role needs no
 # logs:CreateLogGroup permission and retention is enforced.
 # -------------------------------------------------------------------
@@ -101,17 +84,48 @@ resource "aws_lambda_function" "api" {
 }
 
 # -------------------------------------------------------------------
-# Deal-expiry Lambda — single EventBridge cron target; runs every 5 min
+# Deal-expiry Lambda — single EventBridge cron target; runs every 5 min.
+#
+# Container image, REUSING the API Lambda's own image (var.lambda_image_uri)
+# rather than a dedicated ECR repo/Dockerfile — decided over the resize
+# Lambda's "own image" pattern (infra/modules/lambda_resize,
+# infra/modules/ecr's `ecr_resize` call) because the two cases differ in the
+# one way that matters: resize needs Pillow, a dependency the API image
+# doesn't carry, so it earns its own image; deal_expiry
+# (backend/app/lambda_handlers/deal_expiry.py) imports
+# app.db.session/app.models.deal/app.services.audit_service, which pull in
+# the full sqlalchemy[asyncio]+asyncpg+geoalchemy2 stack — already in
+# backend/requirements.txt and already installed into the API image by
+# backend/Dockerfile's `RUN pip install -r requirements.txt`. The Dockerfile
+# also `COPY app/ ${LAMBDA_TASK_ROOT}/app/` wholesale, so
+# app/lambda_handlers/deal_expiry.py is already IN the API image today, just
+# unreachable because CMD points at app.main.handler. A second ECR repo +
+# Dockerfile + deploy-*.yml pipeline for a handler the existing image
+# already contains would just be duplicate build/storage cost for a cron
+# job that runs a handful of times an hour. `image_config.command`
+# overrides the image's default CMD per-function, without rebuilding —
+# exactly what's needed here.
+#
+# `image_uri = var.lambda_image_uri` deliberately reuses the SAME variable
+# as `aws_lambda_function.api` above (not a separate deal-expiry-specific
+# var) — they are, by design, always the same image. This also means no
+# new one-time `:bootstrap` push is needed for this function: whatever
+# image the API Lambda is already running from already contains this
+# handler. See this PR's description for the exact human command to confirm
+# the currently-deployed image is current (post the deals-engine-backend
+# merge) before applying.
 # -------------------------------------------------------------------
 resource "aws_lambda_function" "deal_expiry" {
-  function_name    = local.deal_expiry_function_name
-  runtime          = "python3.12"
-  handler          = "deal_expiry.handler"
-  role             = var.deal_expiry_lambda_role_arn
-  filename         = data.archive_file.deal_expiry_placeholder.output_path
-  source_code_hash = data.archive_file.deal_expiry_placeholder.output_base64sha256
-  timeout          = 60
-  memory_size      = 256
+  function_name = local.deal_expiry_function_name
+  package_type  = "Image"
+  image_uri     = var.lambda_image_uri
+  role          = var.deal_expiry_lambda_role_arn
+  timeout       = 60
+  memory_size   = 256
+
+  image_config {
+    command = ["app.lambda_handlers.deal_expiry.handler"]
+  }
 
   vpc_config {
     subnet_ids         = var.subnet_ids
@@ -128,7 +142,7 @@ resource "aws_lambda_function" "deal_expiry" {
   depends_on = [aws_cloudwatch_log_group.deal_expiry]
 
   lifecycle {
-    ignore_changes = [filename, source_code_hash]
+    ignore_changes = [image_uri]
   }
 
   tags = local.common_tags

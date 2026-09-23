@@ -211,6 +211,16 @@ module "iam" {
 # stops `terraform plan` from then wanting to revert those deploys back to
 # `:bootstrap`. `var.lambda_image_uri` (root, optional) can override this
 # default if a different bootstrap tag/digest is used.
+#
+# `local.lambda_image_uri` also feeds `aws_lambda_function.deal_expiry`
+# (added when deal_expiry moved from a zip placeholder to a container image
+# — see that resource's own comment in modules/lambda/main.tf): it reuses
+# this SAME image rather than getting a second ECR repo, distinguished only
+# by `image_config.command`. If `:bootstrap` has already been expired by
+# module.ecr's lifecycle policy (keeps only the most recent 20 tagged
+# images) by the time deal_expiry's package_type first changes to "Image",
+# pass the API Lambda's currently-deployed image URI as
+# `-var="lambda_image_uri=..."` instead of relying on this default.
 # -------------------------------------------------------------------
 locals {
   lambda_image_uri = coalesce(var.lambda_image_uri, "${module.ecr.repository_url}:bootstrap")

@@ -50,6 +50,12 @@ env:
   AWS_REGION: us-east-1                  # confirmed — see DECISIONS.md "Region"
   ECR_REPOSITORY: swarasa-api-dev        # confirmed against infra/modules/ecr — see header
   LAMBDA_FUNCTION_NAME: swarasa-api-dev  # confirmed against infra/modules/lambda — see header
+  # Added when deal_expiry moved from a zip placeholder to a container
+  # image, REUSING this same image (infra/modules/lambda/main.tf's
+  # aws_lambda_function.deal_expiry comment) instead of a second ECR
+  # repo/pipeline — every push here now also has to move this function
+  # onto the freshly built image, same as the API Lambda below.
+  DEAL_EXPIRY_FUNCTION_NAME: swarasa-deal-expiry-dev
 
 jobs:
   build-and-deploy:
@@ -169,3 +175,26 @@ jobs:
         run: |
           aws lambda wait function-updated \
             --function-name "$LAMBDA_FUNCTION_NAME"
+
+      # deal_expiry runs the SAME image as the API Lambda (just a different
+      # image_config.command — see infra/modules/lambda/main.tf's
+      # aws_lambda_function.deal_expiry comment), so this same build gets
+      # pushed onto it too. Deliberately unconditional (not gated on
+      # check-image's output) the same way the scan steps above are: if a
+      # prior run pushed the image and updated the API Lambda but was
+      # interrupted before reaching here, a re-run must still be able to
+      # bring deal_expiry into sync with the image the API Lambda is
+      # already running.
+      - name: Point deal-expiry Lambda at the same new image
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          aws lambda update-function-code \
+            --function-name "$DEAL_EXPIRY_FUNCTION_NAME" \
+            --image-uri "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+
+      - name: Wait for the deal-expiry update to finish applying
+        run: |
+          aws lambda wait function-updated \
+            --function-name "$DEAL_EXPIRY_FUNCTION_NAME"

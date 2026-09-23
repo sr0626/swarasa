@@ -252,6 +252,62 @@ same-day fallback if the new version needs correcting)*
 
 ## Infrastructure & Hosting
 
+**Deal-expiry Lambda packaging: container image REUSING the API Lambda's own image, not a second ECR repo/Dockerfile**
+2026-09-23 | `backend/app/lambda_handlers/deal_expiry.py` (PR #185) shipped
+against `infra/modules/lambda/main.tf`'s `aws_lambda_function.deal_expiry`,
+which was still a bare `archive_file` zip with no dependency-install step —
+would fail on import the moment deployed, since the handler necessarily
+pulls in the full `sqlalchemy[asyncio]`+`asyncpg`+`geoalchemy2` stack
+(`app.db.session`/`app.models.deal`/`app.services.audit_service`, same as
+the API app). Compared against the resize Lambda's own-image precedent
+(`infra/modules/ecr` with `service_name = "resize"` +
+`infra/modules/lambda_resize`, see "Resize Lambda packaging" below):
+- **Reuse the API Lambda's image** (chosen) — `backend/Dockerfile` already
+  `RUN pip install -r requirements.txt` (the same file deal_expiry needs;
+  no Architect/Backend-owned dependency is missing) and `COPY app/
+  ${LAMBDA_TASK_ROOT}/app/` wholesale, so
+  `app/lambda_handlers/deal_expiry.py` is already baked into the API image
+  today — just unreachable because the image's CMD hardcodes
+  `app.main.handler`. `aws_lambda_function.deal_expiry` now sets
+  `package_type = "Image"`, `image_uri = var.lambda_image_uri` (the SAME
+  variable the API Lambda uses — not a second one), and
+  `image_config { command = ["app.lambda_handlers.deal_expiry.handler"] }`
+  to select the handler per-function without rebuilding. No new ECR repo,
+  no new Dockerfile, no new `deploy-*.yml` pipeline; `deploy-backend.yml`
+  gained one more `aws lambda update-function-code` step (+
+  `function-updated` wait) pointed at `swarasa-deal-expiry-dev`, using the
+  exact image it already just built/scanned for the API Lambda, and
+  `infra/modules/iam/github_actions.tf`'s `github_actions_deploy` role's
+  `LambdaUpdateOwnFunctionCode` statement now lists both function ARNs
+  explicitly (not a wildcard).
+- **Own ECR repo + Dockerfile, mirroring the resize Lambda** (rejected for
+  this case) — the resize Lambda earns its own image because it needs
+  Pillow, a compiled dependency the API image does not carry and has no
+  reason to carry; forking the image there is buying a real isolation
+  benefit (a smaller, purpose-built image; no unrelated FastAPI/Mangum
+  surface in a Pillow Lambda). deal_expiry has the opposite shape: its
+  entire dependency need is a strict subset of what the API image already
+  installs, and its own handler file is already sitting in that image
+  unused. A second repo + Dockerfile + CI job here would be paying the
+  resize Lambda's full build/storage/pipeline cost for zero isolation
+  benefit — same dependency set, same base image, just a different
+  entrypoint.
+- **Bootstrap note:** because this reuses the API Lambda's already-running
+  image, no new one-time `:bootstrap` push is required for this function.
+  `module.ecr`'s lifecycle policy only retains the most recent 20 tagged
+  images, though, so by the time this Lambda's `package_type` first flips
+  to `"Image"` the default `:bootstrap` tag may already be expired —
+  `terraform plan`/`apply` for this change should pass the API Lambda's
+  currently-deployed image URI explicitly
+  (`-var="lambda_image_uri=$(aws lambda get-function --function-name
+  swarasa-api-dev --query 'Code.ImageUri' --output text)"`) rather than
+  rely on that default resolving.
+*Rejected: own ECR repo + Dockerfile + deploy pipeline (duplicate
+build/storage/CI cost for a handler the API image already contains); leaving
+it a zip with a vendored `site-packages/` (no precedent in this codebase,
+would need its own build tooling for a dependency set container packaging
+already solves)*
+
 **Missing Cognito VPC endpoint — every Cognito-email-lookup code path was silently unreachable from the Lambda**
 2026-09-18 | Real production bug, found live while testing `scripts/delete_test_user.py`
 against the deployed dev environment: three consecutive `aws lambda invoke`
