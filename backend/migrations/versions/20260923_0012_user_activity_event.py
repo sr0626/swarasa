@@ -11,7 +11,7 @@ table, no changes to existing tables, no backfill.
 Revision id kept short (`alembic_version.version_num` is VARCHAR(32) —
 see 0002's header).
 
-Revision ID: 0011_user_activity_event
+Revision ID: 0012_user_activity_event
 Revises: 0010_merge_0009_heads
 Create Date: 2026-09-23
 """
@@ -22,8 +22,8 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = "0011_user_activity_event"
-down_revision: Union[str, None] = "0010_merge_0009_heads"
+revision: str = "0012_user_activity_event"
+down_revision: Union[str, None] = "0011_brand_deleted_at"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
