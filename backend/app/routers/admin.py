@@ -7,6 +7,9 @@ from the specific Irving, TX real-data seed it also unblocks).
 """
 from __future__ import annotations
 
+import logging
+
+from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,13 +18,17 @@ from app.dependencies.auth import CurrentUser, require_admin
 from app.dependencies.db import get_db
 from app.models.owner_account import OwnerAccount
 from app.schemas.admin_notifications import AdminNotificationsResponse
+from app.schemas.admin_stats import RegisteredUserCountResponse
 from app.schemas.restaurant_bulk_import import (
     BulkImportRequest,
     BulkImportResponse,
     BulkImportRowOut,
 )
+from app.services import cognito_service
 from app.services.admin_notification_service import get_admin_notifications
 from app.services.restaurant_bulk_import_service import BulkImportError, bulk_import_restaurants
+
+logger = logging.getLogger("app.routers.admin")
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -36,6 +43,41 @@ async def admin_notifications_endpoint(
     aggregate computed per request (see docs/API_CONTRACTS.md "Admin
     notifications" for the new-users limitation)."""
     return await get_admin_notifications(db)
+
+
+@router.get("/registered-user-count", response_model=RegisteredUserCountResponse)
+async def registered_user_count_endpoint(
+    current_user: CurrentUser = Depends(require_admin),
+) -> RegisteredUserCountResponse:
+    """Auth: admin only. Total diner ("registered_user") sign-ups.
+
+    Source of truth is Cognito, not the local database: `owner_account`
+    only has rows for owners, and `user_profile` only gets a row when a
+    diner sets a display name — most never do (see
+    docs/API_CONTRACTS.md "GET /admin/notifications" known limitation,
+    which this endpoint closes for the diner-count case specifically).
+    "Registered users" reads as the `registered_user` pool group, not the
+    whole pool (which would also count owner/manager/admin accounts) —
+    that's the reading the `new_users` limitation note itself pointed at,
+    and it's what an admin overview page asking "how many people signed up
+    to browse/follow/save" actually wants.
+
+    Live call, no caching — see `cognito_service.count_users_in_group`
+    docstring for why that's fine here (admin-only, low-traffic).
+    """
+    try:
+        count = cognito_service.count_users_in_group(cognito_service.REGISTERED_USER_GROUP)
+    except ClientError as exc:
+        logger.warning(
+            "registered-user-count: Cognito ListUsersInGroup failed: %s",
+            exc.response.get("Error", {}).get("Code", "ClientError"),
+        )
+        raise AppError(502, "Unable to retrieve registered user count", "upstream_error") from exc
+    except (BotoCoreError, RuntimeError) as exc:
+        logger.warning("registered-user-count: Cognito lookup failed: %s", type(exc).__name__)
+        raise AppError(502, "Unable to retrieve registered user count", "upstream_error") from exc
+
+    return RegisteredUserCountResponse(count=count)
 
 
 @router.post("/restaurants/bulk-import", response_model=BulkImportResponse)

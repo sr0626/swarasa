@@ -306,7 +306,10 @@ Every Lambda gets its own IAM role with only the permissions it needs:
 #   2026-09-13, see modules/iam/main.tf "CognitoListUsersForManagerAssignment".
 #   Also AdminAddUserToGroup + AdminGetUser on the same single pool ARN
 #   (claim approval adds the claimant to the `owner` group; added 2026-09-19,
-#   "CognitoOwnerGroupAssignmentOnThisPoolOnly"). No AdminCreateUser/
+#   "CognitoOwnerGroupAssignmentOnThisPoolOnly"). Also ListUsersInGroup on
+#   the same single pool ARN (admin "total registered users" count reads
+#   `registered_user` group membership; added 2026-09-22,
+#   "CognitoListUsersInGroupForAdminUserCount"). No AdminCreateUser/
 #   AdminDeleteUser or any other Cognito action, never a wildcard resource)
 # Deal expiry Lambda needs: RDS connect only
 # Resize Lambda needs: S3 get (raw/), S3 put (processed/), S3 delete (raw/)

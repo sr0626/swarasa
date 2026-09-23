@@ -2105,6 +2105,34 @@ neither is part of this endpoint.
 
 Errors: `403 forbidden` for any non-admin caller.
 
+### GET /admin/registered-user-count
+
+Auth: admin only. Total diner (`registered_user`) sign-ups — the data
+source for a companion admin overview/analytics page (see
+docs/PROJECT_PLAN.csv). Added to close exactly the `new_users` gap called
+out above: identity for diners lives only in Cognito (`owner_account` only
+has owner rows; `user_profile` only gets a row when a diner sets a display
+name, which most never do), so this reads Cognito directly via
+`cognito-idp:ListUsersInGroup` on the `registered_user` pool group,
+paginated, summed server-side. See `infra/CLAUDE.md` "IAM Least-Privilege
+Rules" for the exact grant and `app/services/cognito_service.py`'s
+`count_users_in_group` docstring for why `owner`/`manager`/`admin` pool
+members are excluded from the count (the group is diners only, by design,
+not "everyone in the pool").
+
+Response: `200`
+```json
+{ "count": 143, "group": "registered_user" }
+```
+
+Live call, no caching (admin-only, low traffic — see service docstring).
+
+Errors:
+| Status | Code | When |
+|---|---|---|
+| 403 | `forbidden` | caller is not admin |
+| 502 | `upstream_error` | Cognito `ListUsersInGroup` call failed |
+
 ### POST /admin/restaurants/bulk-import
 
 Auth: admin

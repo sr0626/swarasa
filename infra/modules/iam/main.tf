@@ -112,6 +112,20 @@ resource "aws_iam_role_policy" "api_lambda_custom" {
           "cognito-idp:AdminGetUser"
         ]
         Resource = var.cognito_user_pool_arn
+      },
+      {
+        # Admin "total registered users" count (GET /admin/registered-user-
+        # count, app/services/cognito_service.py count_users_in_group).
+        # Read-only, single pool, single group-membership listing action —
+        # NOT the same action as ListUsers above (that filters by
+        # email/sub, this lists group membership; neither substitutes for
+        # the other, see cognito_service.py's count_users_in_group
+        # docstring). Added 2026-09-22, see docs/DECISIONS.md "Admin
+        # registered-user count".
+        Sid      = "CognitoListUsersInGroupForAdminUserCount"
+        Effect   = "Allow"
+        Action   = ["cognito-idp:ListUsersInGroup"]
+        Resource = var.cognito_user_pool_arn
       }
     ]
   })
