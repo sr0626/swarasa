@@ -10,7 +10,7 @@ import DataPrivacySection from "@/components/account/DataPrivacySection";
 import DisplayNameForm from "@/components/account/DisplayNameForm";
 import FollowedRestaurantsGrid from "@/components/account/FollowedRestaurantsGrid";
 import SecurityCard from "@/components/account/SecurityCard";
-import { firstNameFor, primaryLinkClass } from "@/components/account/accountShared";
+import { firstNameFor, isNameLocked, primaryLinkClass } from "@/components/account/accountShared";
 import { SearchIcon } from "@/components/ui/icons";
 import type { AuthMe } from "@/types/auth";
 import type { FollowedBrand } from "@/types/follow";
@@ -62,7 +62,9 @@ export default function DinerAccountView({
           <FollowedRestaurantsGrid follows={follows} loadError={followsError} />
         </div>
         <div className="flex min-w-0 flex-col gap-5">
-          <DisplayNameForm initialFullName={me.full_name} />
+          {/* Set-once: the editable card only shows until a name exists; after
+              that the name is read-only in Account details below. */}
+          {!isNameLocked(me.full_name) && <DisplayNameForm initialFullName={me.full_name} />}
           <AccountDetailsCard me={me} stacked nameEditableElsewhere />
           <SecurityCard />
           <DataPrivacySection latestDeletionRequest={latestDeletionRequest} />

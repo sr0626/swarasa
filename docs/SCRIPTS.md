@@ -37,6 +37,7 @@ aws lambda invoke --function-name swarasa-api-dev --profile swarasa-dev --region
 | `list_ungeocoded_locations` / `set_location_coordinates` | Used by `geocode_missing_locations.py` |
 | `bulk_import_restaurants` | Used by `bulk_import_restaurants_csv.py` |
 | `delete_user_data` | Used by `delete_test_user.py` |
+| `set_user_name` | Admin changes a user's already-set (locked) name. Payload `"email"` (or `"cognito_sub"`) + `"full_name"`; audit-logged for owners; refuses a user with no name yet |
 
 ## Infra (Terraform, from `infra/`)
 

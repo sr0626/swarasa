@@ -1,5 +1,7 @@
 "use client";
 
+// Set-once: the account view only renders this while no name exists yet (see
+// accountShared.ts `isNameLocked`); the backend enforces the lock too.
 // Display-name-only edit form for registered_user/manager — PATCH /auth/me
 // via the generalized `updateMyProfile` client (docs/PROJECT_PLAN.csv
 // "Generic user display name for registered_user/manager"). Deliberately
@@ -9,6 +11,7 @@
 // (backend/app/models/user_profile.py) — no phone field, since that table
 // has none. Same visual shape/copy conventions as ProfileEditForm so the
 // two forms read as one design language across roles.
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { updateDisplayNameAction } from "@/app/account/actions";
 import { PencilIcon } from "@/components/ui/icons";
@@ -23,6 +26,7 @@ export default function DisplayNameForm({
   /** Current saved name, or null if never set. */
   initialFullName: string | null;
 }) {
+  const router = useRouter();
   const [fullName, setFullName] = useState(initialFullName ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,6 +43,9 @@ export default function DisplayNameForm({
       if (result.ok) {
         setFullName(result.data.full_name ?? "");
         setSaved(true);
+        // The name is now set-once/locked: re-render the server page so the
+        // account view drops this form and shows the name read-only.
+        router.refresh();
       } else {
         setError(result.error);
       }
@@ -60,7 +67,8 @@ export default function DisplayNameForm({
         Your name
       </h2>
       <p className="mt-1 text-sm text-brand-ink-muted">
-        Shown on your account and wherever we greet you by name.
+        Shown on your account and wherever we greet you by name. You can set it once — after
+        that, only an admin can change it.
       </p>
 
       <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-end">

@@ -28,7 +28,7 @@ import ManagedLocationsPanel from "@/components/account/ManagedLocationsPanel";
 import NameEditForm from "@/components/account/NameEditForm";
 import OwnerActivitySection from "@/components/account/OwnerActivitySection";
 import SecurityCard from "@/components/account/SecurityCard";
-import { ROLE_LABEL, cardClass, displayNameFor } from "@/components/account/accountShared";
+import { ROLE_LABEL, cardClass, displayNameFor, isNameLocked } from "@/components/account/accountShared";
 import type { ManagedLocationWithStatus } from "@/lib/manager/loadManagedLocationStatuses";
 import type { OwnerActivity } from "@/types/activity";
 import type { AuthMe } from "@/types/auth";
@@ -64,10 +64,11 @@ export default function ManagerAccountView({
       </div>
 
       <div id="profile" className="grid scroll-mt-24 grid-cols-1 gap-5 md:grid-cols-2 md:items-start">
-        {me.owner_account ? (
-          // Defensive only -- a manager session never actually has an
-          // owner_account (see AuthMe's own comment), but if the backend
-          // ever did return one, prefer showing it over the generic form.
+        {me.owner_account || isNameLocked(me.full_name) ? (
+          // Read-only once the name is set (set-once, see isNameLocked). Also
+          // the defensive fallback if the backend ever returned an
+          // owner_account for a manager session (it never does today, see
+          // AuthMe's own comment).
           <AccountDetailsCard me={me} stacked />
         ) : (
           <NameEditForm currentName={me.full_name} email={me.email} />

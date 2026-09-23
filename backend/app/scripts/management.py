@@ -476,6 +476,36 @@ def _run_delete_user_data(event: dict) -> dict:
     return {"command": "delete_user_data", **result}
 
 
+@_command("set_user_name")
+def _run_set_user_name(event: dict) -> dict:
+    """Admin override for a locked display name (`PATCH /auth/me` refuses to
+    change an already-set name -- `409 name_locked`). See
+    app/scripts/set_user_name.py's module docstring.
+
+    Event payload shape:
+        {"_management_command": "set_user_name",
+         "email": "user@example.com",       # OR "cognito_sub": "..."
+         "full_name": "New Name"}
+    """
+    from app.db.session import dispose_engine
+    from app.scripts.set_user_name import SetUserNameError, run_set_user_name
+
+    # Same same-loop-disposal reasoning as _run_seed_dev_data above.
+    async def _run_and_dispose() -> dict:
+        try:
+            return await run_set_user_name(
+                event.get("full_name"), event.get("email"), event.get("cognito_sub")
+            )
+        finally:
+            await dispose_engine()
+
+    try:
+        result = asyncio.run(_run_and_dispose())
+    except SetUserNameError as exc:
+        return {"ok": False, "command": "set_user_name", "error": str(exc)}
+    return {"command": "set_user_name", **result}
+
+
 @_command("dev_clear_manager_assignments")
 def _run_dev_clear_manager_assignments(event: dict) -> dict:
     """DEV-ONLY: soft-remove one manager's active location_manager

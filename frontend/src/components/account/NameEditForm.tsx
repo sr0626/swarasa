@@ -6,6 +6,7 @@
 // as its own small component rather than importing DisplayNameForm directly
 // so the manager console isn't coupled to a diner-page component; a later
 // pass could unify them if the duplication becomes a maintenance burden.
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { updateDisplayNameAction } from "@/app/account/actions";
 import { PencilIcon } from "@/components/ui/icons";
@@ -17,6 +18,7 @@ export default function NameEditForm({
   currentName: string | null;
   email: string;
 }) {
+  const router = useRouter();
   const [fullName, setFullName] = useState(currentName ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,6 +34,9 @@ export default function NameEditForm({
       const result = await updateDisplayNameAction({ full_name: fullName.trim() });
       if (result.ok) {
         setSaved(true);
+        // Set-once: re-render the server page so the manager console swaps
+        // this form for the read-only Account details card.
+        router.refresh();
       } else {
         setError(result.error);
       }
@@ -52,6 +57,9 @@ export default function NameEditForm({
         <PencilIcon className="h-5 w-5 text-brand-ink-subtle" />
         Edit profile
       </h2>
+      <p className="mt-1 text-sm text-brand-ink-muted">
+        You can set your name once — after that, only an admin can change it.
+      </p>
 
       <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-4">
         <div>

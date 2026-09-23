@@ -176,6 +176,26 @@ async def get_me(db: AsyncSession, current_user) -> MeResponse:
     )
 
 
+def _reject_name_change_if_locked(current: str | None, requested: str | None) -> None:
+    """Enforces "a display name is set once" (see `update_me`). `requested`
+    is already trimmed by `MeUpdateRequest`; `current` is normalised the same
+    way here so a stored value with stray whitespace still counts as set and
+    an identical re-send still compares equal. No-op when nothing is being
+    renamed, when no name is stored yet (first set), or when the request
+    repeats the stored name.
+    """
+    if requested is None:
+        return
+    existing = (current or "").strip()
+    if existing and requested != existing:
+        raise AppError(
+            409,
+            "Your name is already set and can't be changed here. "
+            "Contact an admin if it needs to be updated.",
+            "name_locked",
+        )
+
+
 async def update_me(
     db: AsyncSession, current_user, body: MeUpdateRequest
 ) -> OwnerAccountOut | ProfileOut:
@@ -194,6 +214,14 @@ async def update_me(
       entity list (restaurant_brand, restaurant_location, menu_item, deal,
       owner_account, location_manager) and `audit_log.record_id` is a
       `BigInteger`, which a Cognito `sub` string doesn't fit anyway.
+    - **Name lock** (added 2026-09-23, user decision): `full_name` can be
+      SET once but never CHANGED through this route — once a non-empty name
+      is stored (owner_account or user_profile), a PATCH carrying a
+      *different* `full_name` is rejected `409 name_locked` and nothing is
+      written. Re-sending the identical stored name is a harmless no-op.
+      The only way to change a locked name is an admin running the
+      `set_user_name` management command (app/scripts/set_user_name.py).
+      Enforced here, server-side — the account UI just hides the form.
     - `admin`: still no local record to write to — `404
       no_editable_profile`, unchanged from before this change. The
       distinction matters: it is not a permissions problem (every role may
@@ -203,6 +231,10 @@ async def update_me(
     if current_user.role == "owner":
         owner = await get_or_create_owner_account(db, current_user.cognito_sub, current_user.email)
         old_val = {"full_name": owner.full_name, "phone": owner.phone}
+
+        # Checked BEFORE any field is touched so a rejected rename never
+        # half-applies (e.g. a phone change riding in the same request).
+        _reject_name_change_if_locked(owner.full_name, body.full_name)
 
         if body.full_name is not None:
             owner.full_name = body.full_name
@@ -237,6 +269,7 @@ async def update_me(
             profile = UserProfile(cognito_sub=current_user.cognito_sub, full_name=body.full_name)
             db.add(profile)
         else:
+            _reject_name_change_if_locked(profile.full_name, body.full_name)
             profile.full_name = body.full_name
 
         await db.commit()

@@ -46,7 +46,9 @@ from factories import create_owner, create_user_profile
 
 @pytest.mark.asyncio
 async def test_owner_can_update_their_own_profile(client, db_session, as_user):
-    owner = await create_owner(db_session, full_name="Old Name")
+    # No name yet: the first set is allowed (a set name is locked, see
+    # tests/integration/test_display_name_lock.py).
+    owner = await create_owner(db_session, full_name=None)
     await db_session.commit()
 
     as_user("owner", sub=owner.cognito_sub, email=owner.email)
@@ -84,7 +86,7 @@ async def test_owner_update_writes_audit_log(client, db_session, as_user):
     requires an audit_log entry on every owner_account write, but
     update_me previously wrote none at all.
     """
-    owner = await create_owner(db_session, full_name="Old Name", phone=None)
+    owner = await create_owner(db_session, full_name=None, phone=None)
     await db_session.commit()
 
     as_user("owner", sub=owner.cognito_sub, email=owner.email)
@@ -103,7 +105,7 @@ async def test_owner_update_writes_audit_log(client, db_session, as_user):
     assert audit_row.action == "update"
     assert audit_row.actor_id == owner.cognito_sub
     assert audit_row.actor_role == "owner"
-    assert audit_row.old_val == {"full_name": "Old Name", "phone": None}
+    assert audit_row.old_val == {"full_name": None, "phone": None}
     assert audit_row.new_val == {"full_name": "Priya Rao", "phone": "+14695559876"}
 
 
@@ -168,12 +170,14 @@ async def test_registered_user_and_manager_can_set_and_read_back_full_name(clien
 
 @pytest.mark.asyncio
 async def test_registered_user_can_update_an_existing_profile_row(client, db_session, as_user):
-    """Second PATCH is an update, not a duplicate insert -- exercises the
+    """PATCH onto an existing row that has no name yet (e.g. created by
+    `touch_last_seen`) is an update, not a duplicate insert -- exercises the
     upsert's "existing row" branch (the test above only ever exercises
-    first-time creation).
+    first-time creation). Changing an already-set name is locked instead,
+    see test_display_name_lock.py.
     """
     user = as_user("registered_user")
-    await create_user_profile(db_session, cognito_sub=user.cognito_sub, full_name="Old Name")
+    await create_user_profile(db_session, cognito_sub=user.cognito_sub, full_name=None)
     await db_session.commit()
 
     response = await client.patch("/auth/me", json={"full_name": "New Name"})

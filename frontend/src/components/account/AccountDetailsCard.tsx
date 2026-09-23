@@ -8,6 +8,7 @@
 // for those roles so this card doesn't show a stale "editing isn't
 // available" note directly under a form that just proved otherwise; admin
 // (no local profile source at all yet) keeps the default note.
+import { NAME_LOCKED_NOTE, isNameLocked } from "@/components/account/accountShared";
 import type { AuthMe } from "@/types/auth";
 
 export default function AccountDetailsCard({
@@ -21,6 +22,7 @@ export default function AccountDetailsCard({
   /** True when a name edit form is rendered elsewhere on this page for this role. */
   nameEditableElsewhere?: boolean;
 }) {
+  const locked = isNameLocked(me.full_name);
   return (
     <section
       aria-labelledby="account-details-heading"
@@ -43,7 +45,8 @@ export default function AccountDetailsCard({
         </div>
       </dl>
 
-      {!nameEditableElsewhere && (
+      {locked && <p className="mt-4 text-sm text-brand-ink-muted">{NAME_LOCKED_NOTE}</p>}
+      {!locked && !nameEditableElsewhere && (
         <p className="mt-4 rounded-brand-control bg-brand-bg px-3 py-2.5 text-sm text-brand-ink-muted">
           Profile editing isn&apos;t available for this role yet. Name/email changes are currently
           owner-only. Contact support if your details need to change.
