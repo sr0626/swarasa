@@ -391,12 +391,12 @@ async def require_brand_write_access(
     if current_user.role != "owner":
         raise AppError(403, "Not authorized for this restaurant", "forbidden")
 
-    result = await db.execute(
-        select(RestaurantBrand.owner_id).where(RestaurantBrand.id == brand_id)
-    )
-    owner_id_on_brand = result.scalar_one_or_none()
-    if owner_id_on_brand is None:
+    brand = await db.get(RestaurantBrand, brand_id)
+    # A soft-deleted brand 404s for an owner, same as a nonexistent one.
+    # (`owner_id is None` = unclaimed: 404 for an owner caller, as before.)
+    if brand is None or brand.deleted_at is not None or brand.owner_id is None:
         raise AppError(404, "Restaurant not found", "not_found")
+    owner_id_on_brand = brand.owner_id
 
     owner = await auth_service.get_owner_account_by_sub(db, current_user.cognito_sub)
     if owner is None or owner_id_on_brand != owner.id:
@@ -404,6 +404,19 @@ async def require_brand_write_access(
 
     current_user.owner_account_id = owner.id
     return current_user
+
+
+async def _reject_if_brand_deleted(db: AsyncSession, location: RestaurantLocation) -> None:
+    """404 (never 403, so existence isn't leaked) when the location's brand
+    has been soft-deleted (`restaurant_brand.deleted_at`,
+    docs/API_CONTRACTS.md "DELETE /restaurants/{id}"). Called by every
+    owner/manager location dependency AFTER its admin short-circuit — an
+    admin keeps full access to a deleted brand's locations (support/restore
+    flows), everyone else treats them as gone.
+    """
+    brand = await db.get(RestaurantBrand, location.brand_id)
+    if brand is not None and brand.deleted_at is not None:
+        raise AppError(404, "Location not found", "not_found")
 
 
 async def require_location_write_access(
@@ -437,6 +450,8 @@ async def require_location_write_access(
 
     if current_user.role == "admin":
         return current_user
+
+    await _reject_if_brand_deleted(db, location)
 
     if current_user.role == "owner":
         owner = await auth_service.get_owner_account_by_sub(db, current_user.cognito_sub)
@@ -478,6 +493,8 @@ async def require_location_owner_or_admin(
     if current_user.role != "owner":
         raise AppError(403, "Not authorized for this location", "forbidden")
 
+    await _reject_if_brand_deleted(db, location)
+
     owner = await auth_service.get_owner_account_by_sub(db, current_user.cognito_sub)
     brand = await db.get(RestaurantBrand, location.brand_id)
     if owner is None or brand is None or brand.owner_id != owner.id:
@@ -510,6 +527,8 @@ async def require_location_owner_only(
 
     if current_user.role != "owner":
         raise AppError(403, "Not authorized for this location", "forbidden")
+
+    await _reject_if_brand_deleted(db, location)
 
     owner = await auth_service.get_owner_account_by_sub(db, current_user.cognito_sub)
     brand = await db.get(RestaurantBrand, location.brand_id)

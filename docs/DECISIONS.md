@@ -843,6 +843,39 @@ Infra to revisit if this pattern gets used often enough to want it).*
 
 ## Database & Data Model
 
+**Delete listing becomes a soft delete (`restaurant_brand.deleted_at`) that auto-deactivates every active location; supersedes the hard-delete/409 behaviour of `DELETE /restaurants/{id}`**
+2026-09-23 | User bug report: after deleting a location, "Delete listing" still
+failed with "This restaurant still has locations attached — remove or
+reassign them before deleting the listing", and the user's stated intent was
+that deleting a listing should automatically deactivate all its locations
+(with a warning confirmation) and is only a status change in the backend,
+not a hard delete. Decided (root CLAUDE.md "Decision-Making Autonomy"):
+
+- **Nullable `restaurant_brand.deleted_at` timestamp** (migration 0011), not
+  a status/boolean — the brand has no status column today and the timestamp
+  records when. Row and slug are kept.
+- **Same route, new meaning:** `DELETE /restaurants/{id}` (admin only, 204)
+  is now the soft delete; idempotent; no 409 path. New admin-only
+  `POST /restaurants/{id}/restore` clears the flag.
+- **Locations: every `active` one becomes `owner_deactivated`** — the
+  existing freely-reversible self-service hidden status, i.e. what the
+  legacy `is_active=False` shim and `DELETE /locations/{id}` already write —
+  in the SAME transaction, one `audit_log` row per changed location plus one
+  for the brand. Already-hidden locations are not touched: overwriting
+  `closed_pending_reopen` would let an owner sidestep the admin-approved
+  reopen after a restore. Restore does not reactivate locations.
+- **Visibility:** a deleted brand and its locations are 404 on every public,
+  owner and manager path (search, detail, follow, favourites, consoles,
+  claim/report, bulk import slug reuse, overview counts); admin keeps access
+  and sees deleted listings only behind `GET /restaurants?status=deleted`.
+- `DELETE /locations/{id}/permanent` (hard delete of ONE location, PR #176)
+  is unchanged.
+*Rejected: adding a brand-level `status` enum (over-modelled for one
+boolean-ish need); flipping `closed_pending_reopen`/`coming_soon` locations
+too (loses information and bypasses the admin reopen gate); keeping the hard
+delete and just auto-removing locations first (irreversible, and the user
+explicitly wants a status change, not row deletion).*
+
 **Location status lifecycle: a single `status` column (not a DB enum) replacing the old `is_active` boolean, kept alive as a derived `hybrid_property`; one asymmetric transition (`closed_pending_reopen` -> `active`) requires admin approval, everything else is freely self-service**
 2026-09-22 | Combined schema+backend+frontend decision (root CLAUDE.md
 "Decision-Making Autonomy"), closing the product need for more than a

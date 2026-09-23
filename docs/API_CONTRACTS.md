@@ -240,7 +240,7 @@ Query params:
 | owner_id | int, optional | **Admin only** — ignored (never applied) for an owner caller, who is always filtered to their own `owner_id` regardless of this param. Omitted for an admin caller returns all brands. |
 | owner_email | string, optional, max 255 | **Admin only.** Case-insensitive substring match against the brand owner's `owner_account.email`. A brand with no owner (unclaimed, `owner_id IS NULL`) never matches a non-empty `owner_email`. |
 | name | string, optional, max 255 | **Admin only.** Case-insensitive substring match against `restaurant_brand.name`. |
-| status | string, optional | **Admin only.** One of `active` / `owner_deactivated` / `coming_soon` / `closed_pending_reopen` (`restaurant_location.status`, see app/models/restaurant_location.py "Location status lifecycle"); 422 on any other value. **Matches a brand if ANY of its locations currently has this status** — a brand with one `active` and one `coming_soon` location matches `status=coming_soon`. |
+| status | string, optional | **Admin only.** One of `active` / `owner_deactivated` / `coming_soon` / `closed_pending_reopen` (`restaurant_location.status`, see app/models/restaurant_location.py "Location status lifecycle") or the pseudo-value `deleted`; 422 on any other value. **Matches a brand if ANY of its locations currently has this status** — a brand with one `active` and one `coming_soon` location matches `status=coming_soon`. **`status=deleted`** (added 2026-09-23) returns ONLY soft-deleted brands (`restaurant_brand.deleted_at IS NOT NULL`); every other request — every owner request, and an admin request with any other/no `status` — **excludes** soft-deleted brands. |
 | is_paid | bool, optional | **Admin only.** JUDGMENT CALL: **matches a brand if ANY of its locations has this `is_paid` value** — same "any location" rule as `status`/`city` here, chosen for consistency rather than requiring every location to match (a multi-location brand with one paid and one free location matches both `is_paid=true` and `is_paid=false`). |
 | city | string, optional, max 120 | **Admin only.** Case-insensitive **exact** match (not substring — deliberately stricter than `name`/`owner_email`, since city names are short, well-known values an admin types precisely, not a fuzzy search) against `restaurant_location.city`. JUDGMENT CALL: **matches a brand if ANY of its locations is in that city** — a brand can have locations in multiple cities (e.g. Plano and Dallas); filtering by `city=plano` returns it, and so does `city=dallas`, same as `status`/`is_paid` above. |
 | is_claimed | bool, optional | **Admin only.** Exact match against `restaurant_brand.is_claimed` (brand-level field, no "any location" ambiguity). |
@@ -264,7 +264,8 @@ Response:
         { "id": 7, "name": "hyderabadi", "display_name": "Hyderabadi", "category": "regional" }
       ],
       "location_count": 3,
-      "follower_count": 12
+      "follower_count": 12,
+      "deleted_at": null
     }
   ],
   "page": 1,
@@ -453,26 +454,70 @@ populated).
 
 Auth: admin only
 
-`restaurant_location.brand_id` has `ON DELETE RESTRICT` — the database
-itself refuses this delete while any location rows still reference the
-brand. Backend Dev's service layer should catch that and return `409
-Conflict` with a clear message rather than letting a DB integrity
-error surface (root CLAUDE.md "NEVER expose internal stack details in
-API error responses"). Callers must remove/reassign all of the brand's
-locations first — as of 2026-09-22, `DELETE /locations/{id}/permanent`
-below is the real way to do the "remove" half of that (each location must
-already be hidden, with no active manager/pending claim/pending reopen
-request — see that endpoint's own guardrail table); there is still no
-reassign-to-another-brand endpoint (`docs/DECISIONS.md` "Hard-delete a
-location" flags this as explicitly out of scope for now).
+**SOFT delete (changed 2026-09-23 — was a hard delete that 409'd while any
+location row existed).** Stamps the nullable `restaurant_brand.deleted_at`
+(migration `0011_brand_deleted_at`) and, **in the same transaction**, sets
+every `active` location of the brand to `owner_deactivated` (the freely
+reversible self-service hidden status — `app/models/restaurant_location.py`
+"Location status lifecycle"). Locations already hidden (`coming_soon`,
+`owner_deactivated`, `closed_pending_reopen`) are left as they are — in
+particular `closed_pending_reopen` must keep requiring an admin-approved
+reopen. The `restaurant_brand` row is **kept**, so its slug stays reserved
+and its audit/follower/claim history is intact. There is no 409
+"locations attached" path anymore.
 
-**Flagged gap:** `restaurant_brand` has no `is_active`/soft-delete
-column in this schema (unlike `restaurant_location`), so there is no
-"unlist without deleting" option for a whole brand today — only a hard
-delete gated by the FK. Worth a product decision if "temporarily hide
-a brand" turns out to be a real need.
+A soft-deleted brand and all its locations disappear from every public,
+owner and manager read path:
 
-Response: `204 No Content`. Audit: `audit_log` row (`action="delete"`).
+| Surface | Behaviour once `deleted_at` is set |
+|---|---|
+| `GET /restaurants/{id}` (id or slug) | `404 not_found` |
+| `GET /restaurants/{id}/locations` | `404` for everyone except an admin |
+| `GET /locations/{id}` and every owner/manager location write (`PATCH`, hours, photos, status, managers, deals…) | `404` for owner/manager/anonymous; admin keeps access |
+| `PATCH /restaurants/{id}` by the owner, `POST /locations` onto the brand | `404` |
+| `GET /search` (geo + text) | excluded |
+| `POST /restaurants/{id}/follow` | `404` |
+| `GET /auth/me/follows` (favourites) | excluded from `results` **and** `total` (the follow row is kept, so a restore brings it back) |
+| Owner `GET /restaurants`, manager `GET /auth/me/managed-locations` | excluded |
+| Admin `GET /restaurants` | excluded by default; `status=deleted` lists only deleted brands (see above) |
+| `POST /claim`, `POST /reports` | `404` |
+| `GET /admin/overview` counts | excluded |
+| Bulk import | a row whose slug matches a deleted brand is a per-row error (slug stays reserved) |
+| Sitemap | drops out automatically (built from `GET /search`) |
+
+**Idempotent:** deleting an already-deleted brand is a no-op `204` (no
+second audit row, `deleted_at` is not re-stamped). `404` only for an id that
+does not exist.
+
+Response: `204 No Content`.
+
+Audit (root CLAUDE.md "ALWAYS write an audit_log entry", actor = the
+admin): one `restaurant_brand` row (`action="update"`, `old_val
+{"deleted_at": null}`, `new_val {"deleted_at": <iso>, "locations_deactivated":
+[<ids>]}`) plus one `restaurant_location` row per location actually changed
+(`old_val {"status": "active"}`, `new_val {"status": "owner_deactivated",
+"reason": "brand_deleted"}`).
+
+`DELETE /locations/{id}/permanent` (below) is unchanged — it remains the
+only real, irreversible row delete, and is still how an admin removes an
+individual location for good.
+
+### POST /restaurants/{id}/restore
+
+Auth: admin only
+
+Clears `restaurant_brand.deleted_at` (`204`-style idempotent: restoring a
+live brand is a no-op that still returns `200` with the brand). The brand's
+locations are **not** reactivated — they stay `owner_deactivated` (or
+whatever they were) until re-enabled through their normal path
+(`POST /locations/{id}/status`), so a restore never silently republishes
+locations nobody has looked at. The slug is unchanged.
+
+Response: `200`, same shape as `GET /restaurants/{id}` (with `follower_count`
+populated, as for other admin/owner-scoped responses). `404` for an unknown
+id. Audit: one `restaurant_brand` row (`action="update"`, `old_val
+{"deleted_at": <iso>}`, `new_val {"deleted_at": null}`), only when the
+brand was actually deleted.
 
 ---
 
@@ -1288,7 +1333,7 @@ why: cheapest/most-fundamental rejection first):
 | 409 | `manager_different_owner` | (added 2026-09-22) The resolved manager already holds an ACTIVE `location_manager` row on a location owned by a DIFFERENT owner than the caller — see DECISIONS.md "Manager scoped to one owner at a time" |
 | 409 | `manager_cap_reached` | Location is `is_paid=true` and already has the configured max active managers (default 2, `platform_config.max_active_managers_per_location` — see DECISIONS.md "Configurable manager/location caps via platform_config") — from the existing `assert_can_add_active_manager` check in `location_manager_service.py`, cap value now config-driven instead of hardcoded |
 | 409 | `manager_location_cap_reached` | (added 2026-09-22) The resolved manager already actively manages the configured max number of OTHER `is_paid=true` locations (default 2, `platform_config.max_active_locations_per_manager`) — only checked when the TARGET location is also paid; free-tier assignments never count toward or trigger this cap. The message NAMES the locations, e.g. `"This person already manages 2 locations: Dera Grill (Irving), Taj Chaat House (Plano)"` — see DECISIONS.md "Symmetric manager-location cap" for the full paid-tier-only scoping rationale |
-| 409 | `already_active_manager` | This user already has an active assignment on this location — `uq_location_manager_active_user` (`docs/DATA_MODEL.md`) would otherwise raise a raw DB integrity error; service layer catches it the same way `DELETE /restaurants/{id}` catches its `ON DELETE RESTRICT` case above |
+| 409 | `already_active_manager` | This user already has an active assignment on this location — `uq_location_manager_active_user` (`docs/DATA_MODEL.md`) would otherwise raise a raw DB integrity error; service layer catches it the same way other services catch a unique-constraint race |
 
 **Backlog (explicitly not built here):** an "invite a not-yet-registered
 email, auto-link them to this assignment on their later signup" flow. The

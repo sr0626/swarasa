@@ -35,6 +35,12 @@ export interface RestaurantBrand {
    * already is shared (see `RestaurantOut`'s own comment on why).
    */
   follower_count: number | null;
+  /**
+   * Soft-delete timestamp (`restaurant_brand.deleted_at`). `null`/absent for
+   * a live listing. Only ever non-null in the admin listings view behind
+   * the `status=deleted` filter — deleted listings are 404 everywhere else.
+   */
+  deleted_at?: string | null;
 }
 
 /** Body for POST /restaurants. Creates a new brand owned by the caller. */

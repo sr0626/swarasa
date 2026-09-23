@@ -109,6 +109,9 @@ async def _paid_active_assignments_for_manager(
         LocationManager.user_id == manager_sub,
         LocationManager.is_active == True,  # noqa: E712
         RestaurantLocation.is_paid == True,  # noqa: E712
+        # A soft-deleted brand's locations no longer count toward a
+        # manager's cap (`restaurant_brand.deleted_at`).
+        RestaurantBrand.deleted_at.is_(None),
     ]
     if exclude_location_id is not None:
         filters.append(RestaurantLocation.id != exclude_location_id)
@@ -370,6 +373,9 @@ async def list_managed_locations(db: AsyncSession, current_user, pagination):
         LocationManager.user_id == current_user.cognito_sub,
         LocationManager.is_active == True,  # noqa: E712
         RestaurantLocation.is_active == True,  # noqa: E712
+        # Manager console hides a soft-deleted brand's locations even if one
+        # were re-enabled (`restaurant_brand.deleted_at`).
+        RestaurantBrand.deleted_at.is_(None),
     )
 
     total = (
@@ -377,6 +383,7 @@ async def list_managed_locations(db: AsyncSession, current_user, pagination):
             select(func.count())
             .select_from(RestaurantLocation)
             .join(LocationManager, LocationManager.location_id == RestaurantLocation.id)
+            .join(RestaurantBrand, RestaurantBrand.id == RestaurantLocation.brand_id)
             .where(*base_filter)
         )
     ).scalar_one()
@@ -386,6 +393,7 @@ async def list_managed_locations(db: AsyncSession, current_user, pagination):
             await db.execute(
                 select(RestaurantLocation)
                 .join(LocationManager, LocationManager.location_id == RestaurantLocation.id)
+                .join(RestaurantBrand, RestaurantBrand.id == RestaurantLocation.brand_id)
                 .where(*base_filter)
                 .order_by(RestaurantLocation.id)
                 .offset(pagination.offset)

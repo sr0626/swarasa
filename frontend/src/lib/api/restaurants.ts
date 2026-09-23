@@ -3,7 +3,8 @@
 import { apiFetch, toQueryString } from "./client";
 import type { PaginatedResponse, PaginationParams } from "@/types/common";
 import type { FollowOut } from "@/types/follow";
-import type { LocationSummary, LocationStatus } from "@/types/location";
+import type { LocationSummary } from "@/types/location";
+import type { ListingStatusFilter } from "@/lib/adminListings";
 import type {
   CreateRestaurantInput,
   RestaurantBrand,
@@ -21,8 +22,10 @@ export interface AdminRestaurantListFilters {
   ownerEmail?: string;
   /** Case-insensitive substring match against the brand name. */
   name?: string;
-  /** Matches a brand if ANY of its locations has this status. */
-  status?: LocationStatus;
+  /** Matches a brand if ANY of its locations has this status. The
+   * pseudo-value `"deleted"` instead lists ONLY soft-deleted listings
+   * (every other request excludes them). */
+  status?: ListingStatusFilter;
   /** Matches a brand if ANY of its locations has this is_paid value. */
   isPaid?: boolean;
   /** Case-insensitive exact match; matches a brand if ANY of its
@@ -145,9 +148,10 @@ export async function updateRestaurant(
 }
 
 /**
- * DELETE /restaurants/{id} — auth: admin only. Returns 204; the DB
- * ON DELETE RESTRICT means this can 409 while locations still reference
- * the brand (docs/API_CONTRACTS.md).
+ * DELETE /restaurants/{id} — auth: admin only. SOFT delete: stamps
+ * `deleted_at` and deactivates every active location of the brand in one
+ * transaction; the row is kept and the call is idempotent. Returns 204 and
+ * never 409s (docs/API_CONTRACTS.md "DELETE /restaurants/{id}").
  */
 export async function deleteRestaurant(
   id: number,
@@ -156,6 +160,22 @@ export async function deleteRestaurant(
   return apiFetch<void>(
     `/restaurants/${id}`,
     { method: "DELETE" },
+    { accessToken }
+  );
+}
+
+/**
+ * POST /restaurants/{id}/restore — auth: admin only. Clears `deleted_at`.
+ * The brand's locations are NOT reactivated (they stay deactivated until
+ * re-enabled through their normal status path). Idempotent.
+ */
+export async function restoreRestaurant(
+  id: number,
+  accessToken: string
+): Promise<RestaurantBrand> {
+  return apiFetch<RestaurantBrand>(
+    `/restaurants/${id}/restore`,
+    { method: "POST" },
     { accessToken }
   );
 }

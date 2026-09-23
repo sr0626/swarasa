@@ -27,6 +27,10 @@ from app.schemas.restaurant import (
 from app.services import audit_service, auth_service, cuisine_service, follow_service
 
 
+# `GET /restaurants?status=deleted` pseudo-status — see `list_restaurants`.
+DELETED_STATUS_FILTER = "deleted"
+
+
 def slugify(name: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", name.strip().lower()).strip("-")
     return slug or "restaurant"
@@ -109,6 +113,7 @@ async def _brand_to_out(db: AsyncSession, brand: RestaurantBrand, current_user=N
         cuisine_tags=[CuisineTagOut.model_validate(t) for t in tags],
         location_count=location_count,
         follower_count=follower_count,
+        deleted_at=brand.deleted_at,
     )
 
 
@@ -129,14 +134,21 @@ async def get_restaurant(db: AsyncSession, id_or_slug: str) -> RestaurantOut:
     else:
         result = await db.execute(select(RestaurantBrand).where(RestaurantBrand.slug == id_or_slug))
         brand = result.scalar_one_or_none()
-    if brand is None:
+    # A soft-deleted listing is indistinguishable from a nonexistent one
+    # for this public route (docs/API_CONTRACTS.md "DELETE /restaurants/{id}").
+    if brand is None or brand.deleted_at is not None:
         raise AppError(404, "Restaurant not found", "not_found")
     return await _brand_to_out(db, brand)
 
 
-async def get_brand_or_404(db: AsyncSession, brand_id: int) -> RestaurantBrand:
+async def get_brand_or_404(
+    db: AsyncSession, brand_id: int, *, include_deleted: bool = False
+) -> RestaurantBrand:
+    """`include_deleted=False` (default): a soft-deleted brand 404s, same
+    as a nonexistent one — every owner/manager write path goes through here.
+    Only the admin delete/restore actions pass `include_deleted=True`."""
     brand = await db.get(RestaurantBrand, brand_id)
-    if brand is None:
+    if brand is None or (brand.deleted_at is not None and not include_deleted):
         raise AppError(404, "Restaurant not found", "not_found")
     return brand
 
@@ -192,6 +204,19 @@ async def list_restaurants(
     filters = []
     if effective_owner_id is not None:
         filters.append(RestaurantBrand.owner_id == effective_owner_id)
+
+    # Soft-deleted listings (migration 0011) are hidden from every list by
+    # default — the owner console never sees them, and neither does the
+    # default admin view. `status="deleted"` (admin only — `status` is
+    # already forced to None above for a non-admin caller) flips this to
+    # "only deleted listings," which is how the admin panel finds one to
+    # restore. It is a pseudo-status: it is NOT a `restaurant_location.status`
+    # value, so it must not reach the location-status filter below.
+    if status == DELETED_STATUS_FILTER:
+        filters.append(RestaurantBrand.deleted_at.is_not(None))
+        status = None
+    else:
+        filters.append(RestaurantBrand.deleted_at.is_(None))
 
     if owner_email:
         pattern = "%" + _escape_like(owner_email.strip()) + "%"
@@ -359,31 +384,105 @@ async def update_restaurant(
 
 
 async def delete_restaurant(db: AsyncSession, brand_id: int, current_user) -> None:
-    """restaurant_location.brand_id has ON DELETE RESTRICT — the DB refuses
-    this delete while any location rows still reference the brand
-    (docs/API_CONTRACTS.md "DELETE /restaurants/{id}"). Caught below and
-    surfaced as a clean 409 rather than a leaked DB integrity error (root
-    CLAUDE.md "NEVER expose internal stack details").
+    """`DELETE /restaurants/{id}` — admin only. SOFT delete (docs/API_CONTRACTS.md
+    "DELETE /restaurants/{id}"): stamps `restaurant_brand.deleted_at`, keeps
+    the row (slug stays reserved), and deactivates the brand's locations —
+    all in ONE transaction, so a failure part-way leaves nothing half-done.
+
+    Which locations change: every `active` location is set to
+    `owner_deactivated` — the one self-service, freely-reversible hidden
+    status (app/models/restaurant_location.py "Location status lifecycle"),
+    exactly what `delete_location` / the `is_active=False` setter already
+    produce. Locations already hidden are LEFT ALONE, deliberately:
+    `closed_pending_reopen` must keep requiring an admin-approved reopen (a
+    bulk overwrite here would let the owner sidestep that after a restore)
+    and `coming_soon` keeps its meaning. They are hidden anyway — every read
+    path also checks the brand's `deleted_at`.
+
+    Audit (root CLAUDE.md "ALWAYS write an audit_log entry"): one
+    `restaurant_brand` row plus one `restaurant_location` row per location
+    actually changed, actor = the admin.
+
+    Idempotent: deleting an already-deleted brand is a no-op 204 (no second
+    audit row, `deleted_at` not re-stamped). Never 409s — the old
+    "locations attached" refusal is gone.
     """
-    brand = await get_brand_or_404(db, brand_id)
+    brand = await get_brand_or_404(db, brand_id, include_deleted=True)
+    if brand.deleted_at is not None:
+        return
+
+    now = datetime.now(timezone.utc)
+    brand.deleted_at = now
+
+    active_locations = (
+        (
+            await db.execute(
+                select(RestaurantLocation)
+                .where(
+                    RestaurantLocation.brand_id == brand.id,
+                    RestaurantLocation.status == RestaurantLocation.STATUS_ACTIVE,
+                )
+                .order_by(RestaurantLocation.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for location in active_locations:
+        location.status = RestaurantLocation.STATUS_OWNER_DEACTIVATED
+        await audit_service.log(
+            db,
+            table_name="restaurant_location",
+            record_id=location.id,
+            action="update",
+            actor_id=current_user.cognito_sub,
+            actor_role=current_user.role,
+            old_val={"status": RestaurantLocation.STATUS_ACTIVE},
+            new_val={
+                "status": RestaurantLocation.STATUS_OWNER_DEACTIVATED,
+                "reason": "brand_deleted",
+            },
+        )
 
     await audit_service.log(
         db,
         table_name="restaurant_brand",
         record_id=brand.id,
-        action="delete",
+        action="update",
         actor_id=current_user.cognito_sub,
         actor_role=current_user.role,
-        old_val={"name": brand.name, "slug": brand.slug},
-        new_val=None,
+        old_val={"deleted_at": None},
+        new_val={
+            "deleted_at": now.isoformat(),
+            "locations_deactivated": [loc.id for loc in active_locations],
+        },
     )
-    await db.delete(brand)
-    try:
-        await db.commit()
-    except IntegrityError:
-        await db.rollback()
-        raise AppError(
-            409,
-            "Cannot delete a restaurant that still has locations. Remove or reassign its locations first.",
-            "brand_has_locations",
+    await db.commit()
+
+
+async def restore_restaurant(db: AsyncSession, brand_id: int, current_user) -> RestaurantOut:
+    """`POST /restaurants/{id}/restore` — admin only. Clears `deleted_at`.
+
+    The brand's locations are NOT reactivated: they stay `owner_deactivated`
+    (or whatever they were) until re-enabled through their normal path
+    (`POST /locations/{id}/status`), so restoring a listing never silently
+    republishes locations the admin hasn't looked at. Idempotent on an
+    already-live brand (no audit row, returns the brand). Slug is unchanged
+    (it was reserved the whole time).
+    """
+    brand = await get_brand_or_404(db, brand_id, include_deleted=True)
+    if brand.deleted_at is not None:
+        old_deleted_at = brand.deleted_at
+        brand.deleted_at = None
+        await audit_service.log(
+            db,
+            table_name="restaurant_brand",
+            record_id=brand.id,
+            action="update",
+            actor_id=current_user.cognito_sub,
+            actor_role=current_user.role,
+            old_val={"deleted_at": old_deleted_at.isoformat()},
+            new_val={"deleted_at": None},
         )
+        await db.commit()
+    return await _brand_to_out(db, brand, current_user)

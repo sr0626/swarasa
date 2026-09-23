@@ -82,10 +82,18 @@ Referenced by: `restaurant_brand.owner_id`, `location_manager.assigned_by_owner_
 | website | varchar(500), nullable | Added in `20260917_0005_restaurant_brand_website.py` -- see judgment call below |
 | is_claimed | boolean default false, not null | See DECISIONS.md "Claim flow" |
 | claimed_at | timestamptz, nullable | Set when claim is approved |
+| deleted_at | timestamptz, nullable | Added in `20260923_0011_brand_deleted_at.py`. Soft-delete marker: `NULL` = live; non-`NULL` = the admin deleted the listing (`DELETE /restaurants/{id}`, which also sets every `active` location to `owner_deactivated` in the same transaction). Row kept, slug stays reserved; every public/owner/manager read path filters on `deleted_at IS NULL`. Cleared by `POST /restaurants/{id}/restore`. |
 | created_at | timestamptz, not null | |
 | updated_at | timestamptz, not null | |
 
 Indexes: `owner_id`.
+
+**Judgment call:** soft delete is a nullable `deleted_at` timestamp rather
+than a status column or boolean: `restaurant_brand` has no status column
+(status lives on `restaurant_location`), and the timestamp also records
+*when* at no extra cost — same shape as `claimed_at`. No partial index yet:
+the table is small (hundreds of brands) and every filter is
+`deleted_at IS NULL` on top of an indexed access path.
 
 **Judgment call:** `website` is on `restaurant_brand`, not
 `restaurant_location`, added alongside the CSV bulk-import feature
