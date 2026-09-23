@@ -22,7 +22,7 @@ from app.schemas.restaurant import (
     RestaurantOut,
     RestaurantUpdate,
 )
-from app.services import audit_service, auth_service, cuisine_service
+from app.services import audit_service, auth_service, cuisine_service, follow_service
 
 
 def slugify(name: str) -> str:
@@ -41,7 +41,34 @@ async def _unique_slug(db: AsyncSession, base_slug: str) -> str:
         suffix += 1
 
 
-async def _brand_to_out(db: AsyncSession, brand: RestaurantBrand) -> RestaurantOut:
+def _caller_may_view_follower_count(brand: RestaurantBrand, current_user) -> bool:
+    """Dashboard-only stat, never public (task: "in their dashboard for
+    their restaurants only" — see RestaurantOut.follower_count's own
+    docstring). `current_user` is `None` for the public
+    `GET /restaurants/{id}` route (that endpoint has no auth dependency
+    at all — see `get_restaurant` below), so this always returns `False`
+    for that path regardless of who's asking, same caller-aware-gating
+    shape as `location_service._caller_may_view_hidden_location`/
+    `_caller_may_see_inactive_locations`.
+
+    Every OTHER call site that passes a real `current_user` here
+    (`list_restaurants`, `create_restaurant`, `update_restaurant`) has
+    already proven, upstream, that the caller is an admin or the owner of
+    THIS exact brand before `_brand_to_out` is ever called for that row —
+    `list_restaurants` hard-filters its query to the caller's own
+    `owner_id` (or an admin's explicit filter), and `create_restaurant`/
+    `update_restaurant` only run after `require_owner`/
+    `require_brand_write_access` has already verified ownership of this
+    brand specifically. So this check is a second, defense-in-depth gate
+    on role, not a fresh ownership re-check — kept here rather than
+    silently trusting every caller who passes a non-None `current_user`.
+    """
+    if current_user is None:
+        return False
+    return current_user.role in ("owner", "admin")
+
+
+async def _brand_to_out(db: AsyncSession, brand: RestaurantBrand, current_user=None) -> RestaurantOut:
     tags = await cuisine_service.get_brand_cuisine_tags(db, brand.id)
     count_result = await db.execute(
         select(func.count())
@@ -55,6 +82,11 @@ async def _brand_to_out(db: AsyncSession, brand: RestaurantBrand) -> RestaurantO
         .limit(1)
     )
     has_pending_claim = pending_result.scalar_one_or_none() is not None
+
+    follower_count = None
+    if _caller_may_view_follower_count(brand, current_user):
+        follower_count = await follow_service.count_followers_for_brand(db, brand.id)
+
     return RestaurantOut(
         id=brand.id,
         name=brand.name,
@@ -66,6 +98,7 @@ async def _brand_to_out(db: AsyncSession, brand: RestaurantBrand) -> RestaurantO
         owner_id=brand.owner_id,
         cuisine_tags=[CuisineTagOut.model_validate(t) for t in tags],
         location_count=location_count,
+        follower_count=follower_count,
     )
 
 
@@ -73,6 +106,13 @@ async def get_restaurant(db: AsyncSession, id_or_slug: str) -> RestaurantOut:
     """`id_or_slug` resolves either the numeric `restaurant_brand.id` or its
     `slug` (docs/API_CONTRACTS.md "GET /restaurants/{id}"): all-digits ->
     id lookup, otherwise -> slug lookup.
+
+    Public — no `current_user` here, by design (the router has no auth
+    dependency at all for this route). `_brand_to_out`'s `follower_count`
+    therefore always comes back `null`: this endpoint must never leak a
+    brand's follower count to the public, including to the owner
+    themselves browsing their own public page or a different owner
+    probing another brand's id/slug (see `_caller_may_view_follower_count`).
     """
     if id_or_slug.isdigit():
         brand = await db.get(RestaurantBrand, int(id_or_slug))
@@ -130,7 +170,7 @@ async def list_restaurants(
         )
     ).scalars().all()
 
-    results = [await _brand_to_out(db, row) for row in rows]
+    results = [await _brand_to_out(db, row, current_user) for row in rows]
 
     return RestaurantListResponse(
         results=results, page=pagination.page, page_size=pagination.page_size, total=total
@@ -176,7 +216,11 @@ async def create_restaurant(db: AsyncSession, body: RestaurantCreate, current_us
         await db.rollback()
         raise AppError(409, "A restaurant with a conflicting slug already exists", "slug_conflict")
 
-    return await _brand_to_out(db, brand)
+    # `current_user` passed through — they're the owner who just created
+    # this brand (require_owner), so they're always entitled to see its
+    # follower_count (0, for a brand-new brand) same as the owner-scoped
+    # list. See `_caller_may_view_follower_count`.
+    return await _brand_to_out(db, brand, current_user)
 
 
 async def update_restaurant(
@@ -208,7 +252,10 @@ async def update_restaurant(
         new_val=new_val,
     )
     await db.commit()
-    return await _brand_to_out(db, brand)
+    # `current_user` passed through — `require_brand_write_access` already
+    # verified they own this exact brand (or are admin), same reasoning as
+    # `create_restaurant` above.
+    return await _brand_to_out(db, brand, current_user)
 
 
 async def delete_restaurant(db: AsyncSession, brand_id: int, current_user) -> None:

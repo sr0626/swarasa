@@ -23,6 +23,18 @@ export interface RestaurantBrand {
   owner_id: number | null;
   cuisine_tags: CuisineTag[];
   location_count: number;
+  /**
+   * Dashboard-only stat, never public (backend/app/schemas/restaurant.py
+   * RestaurantOut.follower_count). `null` on the public
+   * `GET /restaurants/{id}` response (used by `getRestaurantById`/
+   * `getRestaurantBySlug` below) — only populated (a real count, 0
+   * included) on the owner/admin-scoped `GET /restaurants` list
+   * (`getMyRestaurants`). Components rendering this on a public page
+   * must not surface it even if present; it's kept on the shared type
+   * rather than split into two response shapes since every other field
+   * already is shared (see `RestaurantOut`'s own comment on why).
+   */
+  follower_count: number | null;
 }
 
 /** Body for POST /restaurants. Creates a new brand owned by the caller. */

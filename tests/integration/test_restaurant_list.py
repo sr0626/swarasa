@@ -92,8 +92,17 @@ async def test_admin_omitting_owner_id_returns_all_brands(client, db_session, as
 
 @pytest.mark.asyncio
 async def test_response_shape_matches_get_restaurant_by_id(client, db_session, as_user):
-    """docs/API_CONTRACTS.md: same per-row shape as `GET /restaurants/{id}`,
-    not a summary/list-trimmed variant."""
+    """docs/API_CONTRACTS.md: same per-row shape (same keys) as
+    `GET /restaurants/{id}`, not a summary/list-trimmed variant.
+
+    `follower_count` is the one field deliberately excluded from the
+    otherwise-identical value comparison: it's a dashboard-only stat
+    (docs/API_CONTRACTS.md "GET /restaurants" / "GET /restaurants/{id}")
+    that's populated on the owner-scoped list but always `null` on the
+    public single-restaurant response — see
+    `test_follower_count_visibility.py` for the dedicated coverage of that
+    behaviour.
+    """
     owner = await create_owner(db_session)
     brand = await create_brand(db_session, owner_id=owner.id, is_claimed=True, name="Shape Check Brand")
     await db_session.commit()
@@ -108,7 +117,11 @@ async def test_response_shape_matches_get_restaurant_by_id(client, db_session, a
     detail = detail_response.json()
 
     assert set(row.keys()) == set(detail.keys())
-    assert row == detail
+    row_without_follower_count = {k: v for k, v in row.items() if k != "follower_count"}
+    detail_without_follower_count = {k: v for k, v in detail.items() if k != "follower_count"}
+    assert row_without_follower_count == detail_without_follower_count
+    assert row["follower_count"] == 0  # owner-scoped list: dashboard-visible, 0 followers
+    assert detail["follower_count"] is None  # public single-restaurant response: never visible
 
 
 @pytest.mark.asyncio

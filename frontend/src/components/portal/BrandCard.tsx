@@ -11,7 +11,7 @@
 // Server Component — no interactivity here, just links into the location
 // editor (`/portal/locations/{id}`) and the brand's public page.
 import Link from "next/link";
-import { EyeIcon, LocationPinIcon, PencilIcon, StoreIcon } from "@/components/ui/icons";
+import { EyeIcon, HeartIcon, LocationPinIcon, PencilIcon, StoreIcon } from "@/components/ui/icons";
 import { secondaryLinkClass } from "@/components/account/accountShared";
 import LocationStatusChip from "@/components/console/LocationStatusChip";
 import LocationTierBadge from "@/components/portal/LocationTierBadge";
@@ -40,6 +40,15 @@ export default function BrandCard({
             <h3 className="font-display text-lg font-bold text-brand-ink">{brand.name}</h3>
             {brand.description && (
               <p className="mt-0.5 max-w-lg text-sm text-brand-ink-muted">{brand.description}</p>
+            )}
+            {/* Dashboard-only stat (backend RestaurantOut.follower_count) —
+                never shown on the public /restaurant/[slug] page or search
+                tiles, only here on the owner's own /account business page. */}
+            {brand.follower_count !== null && (
+              <p className="mt-1.5 flex items-center gap-1.5 text-xs text-brand-ink-subtle">
+                <HeartIcon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                {brand.follower_count} follower{brand.follower_count === 1 ? "" : "s"}
+              </p>
             )}
             {brand.cuisine_tags.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-1.5">
