@@ -16,6 +16,7 @@
 // here would just be noise.
 import DefaultRestaurantImage from "@/components/ui/DefaultRestaurantImage";
 import FollowButton from "@/components/ui/FollowButton";
+import { HeartIcon } from "@/components/ui/icons";
 import RestaurantPhotoCarousel, {
   type CarouselPhoto,
 } from "@/components/restaurant/RestaurantPhotoCarousel";
@@ -97,6 +98,20 @@ interface RestaurantHeroProps {
   /** This page's own path (e.g. "/restaurant/spice-garden") — the sign-in
    * return destination for a signed-out follow click. */
   currentPath: string;
+  /**
+   * True when the current viewer can edit this listing (owner of the
+   * brand, an assigned manager, or admin — `canEditListing` in
+   * app/restaurant/[slug]/page.tsx, the same gate that shows
+   * `EditListingBar`). `showFollowButton` is always false for this viewer
+   * (root CLAUDE.md's permission model has no follow use case for
+   * owner/manager/admin — see `showFollowButton`'s own doc comment above),
+   * so instead of nothing they get a non-interactive preview of the follow
+   * icon in its signed-in-diner appearance, labeled as such: an annotation
+   * showing them what a real diner sees, not a working control (the
+   * backend restricts follow to `registered_user` regardless of anything
+   * this page renders).
+   */
+  ownerPreview: boolean;
 }
 
 /** Cover first, then gallery in display order; a cover that is also a
@@ -120,6 +135,7 @@ export default function RestaurantHero({
   isRegisteredUser,
   isFollowed,
   currentPath,
+  ownerPreview,
 }: RestaurantHeroProps) {
   const photos = collectPhotos(restaurant.name, location);
 
@@ -157,6 +173,29 @@ export default function RestaurantHero({
               currentPath={currentPath}
               wrapperClassName="mt-1 shrink-0"
             />
+          )}
+          {/* Owner/manager/admin preview of the follow icon -- see
+              `ownerPreview` doc comment above. Mutually exclusive with
+              `showFollowButton` in practice (a viewer who can edit this
+              listing is never a registered_user or signed-out visitor), but
+              guarded explicitly anyway so this never doubles up if that
+              ever changes. Not a <button>: no onClick, no aria-pressed, and
+              `aria-hidden` on the icon itself -- the adjacent label text is
+              the only thing a screen reader announces here, so it reads as
+              descriptive copy, never as a broken control. */}
+          {!showFollowButton && ownerPreview && (
+            <span className="mt-1 flex shrink-0 flex-wrap items-center gap-2">
+              <span
+                aria-hidden="true"
+                title="Diners see a follow button here"
+                className="flex h-11 w-11 shrink-0 cursor-default items-center justify-center rounded-full bg-white/90 text-brand-ink-subtle opacity-70 shadow-brand-card backdrop-blur-sm"
+              >
+                <HeartIcon className="h-5 w-5" />
+              </span>
+              <span className="rounded-brand-pill bg-brand-chip px-2.5 py-1 text-xs font-medium text-brand-chip-ink">
+                Diners see a follow button here
+              </span>
+            </span>
           )}
         </div>
 
