@@ -560,6 +560,11 @@ git push -u origin fix/alembic-merge-0009-heads   # claude
 git push -u origin feature/deals-engine-frontend   # claude
 git push -u origin docs/brd-v38-current-functionality   # claude
 git push -u origin docs/wave5-tracker-status-cmdlog   # claude
+git push -u origin feat/admin-owners-report   # claude
+git push -u origin feat/soft-delete-listing   # claude
+git push -u origin feat/lock-display-name   # claude
+git push -u origin feat/user-activity-tracking   # claude
+git push -u origin docs/wave6-tracker-status-cmdlog   # claude
 aws sso login --profile swarasa-dev   # user  (expired session, x2)
 aws sts get-caller-identity --profile swarasa-dev   # user  (first run in the wrong account 044336301301, no effect; then the correct account 091823298313)
 aws ecr describe-images --repository-name swarasa-api-dev --profile swarasa-dev --region us-east-1 --query 'sort_by(imageDetails,&imagePushedAt)[-1].{tag:imageTags,pushedAt:imagePushedAt}'   # user
@@ -572,4 +577,5 @@ aws logs tail /aws/lambda/swarasa-deal-expiry-dev --profile swarasa-dev --region
 aws lambda invoke --function-name swarasa-api-dev --payload '{"_management_command": "alembic_upgrade"}' --profile swarasa-dev --region us-east-1 ...   # user  (x3; first failed 'Multiple head revisions' before #190 deployed, then applied 0009_deal + 0009_user_profile_last_seen_at + 0010, then no-op; order of the deal-expiry/alembic invokes above is approximate)
 python3 scripts/create_test_users.py   # user
 python3 scripts/list_users.py   # user
+aws lambda invoke --function-name swarasa-api-dev --payload '{"_management_command": "alembic_upgrade"}' --profile swarasa-dev --region us-east-1 ...   # user  (x2 more: after the #193 deploy applying 0011_brand_deleted_at, after the #194 deploy applying 0012_user_activity_event)
 ```
