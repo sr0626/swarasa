@@ -116,7 +116,7 @@ re-verifying it was actually correct.
     CLAUDE.md             ← QA agent instructions
   /docs
     AGENT_DESIGN.md       ← agent architecture document
-    BRD_v37_Restaurant_Platform.docx          ← business requirements
+    BRD_v38_Restaurant_Platform.docx          ← business requirements
 ```
 
 ## Key Domain Concepts (read before writing any code)

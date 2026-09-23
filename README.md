@@ -133,7 +133,7 @@ swarasa/
     API_CONTRACTS.md          ← endpoint specs (created by architect agent)
     DATA_MODEL.md             ← ERD + entity descriptions (created by architect agent)
     ENVIRONMENTS.md           ← AWS resource names per env (created after tf apply)
-    BRD_v37_Restaurant_Platform.docx              ← business requirements document
+    BRD_v38_Restaurant_Platform.docx              ← business requirements document
 ```
 
 ---
