@@ -162,8 +162,10 @@ export default function TermsPage() {
             <p>
               Account details (name, email, role), restaurant listing
               content submitted by owners/managers, and usage data needed to
-              operate search, claims, and (for registered users) follows and
-              deal alerts. [Placeholder &mdash; final data inventory pending
+              operate search, claims, and (for registered users) follows,
+              deal alerts, and the searches and restaurant tiles they click
+              while signed in (kept for 12 months, included in data
+              exports, and removed on an approved deletion request). [Placeholder &mdash; final data inventory pending
               legal review.]
             </p>
           </Section>

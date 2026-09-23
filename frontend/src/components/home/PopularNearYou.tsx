@@ -62,6 +62,7 @@ export default async function PopularNearYou() {
           isRegisteredUser={followState.isRegisteredUser}
           isFollowed={followState.followedBrandIds.has(item.brand_id)}
           currentPath="/"
+          clickSource="homepage"
         />
       ))}
     </div>

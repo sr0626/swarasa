@@ -5,6 +5,7 @@
 import { apiFetch, toQueryString } from "./client";
 import type { RegisteredUsersResponse } from "@/types/adminRegisteredUsers";
 import type { PaginationParams } from "@/types/common";
+import type { ActivityEventType, UserActivityResponse } from "@/types/userActivity";
 
 /**
  * GET /admin/registered-users -- auth: admin. Live call, no caching (same
@@ -23,6 +24,30 @@ export async function getRegisteredUsers(
 
   return apiFetch<RegisteredUsersResponse>(
     `/admin/registered-users${query}`,
+    { method: "GET", cache: "no-store" },
+    { accessToken }
+  );
+}
+
+/**
+ * GET /admin/registered-users/{user_sub}/activity -- auth: admin. One
+ * diner's recorded searches and restaurant-tile clicks, newest first,
+ * within the retention window (docs/API_CONTRACTS.md). Local DB only, no
+ * Cognito call.
+ */
+export async function getRegisteredUserActivity(
+  userSub: string,
+  params: PaginationParams & { event_type?: ActivityEventType } = {},
+  accessToken: string
+): Promise<UserActivityResponse> {
+  const query = toQueryString({
+    page: params.page,
+    page_size: params.page_size,
+    event_type: params.event_type,
+  });
+
+  return apiFetch<UserActivityResponse>(
+    `/admin/registered-users/${encodeURIComponent(userSub)}/activity${query}`,
     { method: "GET", cache: "no-store" },
     { accessToken }
   );

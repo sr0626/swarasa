@@ -664,6 +664,32 @@ photos are, independent of caller role?
 
 ---
 
+## user_activity_event
+
+Added `20260923_0011_user_activity_event.py`. Per-user search and
+restaurant-tile-click history for **registered users only** (user-approved
+2026-09-23 — docs/DECISIONS.md "Registered-user activity tracking (searches +
+tile clicks)"; API: `docs/API_CONTRACTS.md` "Activity tracking (`/activity`)").
+
+| Column | Type | Notes |
+|---|---|---|
+| id | bigint PK | |
+| user_sub | varchar(36), not null | Cognito `sub` — deliberately NOT a foreign key (same "no local identity table" pattern as `user_follow.user_id`) |
+| event_type | varchar(16), not null | `search` \| `tile_click`; validated in the service layer, plain text so a new type needs no migration |
+| payload | jsonb, not null | Size-bounded (see API_CONTRACTS). `search`: `q`, `cuisine`, `dietary`, `type`, `loc`, `has_deals_today`, `result_count`. `tile_click`: `brand_id`, `location_id` (nullable), `source`. Brand/location ids here are NOT foreign keys — an event must survive a later restaurant deletion |
+| created_at | timestamptz, not null, default `now()` | Retention key |
+
+Indexes:
+- `ix_user_activity_event_user_created` on (`user_sub`, `created_at`) — per-user newest-first paging (admin view, CCPA export)
+- `ix_user_activity_event_created` on `created_at` — retention purge
+
+Judgment calls (flagged for review):
+- **Retention: 12 months**, single constant `activity_service.ACTIVITY_RETENTION_DAYS`. Enforced on the read side (window filter) and physically by an opportunistic, throttled, table-wide purge after writes — no scheduler/infra.
+- **No `audit_log` entry**: behavioural log, not a business record; same treatment as `user_profile.last_seen_at`.
+- **CCPA:** exported (within window) and hard-deleted (all rows for the sub) by an approved deletion request. `scripts/delete_user_data.py` (dev utility) also clears it.
+
+---
+
 ## Open items not covered by this schema (flagged, not silently assumed)
 
 - **Gallery photo storage — CLOSED (follow-up migration `0002`).**

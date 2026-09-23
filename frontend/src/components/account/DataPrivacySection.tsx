@@ -117,7 +117,9 @@ export default function DataPrivacySection({
         <h3 className="text-sm font-semibold text-brand-ink">Download my data</h3>
         <p className="mt-1 text-sm text-brand-ink-muted">
           Get a JSON file of everything tied to your account — profile, follows, manager
-          assignments, claims, and your own recent activity.
+          assignments, claims, and your own recent activity. Registered users
+          also get the searches they ran and the restaurants they clicked while signed in (kept for 12
+          months).
         </p>
         <button
           type="button"

@@ -60,10 +60,21 @@ Query params:
 | q | string, optional, max 100 | Free-text search: case-insensitive substring match on the restaurant (brand) **name**, or a cuisine tag whose name/display name **exactly** equals the text (case-insensitive; never a tag substring, to keep results precise). **Added 2026-09-19** (user request: search should match restaurant names). When `q` is present the radius and coordinates are NOT required -- a name search finds the restaurant wherever it is, including locations that failed geocoding; those come back with `nearest_location.distance_mi: null` and sort after located results. Still combinable with `cuisine[]`/`dietary[]`/`type[]` (AND). |
 | page | int, optional, default 1 | |
 | page_size | int, optional, default 20, max 100 | |
+| loc | string, optional | **Added 2026-09-23** (activity tracking). The location text the user typed (city/ZIP), used ONLY for a signed-in `registered_user`'s search-history entry (clipped to 100 chars there); never affects results (`lat`/`lng` do). Deliberately no `max_length` — an over-long value is truncated when recorded rather than turning a public search into a 422. |
 | has_deals_today | bool, optional | **Added 2026-09-23** (deals engine). When `true`, only brands with **at least one candidate location** (within the current radius/cuisine/dietary/type/q filter set — not just the nearest one shown on the card) that has an active deal matching today are returned. See `docs/DECISIONS.md` "Deals: public boolean signal, gated content". |
 
 Note: `open_now` is deliberately **not** a query param here — deferred
 to Phase 3 (DECISIONS.md "Restaurant hours").
+
+**Auth / activity recording (added 2026-09-23):** the endpoint stays public
+and its response never depends on the caller. If a valid bearer token for a
+`registered_user` is presented, the search is additionally recorded in that
+user's activity history (see "Activity tracking (`/activity`)" below) —
+**page 1 only**, and only when the search carried at least one criterion
+(`q`, a tag filter, `loc` or `has_deals_today`). Anonymous, owner, manager
+and admin callers record nothing. An invalid/expired token is treated as
+anonymous (never a 401 here), and any failure while recording is swallowed:
+recording can never fail or change the search response.
 
 Response:
 ```json
@@ -2034,6 +2045,60 @@ summary, just a slightly less specific one.
 
 ---
 
+## Activity tracking (`/activity`)
+
+Registered-user activity history: the searches a signed-in `registered_user`
+runs and the restaurant tiles they click. **User-approved 2026-09-23**
+(docs/DECISIONS.md "Registered-user activity tracking (searches + tile
+clicks)"). Rules:
+
+- **Registered users only.** Nothing is ever recorded for anonymous
+  visitors, owners, managers or admins.
+- **Bounded.** Search query 100 chars; location text 100 chars; at most 10
+  tags per filter facet, 50 chars each; control characters stripped and
+  whitespace collapsed. `source` is a closed enum.
+- **Best-effort.** Recording is wrapped so it can never fail or slow the
+  user-facing request (same pattern as `user_profile.last_seen_at`).
+- **12-month retention** (`activity_service.ACTIVITY_RETENTION_DAYS`, the
+  single source of truth). Reads (admin view, CCPA export) only ever return
+  events inside the window; expired rows are physically purged
+  opportunistically after writes (throttled to once per hour per Lambda
+  container, table-wide, small batches) — no new AWS resource/schedule.
+- **Privacy rights.** Included in `GET /auth/me/data-export`
+  (`activity_events`) and hard-deleted by an approved data-deletion request.
+
+Searches are recorded server-side inside `GET /search` (see that section).
+Tile clicks use the endpoint below.
+
+### POST /activity/tile-click
+
+Auth: `registered_user` only (`401` unauthenticated, `403` any other role)
+
+Body:
+```json
+{ "brand_id": 123, "location_id": 456, "source": "search_results" }
+```
+| Field | Type | Notes |
+|---|---|---|
+| brand_id | int, required | Must exist |
+| location_id | int, optional/null | When present must belong to `brand_id`. The favourites grid is brand-level and sends `null` |
+| source | enum, required | `search_results` \| `homepage` \| `favourites` |
+
+Response: `204` no body. Fire-and-forget from the client (the frontend sends
+a `navigator.sendBeacon` to a same-origin relay route, which forwards here
+with the session token). `204` is returned even if the write itself failed
+best-effort — the caller can do nothing useful about it.
+
+Errors:
+| Status | Code | When |
+|---|---|---|
+| 401 | `unauthorized` | no/invalid token |
+| 403 | `forbidden` | caller is not a `registered_user` |
+| 404 | `not_found` | unknown `brand_id`, or `location_id` unknown / not this brand's |
+| 422 | `validation_error` | malformed body or unknown `source` |
+
+---
+
 ## Privacy (CCPA data export / deletion)
 
 Closes the tracked Phase 1 gap in `docs/PROJECT_PLAN.csv` ("CCPA data
@@ -2090,6 +2155,10 @@ Response: `200`
   "listing_reports": [
     { "report_id": 44, "brand_id": 123, "location_id": 42, "category": "hours_incorrect", "details": "Closed Mondays now.", "reporter_email": "owner@example.com", "status": "new", "submitted_at": "2026-09-18T10:00:00Z", "reviewed_at": null }
   ],
+  "activity_events": [
+    { "event_type": "search", "created_at": "2026-09-20T18:00:00Z", "payload": { "q": "biryani", "cuisine": ["hyderabadi"], "loc": "Irving, TX", "result_count": 7 } },
+    { "event_type": "tile_click", "created_at": "2026-09-20T18:01:00Z", "payload": { "brand_id": 123, "location_id": 42, "source": "search_results" } }
+  ],
   "audit_log_entries": [
     { "table_name": "restaurant_brand", "record_id": 123, "action": "update", "actor_role": "owner", "created_at": "2026-09-10T10:00:00Z" }
   ],
@@ -2102,7 +2171,10 @@ problem" submissions matched by `reporter_user_id` (the caller's Cognito
 `sub`, set only when they were signed in when they submitted it) —
 **not** by `reporter_email`, since that field is free text any submitter
 (including an anonymous one) can type and is not a reliable identity
-match. `audit_log_entries` covers actions the caller themselves performed
+match. `activity_events` (added 2026-09-23) is the caller's recorded searches and
+restaurant-tile clicks (`user_activity_event`, matched by `user_sub`), newest
+first, **within the 12-month retention window only** — `[]` for every role
+other than `registered_user`. `audit_log_entries` covers actions the caller themselves performed
 (`actor_id` match) — included for transparency, but per `notice` and
 DECISIONS.md, these are NOT touched by a data-deletion request.
 
@@ -2127,7 +2199,7 @@ Response: `201`
   "status": "pending_review",
   "requester_role": "registered_user",
   "reason": "no longer using the app",
-  "data_scope": { "owner_account": 0, "location_manager_assignments": 0, "follows": 3, "claim_requests": 0, "claim_requests_pending": 0, "listing_reports": 0, "audit_log_entries": 0 },
+  "data_scope": { "owner_account": 0, "location_manager_assignments": 0, "follows": 3, "claim_requests": 0, "claim_requests_pending": 0, "listing_reports": 0, "activity_events": 0, "audit_log_entries": 0 },
   "submitted_at": "2026-09-16T10:00:00Z",
   "reviewed_at": null,
   "reviewer_notes": null,
@@ -2176,6 +2248,10 @@ deleted), `claim_request` (redacted only), or `listing_report` (only
 `reporter_email` nulled out — `reporter_user_id` and the report's own
 content are left in place, same "attribution trail, not an access grant"
 reasoning `audit_log.actor_id` gets), none of which is on that list.
+`user_activity_event` rows (recorded searches/tile clicks) are
+**hard-deleted** — every row for the sub, including any past-retention rows
+not yet physically purged — with no `audit_log` entry (pure behavioural data,
+same treatment as `user_follow`).
 
 Response: `200`, updated request shape (`status: "completed"`).
 
@@ -2428,6 +2504,58 @@ Errors:
 |---|---|---|
 | 403 | `forbidden` | caller is not admin |
 | 422 | — | `page`/`page_size` out of range, or unknown `sort` |
+
+### GET /admin/registered-users/{user_sub}/activity
+
+Auth: admin only (`401` unauthenticated, `403` otherwise). One diner's
+recorded searches and restaurant-tile clicks (`user_activity_event`), newest
+first (`created_at` desc, `id` desc), **within the 12-month retention window
+only**. Backs the per-user activity view linked from each row of the
+Registered users report (`/admin/registered-users/{user_sub}`). Local DB only
+— no Cognito call, so it is fast; it does not verify `user_sub` is a real
+diner (an unknown sub simply has no events). Brand/location names are
+resolved with two batched queries for the page (no N+1).
+
+Query params:
+| Param | Type | Notes |
+|---|---|---|
+| event_type | `search` \| `tile_click`, optional | Filter; anything else is `422` |
+| page | int, optional, default 1 | |
+| page_size | int, optional, default 20, max 100 | |
+
+Response: `200`
+```json
+{
+  "results": [
+    {
+      "id": 901,
+      "event_type": "tile_click",
+      "created_at": "2026-09-20T18:01:00Z",
+      "payload": { "brand_id": 123, "location_id": 42, "source": "search_results" },
+      "brand_name": "Spice Route",
+      "location_label": "4900 W Park Blvd, Plano"
+    },
+    {
+      "id": 900,
+      "event_type": "search",
+      "created_at": "2026-09-20T18:00:00Z",
+      "payload": { "q": "biryani", "cuisine": ["hyderabadi"], "loc": "Irving, TX", "result_count": 7 },
+      "brand_name": null,
+      "location_label": null
+    }
+  ],
+  "page": 1,
+  "page_size": 20,
+  "total": 2,
+  "retention_days": 365
+}
+```
+`payload` keys for `search`: `q`, `cuisine`, `dietary`, `type`, `loc`,
+`has_deals_today`, `result_count` (each omitted when empty). For
+`tile_click`: `brand_id`, `location_id` (nullable), `source`. `brand_name` /
+`location_label` are set for `tile_click` only and are `null` when the
+restaurant/location has since been removed (the frontend shows "Removed
+restaurant").
 
 ### GET /admin/overview
 

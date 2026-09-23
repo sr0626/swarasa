@@ -53,6 +53,18 @@ export interface ListingReportExport {
   reviewed_at: string | null;
 }
 
+/**
+ * A search or restaurant-tile click recorded while signed in as a
+ * registered user (12-month retention; hard-deleted by a deletion request).
+ * `payload` is exactly what was stored — kept loose since it differs by
+ * `event_type` and is only ever shown in the raw JSON export.
+ */
+export interface ActivityEventExport {
+  event_type: string;
+  created_at: string;
+  payload: Record<string, unknown>;
+}
+
 /** Actions the caller themselves performed — retained, never touched by a deletion request. */
 export interface AuditLogExport {
   table_name: string;
@@ -73,6 +85,7 @@ export interface DataExport {
   follows: FollowExport[];
   claim_requests: ClaimRequestExport[];
   listing_reports: ListingReportExport[];
+  activity_events: ActivityEventExport[];
   audit_log_entries: AuditLogExport[];
   notice: string;
 }

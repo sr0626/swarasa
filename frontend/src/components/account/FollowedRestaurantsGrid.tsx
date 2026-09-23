@@ -8,6 +8,7 @@
 // (components/ui/DefaultRestaurantImage) — same treatment as an un-photographed
 // RestaurantCard. Add the real photo here once the follows contract exposes one.
 import Link from "next/link";
+import TrackedTileLink from "@/components/listing/TrackedTileLink";
 import DefaultRestaurantImage from "@/components/ui/DefaultRestaurantImage";
 import { SearchIcon } from "@/components/ui/icons";
 import { cardClass, primaryLinkClass } from "@/components/account/accountShared";
@@ -73,8 +74,12 @@ export default function FollowedRestaurantsGrid({
         <ul className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {follows.map((follow) => (
             <li key={follow.brand_id}>
-              <Link
+              {/* The favourites grid only ever renders for a registered user
+                  (its own "Restaurants you follow" section), so every tile
+                  click is tracked; the route handler/backend re-check role. */}
+              <TrackedTileLink
                 href={`/restaurant/${follow.slug}`}
+                track={{ brand_id: follow.brand_id, location_id: null, source: "favourites" }}
                 className="group flex h-full flex-col overflow-hidden rounded-brand-card border border-brand-border bg-white shadow-brand-card transition hover:shadow-brand-card-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent"
               >
                 <div className="relative h-32 w-full shrink-0 overflow-hidden bg-brand-warm-gradient">
@@ -93,7 +98,7 @@ export default function FollowedRestaurantsGrid({
                     </span>
                   )}
                 </div>
-              </Link>
+              </TrackedTileLink>
             </li>
           ))}
         </ul>
