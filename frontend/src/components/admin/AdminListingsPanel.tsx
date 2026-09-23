@@ -1,10 +1,18 @@
 "use client";
 
-// Admin listings management UI. Renders the brands (+ their already
-// SSR-loaded locations) the page passed in, and drives the two real
-// moderation actions (`deleteRestaurantAction`, `deactivateLocationAction`
-// in `actions.ts`) against docs/API_CONTRACTS.md's actual
-// `DELETE /restaurants/{id}` and `DELETE /locations/{id}` endpoints.
+// Admin listings management UI. Owns the whole "find + moderate a
+// listing" experience: the filter bar (GET form, URL-driven — see
+// docs/API_CONTRACTS.md "GET /restaurants" filters), the active-filter
+// chip row, the brand list (+ already SSR-loaded locations), pagination,
+// and the two real moderation actions (`deleteRestaurantAction`,
+// `deactivateLocationAction` in `actions.ts`) against
+// `DELETE /restaurants/{id}` and `DELETE /locations/{id}`.
+//
+// Filtering/pagination is server-driven, same pattern as `/search`: the
+// filter form is a plain `<form method="get">` and pagination/active-filter
+// links are plain hrefs — no client-side re-filtering of `initialBrands`,
+// every filter change is a real navigation that re-runs
+// `admin/listings/page.tsx`'s SSR fetch against the new query string.
 //
 // Locations are not lazily fetched here — the page Server Component
 // already loaded each brand's locations (same N+1-but-bounded-by-page-size
@@ -18,7 +26,7 @@ import {
 } from "@/app/admin/listings/actions";
 import OpenStatusBadge from "@/components/ui/OpenStatusBadge";
 import { PencilIcon, TrashIcon } from "@/components/ui/icons";
-import type { LocationSummary } from "@/types/location";
+import type { LocationStatus, LocationSummary } from "@/types/location";
 import type { RestaurantBrand } from "@/types/restaurant";
 
 export interface BrandWithLocations {
@@ -27,13 +35,86 @@ export interface BrandWithLocations {
   locationsError: string | null;
 }
 
+/** Parsed, URL-derived filter state — see `admin/listings/page.tsx`'s
+ * `searchParams` parsing. `undefined` means "no filter" for every field
+ * (never an empty string), so `Object.entries` + `!== undefined` is a
+ * reliable "is this filter active" check throughout this file. */
+export interface AdminListingsFilters {
+  ownerEmail?: string;
+  name?: string;
+  status?: LocationStatus;
+  isPaid?: boolean;
+  city?: string;
+  isClaimed?: boolean;
+}
+
+const STATUS_OPTIONS: ReadonlyArray<{ value: LocationStatus; label: string }> = [
+  { value: "active", label: "Active" },
+  { value: "owner_deactivated", label: "Hidden — owner deactivated" },
+  { value: "coming_soon", label: "Coming soon" },
+  { value: "closed_pending_reopen", label: "Closed — pending reopen" },
+];
+
+const STATUS_LABELS: Record<LocationStatus, string> = {
+  active: "Active",
+  owner_deactivated: "Hidden — owner deactivated",
+  coming_soon: "Coming soon",
+  closed_pending_reopen: "Closed — pending reopen",
+};
+
+/** Builds `/admin/listings?...` for the given filters + page, omitting
+ * every unset filter and `page` when it's the default (1) — same
+ * "no query string for the default state" convention as the old
+ * `owner_id`-only `PageLink` this replaces. */
+function buildListingsHref(filters: AdminListingsFilters, page: number): string {
+  const params = new URLSearchParams();
+  if (filters.ownerEmail) params.set("owner_email", filters.ownerEmail);
+  if (filters.name) params.set("name", filters.name);
+  if (filters.status) params.set("status", filters.status);
+  if (filters.isPaid !== undefined) params.set("is_paid", String(filters.isPaid));
+  if (filters.city) params.set("city", filters.city);
+  if (filters.isClaimed !== undefined) params.set("is_claimed", String(filters.isClaimed));
+  if (page > 1) params.set("page", String(page));
+  const qs = params.toString();
+  return qs ? `/admin/listings?${qs}` : "/admin/listings";
+}
+
+interface ActiveFilterChip {
+  key: keyof AdminListingsFilters;
+  label: string;
+}
+
+function activeFilterChips(filters: AdminListingsFilters): ActiveFilterChip[] {
+  const chips: ActiveFilterChip[] = [];
+  if (filters.ownerEmail) chips.push({ key: "ownerEmail", label: `Owner: ${filters.ownerEmail}` });
+  if (filters.name) chips.push({ key: "name", label: `Name: ${filters.name}` });
+  if (filters.status) chips.push({ key: "status", label: `Status: ${STATUS_LABELS[filters.status]}` });
+  if (filters.isPaid !== undefined) {
+    chips.push({ key: "isPaid", label: filters.isPaid ? "Paid" : "Free" });
+  }
+  if (filters.city) chips.push({ key: "city", label: `City: ${filters.city}` });
+  if (filters.isClaimed !== undefined) {
+    chips.push({ key: "isClaimed", label: filters.isClaimed ? "Claimed" : "Unclaimed" });
+  }
+  return chips;
+}
+
 export default function AdminListingsPanel({
   initialBrands,
+  filters,
+  total,
+  page,
+  totalPages,
 }: {
   initialBrands: BrandWithLocations[];
+  filters: AdminListingsFilters;
+  total: number;
+  page: number;
+  totalPages: number;
 }) {
   const [brands, setBrands] = useState<BrandWithLocations[]>(initialBrands);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const chips = activeFilterChips(filters);
 
   function toggleExpanded(brandId: number) {
     setExpanded((prev) => {
@@ -65,28 +146,208 @@ export default function AdminListingsPanel({
     );
   }
 
-  if (brands.length === 0) {
-    return (
-      <p className="rounded-brand-card border border-dashed border-brand-border bg-white p-5 text-sm text-brand-ink-muted">
-        No restaurants on this page.
+  return (
+    <div>
+      <form
+        method="get"
+        className="flex flex-wrap items-end gap-3 rounded-brand-card border border-brand-border bg-white p-4"
+      >
+        <div>
+          <label htmlFor="owner_email" className="text-sm font-semibold text-brand-ink">
+            Owner email
+          </label>
+          <input
+            id="owner_email"
+            name="owner_email"
+            type="text"
+            defaultValue={filters.ownerEmail ?? ""}
+            placeholder="owner@example.com"
+            className="mt-2 w-48 rounded-brand-control border border-brand-border bg-white px-3 py-2 text-sm text-brand-ink placeholder:text-brand-placeholder focus:border-brand-accent focus:outline-none"
+          />
+        </div>
+        <div>
+          <label htmlFor="name" className="text-sm font-semibold text-brand-ink">
+            Restaurant name
+          </label>
+          <input
+            id="name"
+            name="name"
+            type="text"
+            defaultValue={filters.name ?? ""}
+            placeholder="e.g. Spice Route"
+            className="mt-2 w-48 rounded-brand-control border border-brand-border bg-white px-3 py-2 text-sm text-brand-ink placeholder:text-brand-placeholder focus:border-brand-accent focus:outline-none"
+          />
+        </div>
+        <div>
+          <label htmlFor="city" className="text-sm font-semibold text-brand-ink">
+            City
+          </label>
+          <input
+            id="city"
+            name="city"
+            type="text"
+            defaultValue={filters.city ?? ""}
+            placeholder="e.g. Plano"
+            className="mt-2 w-36 rounded-brand-control border border-brand-border bg-white px-3 py-2 text-sm text-brand-ink placeholder:text-brand-placeholder focus:border-brand-accent focus:outline-none"
+          />
+        </div>
+        <div>
+          <label htmlFor="status" className="text-sm font-semibold text-brand-ink">
+            Status
+          </label>
+          <select
+            id="status"
+            name="status"
+            defaultValue={filters.status ?? ""}
+            className="mt-2 min-h-[40px] rounded-brand-control border border-brand-border bg-white px-3 text-sm text-brand-ink focus:border-brand-accent focus:outline-none"
+          >
+            <option value="">Any</option>
+            {STATUS_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label htmlFor="is_paid" className="text-sm font-semibold text-brand-ink">
+            Tier
+          </label>
+          <select
+            id="is_paid"
+            name="is_paid"
+            defaultValue={filters.isPaid === undefined ? "" : String(filters.isPaid)}
+            className="mt-2 min-h-[40px] rounded-brand-control border border-brand-border bg-white px-3 text-sm text-brand-ink focus:border-brand-accent focus:outline-none"
+          >
+            <option value="">Any</option>
+            <option value="true">Paid</option>
+            <option value="false">Free</option>
+          </select>
+        </div>
+        <div>
+          <label htmlFor="is_claimed" className="text-sm font-semibold text-brand-ink">
+            Claimed
+          </label>
+          <select
+            id="is_claimed"
+            name="is_claimed"
+            defaultValue={filters.isClaimed === undefined ? "" : String(filters.isClaimed)}
+            className="mt-2 min-h-[40px] rounded-brand-control border border-brand-border bg-white px-3 text-sm text-brand-ink focus:border-brand-accent focus:outline-none"
+          >
+            <option value="">Any</option>
+            <option value="true">Claimed</option>
+            <option value="false">Unclaimed</option>
+          </select>
+        </div>
+        <button
+          type="submit"
+          className="flex min-h-[40px] items-center justify-center rounded-brand-control bg-brand-ink px-4 text-sm font-semibold text-brand-bg transition hover:bg-brand-ink/90"
+        >
+          Apply
+        </button>
+        {chips.length > 0 && (
+          <Link
+            href="/admin/listings"
+            className="flex min-h-[40px] items-center justify-center rounded-brand-control border border-brand-border px-4 text-sm font-semibold text-brand-ink-muted transition hover:bg-brand-chip"
+          >
+            Clear all
+          </Link>
+        )}
+      </form>
+
+      {chips.length > 0 && (
+        <div
+          className="mt-3 flex flex-wrap items-center gap-1.5"
+          aria-label="Active filters"
+          role="group"
+        >
+          {chips.map((chip) => (
+            <Link
+              key={chip.key}
+              href={buildListingsHref({ ...filters, [chip.key]: undefined }, 1)}
+              aria-label={`Remove filter ${chip.label}`}
+              className="flex min-h-[36px] items-center gap-1.5 rounded-brand-pill border border-brand-border bg-white px-3 text-xs font-medium text-brand-ink transition hover:bg-brand-chip"
+            >
+              {chip.label}
+              <span aria-hidden="true" className="text-base leading-none text-brand-ink-subtle">
+                &times;
+              </span>
+            </Link>
+          ))}
+        </div>
+      )}
+
+      <p className="mt-4 text-sm text-brand-ink-subtle">
+        {total} restaurant{total === 1 ? "" : "s"} match{total === 1 ? "es" : ""} these filters.
       </p>
+
+      <div className="mt-3">
+        {brands.length === 0 ? (
+          <p className="rounded-brand-card border border-dashed border-brand-border bg-white p-5 text-sm text-brand-ink-muted">
+            No restaurants match these filters.
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-4">
+            {brands.map((entry) => (
+              <li key={entry.brand.id}>
+                <BrandRow
+                  entry={entry}
+                  expanded={expanded.has(entry.brand.id)}
+                  onToggleExpanded={() => toggleExpanded(entry.brand.id)}
+                  onDeleted={() => removeBrand(entry.brand.id)}
+                  onLocationDeactivated={(locationId) => removeLocation(entry.brand.id, locationId)}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {totalPages > 1 && (
+        <nav
+          aria-label="Listings pages"
+          className="mt-8 flex items-center justify-center gap-3 text-sm"
+        >
+          <PageLink filters={filters} page={page - 1} disabled={page <= 1}>
+            &larr; Previous
+          </PageLink>
+          <span className="text-brand-ink-subtle">
+            Page {page} of {totalPages}
+          </span>
+          <PageLink filters={filters} page={page + 1} disabled={page >= totalPages}>
+            Next &rarr;
+          </PageLink>
+        </nav>
+      )}
+    </div>
+  );
+}
+
+function PageLink({
+  filters,
+  page,
+  disabled,
+  children,
+}: {
+  filters: AdminListingsFilters;
+  page: number;
+  disabled: boolean;
+  children: React.ReactNode;
+}) {
+  if (disabled) {
+    return (
+      <span className="rounded-brand-control border border-brand-border px-3 py-2 text-brand-ink-subtle/40">
+        {children}
+      </span>
     );
   }
-
   return (
-    <ul className="flex flex-col gap-4">
-      {brands.map((entry) => (
-        <li key={entry.brand.id}>
-          <BrandRow
-            entry={entry}
-            expanded={expanded.has(entry.brand.id)}
-            onToggleExpanded={() => toggleExpanded(entry.brand.id)}
-            onDeleted={() => removeBrand(entry.brand.id)}
-            onLocationDeactivated={(locationId) => removeLocation(entry.brand.id, locationId)}
-          />
-        </li>
-      ))}
-    </ul>
+    <Link
+      href={buildListingsHref(filters, page)}
+      className="rounded-brand-control border border-brand-border px-3 py-2 text-brand-ink-muted transition hover:bg-brand-chip"
+    >
+      {children}
+    </Link>
   );
 }
 

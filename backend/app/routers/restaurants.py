@@ -22,6 +22,7 @@ from app.dependencies.auth import (
 from app.dependencies.db import get_db
 from app.dependencies.pagination import Pagination, pagination_params
 from app.schemas.follow import FollowOut
+from app.schemas.location import LocationStatusValue
 from app.schemas.restaurant import (
     LocationListResponse,
     RestaurantCreate,
@@ -41,6 +42,44 @@ async def list_restaurants(
         description="Admin only — ignored for an owner caller, who is always "
         "filtered to their own owner_id regardless of this param.",
     ),
+    owner_email: str | None = Query(
+        default=None,
+        max_length=255,
+        description="Admin only — same ignored-for-owner-caller rule as "
+        "owner_id. Case-insensitive substring match against the brand "
+        "owner's owner_account.email. A brand with no owner (unclaimed, "
+        "owner_id IS NULL) never matches a non-empty owner_email filter.",
+    ),
+    name: str | None = Query(
+        default=None,
+        max_length=255,
+        description="Admin only. Case-insensitive substring match against "
+        "restaurant_brand.name.",
+    ),
+    location_status: LocationStatusValue | None = Query(
+        default=None,
+        alias="status",
+        description="Admin only. Matches a brand if ANY of its locations "
+        "currently has this restaurant_location.status value.",
+    ),
+    is_paid: bool | None = Query(
+        default=None,
+        description="Admin only. Matches a brand if ANY of its locations "
+        "has this restaurant_location.is_paid value (true = at least one "
+        "paid location, false = at least one free location).",
+    ),
+    city: str | None = Query(
+        default=None,
+        max_length=120,
+        description="Admin only. Case-insensitive exact match against "
+        "restaurant_location.city. Matches a brand if ANY of its "
+        "locations is in that city — a brand can have locations across "
+        "multiple cities.",
+    ),
+    is_claimed: bool | None = Query(
+        default=None,
+        description="Admin only. Matches restaurant_brand.is_claimed exactly.",
+    ),
     pagination: Pagination = Depends(pagination_params),
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(require_owner_or_admin),
@@ -48,8 +87,30 @@ async def list_restaurants(
     """Auth: owner or admin. Owner caller: hard-filtered server-side to
     their own brands, no query param can widen this. Admin caller: the
     optional `owner_id` query param, omitted returns all brands
-    (docs/API_CONTRACTS.md "GET /restaurants")."""
-    return await restaurant_service.list_restaurants(db, current_user, owner_id, pagination)
+    (docs/API_CONTRACTS.md "GET /restaurants").
+
+    `owner_email`/`name`/`status`/`is_paid`/`city`/`is_claimed` (added for
+    the admin listings management page, docs/API_CONTRACTS.md "GET
+    /restaurants" filters) follow the exact same admin-only,
+    silently-ignored-for-an-owner-caller rule as `owner_id` — see
+    `restaurant_service.list_restaurants`. All provided filters combine
+    with AND (docs/API_CONTRACTS.md "GET /search" facet convention —
+    independent filters AND together; there is no OR-within-a-filter case
+    here since every new param here is single-valued, unlike `/search`'s
+    `cuisine[]`/`dietary[]`/`type[]`).
+    """
+    return await restaurant_service.list_restaurants(
+        db,
+        current_user,
+        owner_id,
+        pagination,
+        owner_email=owner_email,
+        name=name,
+        status=location_status,
+        is_paid=is_paid,
+        city=city,
+        is_claimed=is_claimed,
+    )
 
 
 @router.get("/{id_or_slug}", response_model=RestaurantOut)

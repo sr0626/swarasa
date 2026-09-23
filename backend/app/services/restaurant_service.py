@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import AppError
 from app.dependencies.pagination import Pagination
 from app.models.claim_request import ClaimRequest
+from app.models.owner_account import OwnerAccount
 from app.models.restaurant_brand import RestaurantBrand
 from app.models.restaurant_location import RestaurantLocation
 from app.schemas.cuisine import CuisineTagOut
@@ -28,6 +29,14 @@ from app.services import audit_service, auth_service, cuisine_service
 def slugify(name: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", name.strip().lower()).strip("-")
     return slug or "restaurant"
+
+
+def _escape_like(value: str) -> str:
+    """Escapes LIKE wildcards so a user typing `%` or `_` matches
+    literally. Same helper as `search_service._escape_like` — duplicated
+    rather than imported to keep the two services independent (no
+    precedent for a shared text-util module in this codebase yet)."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 async def _unique_slug(db: AsyncSession, base_slug: str) -> str:
@@ -96,6 +105,13 @@ async def list_restaurants(
     current_user,
     owner_id_param: int | None,
     pagination: Pagination,
+    *,
+    owner_email: str | None = None,
+    name: str | None = None,
+    status: str | None = None,
+    is_paid: bool | None = None,
+    city: str | None = None,
+    is_claimed: bool | None = None,
 ) -> RestaurantListResponse:
     """`GET /restaurants` — docs/API_CONTRACTS.md "Owner-scoped restaurant
     list". Auth is owner or admin (`require_owner_or_admin`).
@@ -106,15 +122,70 @@ async def list_restaurants(
     caller's `owner_id_param` reaches the query, no matter what value is
     passed (docs/API_CONTRACTS.md: "No query param can widen this — never
     trust a client-supplied owner filter for a non-admin caller").
+
+    `owner_email`/`name`/`status`/`is_paid`/`city`/`is_claimed` (added for
+    the admin listings management page) follow the exact same
+    admin-only rule: every one of them is silently ignored for a
+    non-admin caller, same as `owner_id_param` above — an owner's list
+    stays exactly "my own brands," never narrowed or widened by a filter
+    param meant for the admin moderation UI. All provided filters combine
+    with AND, matching `search_service`'s "independent facets AND
+    together" convention (docs/API_CONTRACTS.md "GET /search").
     """
     if current_user.role == "admin":
         effective_owner_id = owner_id_param
     else:
         effective_owner_id = current_user.owner_account_id
+        owner_email = name = status = is_paid = city = is_claimed = None
 
     filters = []
     if effective_owner_id is not None:
         filters.append(RestaurantBrand.owner_id == effective_owner_id)
+
+    if owner_email:
+        pattern = "%" + _escape_like(owner_email.strip()) + "%"
+        filters.append(
+            RestaurantBrand.owner_id.in_(
+                select(OwnerAccount.id).where(OwnerAccount.email.ilike(pattern, escape="\\"))
+            )
+        )
+
+    if name:
+        pattern = "%" + _escape_like(name.strip()) + "%"
+        filters.append(RestaurantBrand.name.ilike(pattern, escape="\\"))
+
+    if is_claimed is not None:
+        filters.append(RestaurantBrand.is_claimed == is_claimed)
+
+    # status/is_paid/city all live on restaurant_location, not
+    # restaurant_brand, and a brand can have several locations — each
+    # matches a brand if ANY of its locations satisfies the filter
+    # (documented judgment call, docs/API_CONTRACTS.md "GET /restaurants":
+    # a brand with locations in both Plano and Dallas matches
+    # `city=plano` AND `city=dallas` as two separate requests, same "any
+    # location" rule `is_paid`/`status` use here).
+    if status is not None:
+        filters.append(
+            RestaurantBrand.id.in_(
+                select(RestaurantLocation.brand_id).where(RestaurantLocation.status == status)
+            )
+        )
+
+    if is_paid is not None:
+        filters.append(
+            RestaurantBrand.id.in_(
+                select(RestaurantLocation.brand_id).where(RestaurantLocation.is_paid == is_paid)
+            )
+        )
+
+    if city:
+        filters.append(
+            RestaurantBrand.id.in_(
+                select(RestaurantLocation.brand_id).where(
+                    func.lower(RestaurantLocation.city) == city.strip().lower()
+                )
+            )
+        )
 
     total = (
         await db.execute(select(func.count()).select_from(RestaurantBrand).where(*filters))
