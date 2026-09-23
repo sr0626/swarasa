@@ -101,42 +101,48 @@ async def _expire_deals() -> int:
     from app.models.deal import Deal
     from app.services import audit_service
 
-    session_factory = get_session_factory()
-    now = datetime.now(timezone.utc)
-    expired_count = 0
+    try:
+        session_factory = get_session_factory()
+        now = datetime.now(timezone.utc)
+        expired_count = 0
 
-    async with session_factory() as db:
-        result = await db.execute(
-            select(Deal).where(
-                Deal.is_active == True,  # noqa: E712
-                Deal.end_at.isnot(None),
-                Deal.end_at <= now,
+        async with session_factory() as db:
+            result = await db.execute(
+                select(Deal).where(
+                    Deal.is_active == True,  # noqa: E712
+                    Deal.end_at.isnot(None),
+                    Deal.end_at <= now,
+                )
             )
-        )
-        expired = list(result.scalars().all())
+            expired = list(result.scalars().all())
 
-        for deal in expired:
-            old_val = {"is_active": True}
-            deal.is_active = False
-            await audit_service.log(
-                db,
-                table_name="deal",
-                record_id=deal.id,
-                action="update",
-                actor_id=SYSTEM_ACTOR_ID,
-                actor_role=SYSTEM_ACTOR_ROLE,
-                old_val=old_val,
-                new_val={"is_active": False},
-            )
+            for deal in expired:
+                old_val = {"is_active": True}
+                deal.is_active = False
+                await audit_service.log(
+                    db,
+                    table_name="deal",
+                    record_id=deal.id,
+                    action="update",
+                    actor_id=SYSTEM_ACTOR_ID,
+                    actor_role=SYSTEM_ACTOR_ROLE,
+                    old_val=old_val,
+                    new_val={"is_active": False},
+                )
 
-        await db.commit()
-        expired_count = len(expired)
+            await db.commit()
+            expired_count = len(expired)
 
-    # Same reasoning as app/db/session.py's management-command callers:
-    # each Lambda invocation gets its own asyncio.run() loop below, and a
-    # warm container's cached engine would otherwise be bound to a
-    # previous invocation's now-closed loop.
-    await dispose_engine()
+    finally:
+        # Same reasoning as app/db/session.py's management-command callers:
+        # each Lambda invocation gets its own asyncio.run() loop below, and a
+        # warm container's cached engine would otherwise be bound to a
+        # previous invocation's now-closed loop. In a `finally` (not only on
+        # success) because a failed run that left the engine cached poisoned
+        # every later warm invocation with "attached to a different loop",
+        # masking the original error (seen live 2026-09-23 when the `deal`
+        # table didn't exist yet).
+        await dispose_engine()
     return expired_count
 
 
