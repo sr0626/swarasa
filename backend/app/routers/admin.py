@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 
 from botocore.exceptions import BotoCoreError, ClientError
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
@@ -20,6 +20,7 @@ from app.dependencies.pagination import Pagination, pagination_params
 from app.models.owner_account import OwnerAccount
 from app.schemas.admin_notifications import AdminNotificationsResponse
 from app.schemas.admin_overview import AdminOverviewResponse
+from app.schemas.admin_owners import AdminOwnersResponse, OwnerSort
 from app.schemas.admin_registered_users import RegisteredUsersResponse
 from app.schemas.admin_stats import RegisteredUserCountResponse
 from app.schemas.restaurant_bulk_import import (
@@ -30,6 +31,7 @@ from app.schemas.restaurant_bulk_import import (
 from app.services import cognito_service
 from app.services.admin_notification_service import get_admin_notifications
 from app.services.admin_overview_service import get_admin_overview
+from app.services.admin_owners_service import get_admin_owners
 from app.services.admin_registered_users_service import get_registered_users
 from app.services.restaurant_bulk_import_service import BulkImportError, bulk_import_restaurants
 
@@ -113,6 +115,29 @@ async def registered_users_endpoint(
     except (BotoCoreError, RuntimeError) as exc:
         logger.warning("registered-users: Cognito lookup failed: %s", type(exc).__name__)
         raise AppError(502, "Unable to retrieve registered users", "upstream_error") from exc
+
+
+@router.get("/owners", response_model=AdminOwnersResponse)
+async def admin_owners_endpoint(
+    pagination: Pagination = Depends(pagination_params),
+    q: str | None = Query(
+        default=None,
+        max_length=100,
+        description="Case-insensitive substring match against owner email or full name.",
+    ),
+    sort: OwnerSort = Query(
+        default="newest",
+        description="newest (default) | oldest | most_locations | email",
+    ),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_admin),
+) -> AdminOwnersResponse:
+    """Auth: admin only. Owner directory for the admin "Owners" report:
+    contact info, joined date, brand/location counts (by status), verified
+    locations, follower total and pending claim/reopen requests. Local DB
+    only (no Cognito call); no billing fields. See docs/API_CONTRACTS.md
+    "GET /admin/owners"."""
+    return await get_admin_owners(db, pagination, search=q, sort=sort)
 
 
 @router.get("/overview", response_model=AdminOverviewResponse)

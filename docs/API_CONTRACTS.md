@@ -2351,6 +2351,84 @@ Errors:
 | 403 | `forbidden` | caller is not admin |
 | 502 | `upstream_error` | Cognito `ListUsersInGroup` call failed |
 
+### GET /admin/owners
+
+Auth: admin only. Owner directory for the admin console's "Owners" report
+(`/admin/owners`, linked from the Platform Overview page's "Total owners"
+tile and its own nav item) — the owner-side counterpart of
+`GET /admin/registered-users`. Local database only (`owner_account` plus its
+brands/locations/follows/pending requests): **no Cognito call**, so no 502
+failure mode. **No billing/payment fields** (Stripe/`is_paid` work is
+deferred) — `stripe_customer_id`/`stripe_sub_id` are never returned.
+
+Query params:
+| Param | Type | Notes |
+|---|---|---|
+| page | int, optional, default 1 | |
+| page_size | int, optional, default 20, max 100 | |
+| q | string, optional, max 100 chars | Case-insensitive substring match against `email` OR `full_name`; blank/whitespace ignored; `%`/`_` matched literally |
+| sort | enum, optional, default `newest` | `newest` (`joined_at` desc) · `oldest` · `most_locations` (`location_count` desc, then newest) · `email` (A–Z, case-insensitive). `id` is always the final tiebreaker so pages are stable. Unknown value → `422` |
+
+**JUDGMENT CALLS:**
+- Lists **every** `owner_account`, including owners with zero brands (an admin
+  reviewing sign-ups needs them). The Platform Overview "Total owners" tile
+  counts only owners with >= 1 brand, so this endpoint's `total` can be
+  higher.
+- **CCPA-deleted owners** (`personal_data_deleted_at` set) stay in the list
+  flagged `personal_data_deleted: true`, with `email`/`full_name`/`phone`
+  returned as `null` (the stored value is only a synthetic tombstone). Their
+  brands/locations still exist, so hiding the row would make counts disagree
+  with the Overview page.
+- `location_count`/`by_status` are location-grain (same as the Overview owner
+  table; `by_status` values sum to `location_count`). `brand_count` counts
+  brands with `owner_id` = this owner (unclaimed brands belong to no owner).
+- `follower_count` = total `user_follow` rows across the owner's brands (a
+  diner following two of the owner's brands counts twice). Admin-only stat,
+  same gate as `RestaurantOut.follower_count`.
+- `pending_claim_count` = `claim_request` rows in `pending_review` whose
+  `claimant_user_id` equals the owner's `cognito_sub`;
+  `pending_reopen_request_count` = `location_reopen_request` rows in
+  `pending_review` for locations under the owner's brands.
+- Implemented with one `GROUP BY owner_id` subquery per aggregate, LEFT JOINed
+  onto `owner_account` (no N+1, no cross-aggregate fan-out).
+
+Response: `200`
+```json
+{
+  "results": [
+    {
+      "id": 12,
+      "email": "owner@example.com",
+      "full_name": "Priya Sharma",
+      "phone": "+12145550100",
+      "joined_at": "2026-09-01T10:00:00Z",
+      "personal_data_deleted": false,
+      "brand_count": 2,
+      "location_count": 3,
+      "by_status": {
+        "active": 2,
+        "owner_deactivated": 0,
+        "coming_soon": 1,
+        "closed_pending_reopen": 0
+      },
+      "verified_location_count": 2,
+      "follower_count": 14,
+      "pending_claim_count": 0,
+      "pending_reopen_request_count": 1
+    }
+  ],
+  "page": 1,
+  "page_size": 20,
+  "total": 1
+}
+```
+
+Errors:
+| Status | Code | When |
+|---|---|---|
+| 403 | `forbidden` | caller is not admin |
+| 422 | — | `page`/`page_size` out of range, or unknown `sort` |
+
 ### GET /admin/overview
 
 Auth: admin only. Platform-wide restaurant/tier/owner aggregate behind the
