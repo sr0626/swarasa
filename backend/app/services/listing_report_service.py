@@ -76,7 +76,7 @@ async def create_report(
         return None
 
     brand = await db.get(RestaurantBrand, body.brand_id)
-    if brand is None:
+    if brand is None or brand.deleted_at is not None:
         raise AppError(404, "Restaurant not found", "not_found")
 
     if body.location_id is not None:

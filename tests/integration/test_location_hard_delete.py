@@ -13,7 +13,7 @@ Covers:
     reopen request for this location.
   - succeeds for owner (owns parent brand) and for admin: row is actually
     gone (not just hidden), audit_log row written (`action="delete"`),
-    and the brand can now be hard-deleted once it has zero locations left.
+    and the brand can then still be (soft-)deleted via `DELETE /restaurants/{id}`.
   - a different owner (doesn't own this location) is forbidden (403); an
     anonymous caller is unauthorized (401); a manager is forbidden (403) —
     same auth shape as the existing soft-delete route.
@@ -197,7 +197,11 @@ async def test_admin_can_remove_a_location_it_does_not_own(db_session, client, a
 
 
 @pytest.mark.asyncio
-async def test_removing_the_last_location_unblocks_brand_delete(db_session, client, as_user):
+async def test_brand_delete_after_removing_last_location_soft_deletes_brand(db_session, client, as_user):
+    """`DELETE /restaurants/{id}` is now a SOFT delete (deleted_at) — it no
+    longer depends on the brand having zero locations (see
+    tests/integration/test_brand_soft_delete.py), so the brand row survives
+    even after its last location was hard-removed."""
     owner, brand, location = await _setup_hidden_location(db_session)
     as_user("owner", sub=owner.cognito_sub)
 
@@ -210,10 +214,12 @@ async def test_removing_the_last_location_unblocks_brand_delete(db_session, clie
 
     row = (
         await db_session.execute(
-            select(RestaurantBrand).where(RestaurantBrand.id == brand.id)
+            select(RestaurantBrand)
+            .where(RestaurantBrand.id == brand.id)
+            .execution_options(populate_existing=True)
         )
-    ).scalar_one_or_none()
-    assert row is None
+    ).scalar_one()
+    assert row.deleted_at is not None
 
 
 @pytest.mark.asyncio

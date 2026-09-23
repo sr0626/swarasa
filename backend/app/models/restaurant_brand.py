@@ -64,6 +64,16 @@ class RestaurantBrand(TimestampMixin, Base):
         DateTime(timezone=True), nullable=True
     )
 
+    # Soft delete (migration 0011, docs/API_CONTRACTS.md "DELETE
+    # /restaurants/{id}"): NULL = live, non-NULL = the admin deleted this
+    # listing. The row is kept (slug stays reserved, audit/follower history
+    # intact); every public/owner/manager read path filters on
+    # `deleted_at IS NULL`. Deleting also deactivates all the brand's
+    # locations in the same transaction (`restaurant_service.delete_restaurant`).
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     owner: Mapped["OwnerAccount | None"] = relationship(back_populates="brands")
     locations: Mapped[list["RestaurantLocation"]] = relationship(
         back_populates="brand"

@@ -55,7 +55,7 @@ async def follow_brand(db: AsyncSession, brand_id: int, current_user) -> FollowO
     following" case from touching the DB at all).
     """
     brand = await db.get(RestaurantBrand, brand_id)
-    if brand is None:
+    if brand is None or brand.deleted_at is not None:
         raise AppError(404, "Restaurant not found", "not_found")
 
     existing = await _get_existing_follow(db, current_user.cognito_sub, brand_id)
@@ -109,15 +109,28 @@ async def list_my_follows(
     `GET /locations/{id}/managers` which is capped small enough to skip
     paging.
     """
-    base_stmt = select(UserFollow, RestaurantBrand).join(
-        RestaurantBrand, RestaurantBrand.id == UserFollow.brand_id
-    ).where(UserFollow.user_id == current_user.cognito_sub)
+    # Soft-deleted brands (`restaurant_brand.deleted_at`) are excluded from
+    # both the page and `total` — a favourites list never shows a dead
+    # listing. The `user_follow` row itself is kept, so a restored brand
+    # reappears in the follower's list.
+    base_stmt = (
+        select(UserFollow, RestaurantBrand)
+        .join(RestaurantBrand, RestaurantBrand.id == UserFollow.brand_id)
+        .where(
+            UserFollow.user_id == current_user.cognito_sub,
+            RestaurantBrand.deleted_at.is_(None),
+        )
+    )
 
     total = (
         await db.execute(
             select(func.count())
             .select_from(UserFollow)
-            .where(UserFollow.user_id == current_user.cognito_sub)
+            .join(RestaurantBrand, RestaurantBrand.id == UserFollow.brand_id)
+            .where(
+                UserFollow.user_id == current_user.cognito_sub,
+                RestaurantBrand.deleted_at.is_(None),
+            )
         )
     ).scalar_one()
 

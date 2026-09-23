@@ -133,7 +133,20 @@ async def test_require_brand_write_access_rejects_non_owner_non_admin_role():
 
 @pytest.mark.asyncio
 async def test_require_brand_write_access_404_when_brand_missing():
-    db = _FakeSession(execute_result=_FakeResult(scalar=None))
+    db = _FakeSession()  # no brand row at all
+    with pytest.raises(AppError) as exc_info:
+        await auth_deps.require_brand_write_access(brand_id=1, db=db, current_user=_user("owner"))
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_require_brand_write_access_404_when_brand_soft_deleted():
+    """A soft-deleted brand (`deleted_at` set) 404s for its own owner, same
+    as a nonexistent one."""
+    from datetime import datetime, timezone
+
+    brand = RestaurantBrand(id=1, owner_id=1, name="x", slug="x", deleted_at=datetime.now(timezone.utc))
+    db = _FakeSession(get_map={(RestaurantBrand, 1): brand})
     with pytest.raises(AppError) as exc_info:
         await auth_deps.require_brand_write_access(brand_id=1, db=db, current_user=_user("owner"))
     assert exc_info.value.status_code == 404
@@ -149,7 +162,7 @@ async def test_require_brand_write_access_403_for_non_owning_owner(monkeypatch: 
     monkeypatch.setattr(auth_deps.auth_service, "get_owner_account_by_sub", _fake_get_owner_by_sub)
 
     # Brand is owned by owner id 1, but the resolved caller is owner id 7.
-    db = _FakeSession(execute_result=_FakeResult(scalar=1))
+    db = _FakeSession(get_map={(RestaurantBrand, 1): RestaurantBrand(id=1, owner_id=1, name="x", slug="x")})
     with pytest.raises(AppError) as exc_info:
         await auth_deps.require_brand_write_access(
             brand_id=1, db=db, current_user=_user("owner", sub="not-me")
@@ -166,7 +179,7 @@ async def test_require_brand_write_access_200_for_owning_owner(monkeypatch: pyte
 
     monkeypatch.setattr(auth_deps.auth_service, "get_owner_account_by_sub", _fake_get_owner_by_sub)
 
-    db = _FakeSession(execute_result=_FakeResult(scalar=1))
+    db = _FakeSession(get_map={(RestaurantBrand, 1): RestaurantBrand(id=1, owner_id=1, name="x", slug="x")})
     user = _user("owner", sub="me")
     result = await auth_deps.require_brand_write_access(brand_id=1, db=db, current_user=user)
     assert result.owner_account_id == 1

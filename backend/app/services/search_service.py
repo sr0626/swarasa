@@ -108,6 +108,14 @@ async def _fetch_candidates(
         # correct against the new 4-state model with no edit required —
         # verified via the model's own hybrid `.expression`, not assumed.
         .where(RestaurantLocation.is_active == True)  # noqa: E712
+        # Belt-and-suspenders for soft-deleted brands (`deleted_at`): a
+        # brand delete already deactivates its locations, but a location
+        # re-enabled while its brand is still deleted must not resurface.
+        .where(
+            RestaurantLocation.brand_id.in_(
+                select(RestaurantBrand.id).where(RestaurantBrand.deleted_at.is_(None))
+            )
+        )
     )
     if q:
         # Text search (restaurant name; or a cuisine tag whose name EXACTLY
