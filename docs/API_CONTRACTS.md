@@ -1658,12 +1658,35 @@ CLAUDE.md "ALWAYS write an audit_log entry ..."), including manager
 edits made on an owner's behalf, but no endpoint ever let an owner see
 that history.
 
-Auth: owner only (`require_owner`) — unlike `GET /auth/me/managed-
-locations` or `GET /auth/me/follows`, this is NOT open to every
-authenticated role, since `audit_log` scoping here depends on resolving
-the caller's own `owner_account` and its brands/locations; a manager/
-admin/registered_user caller has no equivalent "my own entities" concept
-this endpoint could scope to.
+**Broadened same day to also serve `manager` callers**, with a narrower
+row set per role (task brief: "managers currently get NO activity feed
+at all"). Auth: owner or manager (`require_owner_or_manager`) — still
+NOT open to `admin`/`registered_user`, since `audit_log` scoping here
+depends on resolving the caller's own owned/assigned entities, and
+neither of those roles has an equivalent "my own entities" concept this
+endpoint could scope to.
+
+- **Owner** sees everything on their own brands/locations, PLUS
+  manager-assignment changes (`location_manager` — who got assigned/
+  removed) and (once they exist — none do yet in Phase 1) payment/
+  billing-related updates. Unchanged from the original version of this
+  endpoint.
+- **Manager** sees only customer-facing-relevant changes
+  (`restaurant_brand`/`restaurant_location` — address, hours, general
+  listing-content edits) on their own CURRENTLY active assigned
+  locations. Explicitly excluded: `location_manager` rows entirely (no
+  visibility into other managers being assigned/removed, or their own
+  assignment history — that's the owner's business), `owner_account`
+  rows, and (not yet applicable, but architecturally excluded by table
+  rather than by field so it stays excluded once it exists) payment/
+  billing internals.
+
+See `backend/app/services/audit_query_service.py` module docstring for
+the full per-role table/action breakdown and the reasoning behind each
+inclusion/exclusion, and for why no "hide internal system writes" filter
+was added (every current `audit_log` writer is a real human actor —
+owner, manager, or admin acting through an admin console — there is no
+automated/scheduled writer today to filter out).
 
 Query params: standard pagination (`page`, default `1`; `page_size`,
 default `20`, max `100`).
@@ -1701,19 +1724,25 @@ Response: `200`
 Most-recent-first (`created_at desc`, `id desc` tiebreak).
 
 **Scoping** (see `backend/app/services/audit_query_service.py` module
-docstring for the full reasoning): a row is included only if its
-`table_name`/`record_id` traces back to a brand/location/location_manager
-row this owner actually owns — via `restaurant_brand.owner_id`, then
-`restaurant_location.brand_id`, then `location_manager.location_id` —
-computed with real DB queries every time, never trusted from the row's
-own `actor_id`/`actor_role` (a manager's edit is included even though
-its `actor_id` is the manager's own sub, not the owner's) and never from
-a client-supplied id. `menu_item`/`deal` are on root CLAUDE.md's
+docstring for the full reasoning): for an **owner**, a row is included
+only if its `table_name`/`record_id` traces back to a brand/location/
+location_manager row this owner actually owns — via
+`restaurant_brand.owner_id`, then `restaurant_location.brand_id`, then
+`location_manager.location_id`. For a **manager**, a row is included
+only if it traces back to one of THEIR OWN currently active
+(`location_manager.is_active == true`) assigned locations — via
+`location_manager.user_id`, then `restaurant_location.brand_id` for the
+brand-level rows — and never includes `table_name == "location_manager"`
+at all. Both are computed with real DB queries every time, never trusted
+from the row's own `actor_id`/`actor_role` (e.g. an owner's edit to a
+manager's assigned location shows up in that manager's feed too, same
+"trace the entity, not the actor" posture in both directions) and never
+from a client-supplied id. `menu_item`/`deal` are on root CLAUDE.md's
 audit-required table list too but don't exist as tables yet (Phase 2) so
-are not queried. `owner_account` writes are deliberately excluded even
-though they're audit-logged — that's the owner's own account record,
-already covered by `GET /auth/me`/`GET /auth/me/data-export`, not one of
-"the entities the owner manages."
+are not queried by either role. `owner_account` writes are deliberately
+excluded from both — that's the owner's own account record, already
+covered by `GET /auth/me`/`GET /auth/me/data-export`, not one of "the
+entities the owner/manager manages."
 
 **`actor_label` / `actor_resolved`** — JUDGMENT CALL (flagged for
 review): `audit_log.actor_id` is a bare Cognito `sub`, not directly

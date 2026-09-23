@@ -114,10 +114,12 @@ export async function updateDisplayNameAction(
 }
 
 /**
- * GET /auth/me/activity (owner only). Backs OwnerActivitySection's
- * "Load more" button -- each click re-derives the session server-side and
- * fetches the next page, same "keep the access token server-side" shape as
- * every other action in this file.
+ * GET /auth/me/activity (owner or manager -- broadened 2026-09-22 to also
+ * serve manager callers, with a narrower row set enforced server-side, see
+ * docs/API_CONTRACTS.md "GET /auth/me/activity"). Backs OwnerActivitySection's
+ * "Load more" button on both the owner and manager consoles -- each click
+ * re-derives the session server-side and fetches the next page, same "keep
+ * the access token server-side" shape as every other action in this file.
  */
 export async function getMyActivityAction(
   page: number

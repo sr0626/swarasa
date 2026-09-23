@@ -115,12 +115,15 @@ export default async function AccountPage() {
     ownerRestaurants = await loadOwnerRestaurants(session.accessToken);
   }
 
-  // Owners: first page of GET /auth/me/activity, rendered by
+  // Owner and manager: first page of GET /auth/me/activity, rendered by
   // OwnerActivitySection ("Load more" fetches subsequent pages via
-  // getMyActivityAction). Failure is scoped to this section only.
+  // getMyActivityAction). Broadened to managers 2026-09-22 -- same
+  // endpoint, a narrower row set server-side (see
+  // backend/app/services/audit_query_service.py). Failure is scoped to
+  // this section only.
   let activityPage: PaginatedResponse<OwnerActivity> | null = null;
   let activityError: string | null = null;
-  if (me && me.role === "owner") {
+  if (me && (me.role === "owner" || me.role === "manager")) {
     try {
       activityPage = await getMyActivity({ page: 1, page_size: 20 }, session.accessToken);
     } catch (error) {
@@ -185,6 +188,8 @@ export default async function AccountPage() {
           locations={managedLocations}
           locationsError={managedLocationsError}
           latestDeletionRequest={latestDeletionRequest}
+          activityPage={activityPage}
+          activityError={activityError}
         />
       </ManagerShell>
     );

@@ -70,10 +70,16 @@ async def test_activity_requires_auth(client, db_session, as_anonymous):
 
 
 @pytest.mark.asyncio
-async def test_activity_requires_owner_role(client, db_session, as_user):
+async def test_activity_requires_owner_or_manager_role(client, db_session, as_user):
+    """`GET /auth/me/activity` is owner-or-manager only (broadened
+    2026-09-22 — see test_manager_activity.py for the manager's own
+    feed/scoping tests). `admin`/`registered_user` still have no
+    "my own entities" concept this endpoint could scope to, so they
+    remain 403.
+    """
     as_user("manager")
     manager_resp = await client.get("/auth/me/activity")
-    assert manager_resp.status_code == 403
+    assert manager_resp.status_code == 200, manager_resp.text
 
     as_user("admin")
     admin_resp = await client.get("/auth/me/activity")

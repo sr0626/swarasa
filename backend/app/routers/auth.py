@@ -10,6 +10,7 @@ from app.dependencies.auth import (
     CurrentUser,
     get_current_user,
     require_owner,
+    require_owner_or_manager,
     require_registered_user,
 )
 from app.dependencies.db import get_db
@@ -93,13 +94,29 @@ async def get_my_follows(
 async def get_my_activity(
     pagination: Pagination = Depends(pagination_params),
     db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(require_owner),
+    current_user: CurrentUser = Depends(require_owner_or_manager),
 ) -> OwnerActivityListResponse:
-    """Auth: owner. Read-only `audit_log` history scoped to entities this
-    owner actually owns (see `audit_query_service.list_owner_activity`'s
-    docstring) — surfaces manager-made edits on the owner's behalf, not
-    just the owner's own writes.
+    """Auth: owner or manager (broadened 2026-09-22 — was owner-only).
+    Read-only `audit_log` history, scoped differently per role (see
+    `audit_query_service` module docstring for the full "Owner" vs.
+    "Manager" table/action breakdown):
+
+    - Owner: everything on their own brands/locations, PLUS
+      manager-assignment changes (`location_manager`) — surfaces
+      manager-made edits on the owner's behalf, not just the owner's own
+      writes.
+    - Manager: only customer-facing-relevant changes
+      (`restaurant_brand`/`restaurant_location`) on their own currently
+      active assigned locations — never another manager's assignment/
+      removal history, never billing internals, never unrelated
+      locations.
+
+    The response shape (`OwnerActivityListResponse`) is unchanged and
+    shared by both roles — same envelope, same per-row fields, just a
+    different underlying row set.
     """
+    if current_user.role == "manager":
+        return await audit_query_service.list_manager_activity(db, current_user, pagination)
     return await audit_query_service.list_owner_activity(db, current_user, pagination)
 
 
