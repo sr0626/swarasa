@@ -203,6 +203,7 @@ export default async function RestaurantPage({ params }: RestaurantPageProps) {
                 isRegisteredUser={followState.isRegisteredUser}
                 isFollowed={followState.followedBrandIds.has(restaurant.id)}
                 currentPath={`/restaurant/${restaurant.slug}`}
+                ownerPreview={canEdit}
               />
             </div>
 
