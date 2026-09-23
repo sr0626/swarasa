@@ -150,10 +150,14 @@ paid_until   TIMESTAMP              -- NULL when free
 ### Paid content behaviour
 - Downgrade: paid content hides immediately (is_paid=false), NOT deleted
 - Re-subscribe: paid content reappears immediately (is_paid=true)
-- is_paid=false locations: dish photos beyond the free gallery limit, deals,
+- is_paid=false locations: dish photos beyond the free gallery limit,
   custom page, full analytics, and promoted placement are NOT returned by API.
   Full menu with prices IS returned regardless of is_paid — it's a free feature
-  (see BRD section 3.3, DECISIONS.md "Full menu with prices moved to free tier")
+  (see BRD section 3.3, DECISIONS.md "Full menu with prices moved to free tier").
+  Deals are ALSO a free-tier feature, not paid-gated — confirmed by direct user
+  decision 2026-09-23, overriding this list's earlier inclusion of deals
+  (see DECISIONS.md "Deals engine: free-tier, public-signal + registered-user-content
+  visibility (supersedes May 2026 entry)")
 - Paid tier also caps `location_manager` assignments at 2 per location
 
 ### Permission model
@@ -161,8 +165,10 @@ Every write request must be validated server-side:
 - Owner: full access to all their brands/locations
 - Manager: only locations explicitly assigned (check location_manager table on every write)
 - Admin: full platform access
-- Registered user: read-only + follow + deals
-- Public: read-only (no deals)
+- Registered user: read-only + follow + full deal content
+- Public: read-only + a content-free "deal(s) available today" signal only
+  (no deal title/description — see DECISIONS.md "Deals engine: free-tier,
+  public-signal + registered-user-content visibility")
 
 ## Coding Conventions
 
