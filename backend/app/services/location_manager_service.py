@@ -33,7 +33,13 @@ from app.core.errors import AppError
 from app.models.location_manager import LocationManager
 from app.models.restaurant_brand import RestaurantBrand
 from app.models.restaurant_location import RestaurantLocation
-from app.services import audit_service, cognito_service, hours_service, platform_config_service
+from app.services import (
+    audit_service,
+    cognito_service,
+    follow_service,
+    hours_service,
+    platform_config_service,
+)
 
 # Fallback defaults / seed values only — see module docstring. The live
 # cap numbers are read from `platform_config` on every check.
@@ -393,6 +399,7 @@ async def list_managed_locations(db: AsyncSession, current_user, pagination):
     results = []
     for row in rows:
         is_open_now = await hours_service.is_open_now_for_location(db, row.id, row.timezone)
+        follower_count = await follow_service.count_followers_for_brand(db, row.brand_id)
         results.append(
             ManagedLocationOut(
                 id=row.id,
@@ -405,6 +412,7 @@ async def list_managed_locations(db: AsyncSession, current_user, pagination):
                 is_verified=row.is_verified,
                 is_paid=row.is_paid,
                 is_open_now=is_open_now,
+                follower_count=follower_count,
             )
         )
 

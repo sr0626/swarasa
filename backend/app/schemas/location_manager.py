@@ -59,6 +59,19 @@ class ManagedLocationOut(BaseModel):
     is_verified: bool
     is_paid: bool
     is_open_now: bool | None
+    # Dashboard-only stat (same field/reasoning as `RestaurantOut.
+    # follower_count` — see `backend/app/schemas/restaurant.py`), added
+    # here alongside it. Unlike that field this one is never `None`:
+    # `GET /auth/me/managed-locations` is already hard-scoped to the
+    # caller's own active assignments (`location_manager_service.
+    # list_managed_locations`'s own docstring), so there's no public/
+    # other-caller variant of this response to gate against — every row
+    # this endpoint ever returns is one the caller is entitled to see.
+    # Follows are brand-level (app/models/user_follow.py), not
+    # location-level, so this is really the location's parent brand's
+    # follower count — every location under the same brand reports the
+    # same number.
+    follower_count: int
 
 
 class ManagedLocationListResponse(BaseModel):

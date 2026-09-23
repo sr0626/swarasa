@@ -268,4 +268,14 @@ export interface ManagedLocation {
   is_verified: boolean;
   is_paid: boolean;
   is_open_now: boolean | null;
+  /**
+   * Dashboard-only stat (backend/app/schemas/location_manager.py
+   * ManagedLocationOut.follower_count) — always a real count here (never
+   * `null`, unlike `RestaurantBrand.follower_count`): this endpoint is
+   * already hard-scoped server-side to the manager's own active
+   * assignments, so there's no public/other-caller variant to gate
+   * against. Follows are brand-level, so locations sharing a brand share
+   * the same number.
+   */
+  follower_count: number;
 }

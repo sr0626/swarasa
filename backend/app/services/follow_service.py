@@ -26,6 +26,24 @@ async def _get_existing_follow(db: AsyncSession, user_id: str, brand_id: int) ->
     return result.scalar_one_or_none()
 
 
+async def count_followers_for_brand(db: AsyncSession, brand_id: int) -> int:
+    """Owner/manager/admin-dashboard-only stat — see
+    `restaurant_service._brand_to_out` (RestaurantOut.follower_count,
+    caller-gated so this never reaches a public response) and
+    `location_manager_service.list_managed_locations`
+    (ManagedLocationOut.follower_count, already self-scoped to the
+    caller's own assignments). Follows are brand-level, not
+    location-level (see app/models/user_follow.py), so a location's
+    follower_count is really its parent brand's count — every location
+    under the same brand reports the same number, same as
+    `location_count` is a brand-level stat too.
+    """
+    result = await db.execute(
+        select(func.count()).select_from(UserFollow).where(UserFollow.brand_id == brand_id)
+    )
+    return result.scalar_one()
+
+
 async def follow_brand(db: AsyncSession, brand_id: int, current_user) -> FollowOut:
     """POST /restaurants/{id}/follow.
 

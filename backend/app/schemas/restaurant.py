@@ -26,6 +26,17 @@ class RestaurantOut(BaseModel):
     owner_id: int | None
     cuisine_tags: list[CuisineTagOut]
     location_count: int
+    # Dashboard-only stat, never public (docs/API_CONTRACTS.md "GET
+    # /restaurants"). `null` for a caller who isn't allowed to see it —
+    # the public `GET /restaurants/{id}` (and anonymous/registered_user/
+    # manager-role callers generally) always get `null` here rather than
+    # the field being omitted entirely, so the shape stays identical for
+    # every caller (same posture `has_pending_claim`/`owner_id` already
+    # take) while the *value* is caller-gated. Populated (an actual
+    # count, 0 included) only for the owner-scoped `GET /restaurants`
+    # list and for the owner/admin who just created/updated the brand —
+    # see `restaurant_service._brand_to_out`'s `current_user` parameter.
+    follower_count: int | None = None
 
 
 class RestaurantCreate(BaseModel):

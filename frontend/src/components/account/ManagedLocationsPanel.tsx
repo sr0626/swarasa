@@ -11,7 +11,7 @@
 // Assignment is owner-controlled, so the empty state and footnote say so.
 // Server Component — links only.
 import Link from "next/link";
-import { LocationPinIcon, PencilIcon } from "@/components/ui/icons";
+import { HeartIcon, LocationPinIcon, PencilIcon } from "@/components/ui/icons";
 import LocationStatusChip from "@/components/console/LocationStatusChip";
 import {
   cardClass,
@@ -81,8 +81,14 @@ export default function ManagedLocationsPanel({
                       {location.address_line1}, {location.city}, {location.state}
                     </span>
                   </p>
-                  <div className="mt-2 pl-6">
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 pl-6">
                     <LocationStatusChip status={todayStatus} />
+                    {/* Dashboard-only stat (backend ManagedLocationOut.
+                        follower_count) — never shown anywhere public-facing. */}
+                    <span className="inline-flex items-center gap-1.5 text-xs text-brand-ink-subtle">
+                      <HeartIcon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                      {location.follower_count} follower{location.follower_count === 1 ? "" : "s"}
+                    </span>
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">

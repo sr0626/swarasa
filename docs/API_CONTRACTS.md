@@ -224,7 +224,8 @@ Response:
       "cuisine_tags": [
         { "id": 7, "name": "hyderabadi", "display_name": "Hyderabadi", "category": "regional" }
       ],
-      "location_count": 3
+      "location_count": 3,
+      "follower_count": 12
     }
   ],
   "page": 1,
@@ -235,7 +236,21 @@ Response:
 Same per-row shape as `GET /restaurants/{id}` below (not a
 summary/list-trimmed variant) — the owner portal dashboard needs the
 same fields the single-brand detail page shows, and keeping one shape
-avoids Frontend Dev maintaining two brand card types.
+avoids Frontend Dev maintaining two brand card types. **One deliberate
+exception: `follower_count`.** Added 2026-09-22 (dashboard-only stat —
+"show the number of followers ... on their dashboard only ... not
+visible to diners or other owners"): a real, non-null count of
+`user_follow` rows for the brand here, but always `null` on the public
+`GET /restaurants/{id}` below, regardless of who's asking (including the
+owning owner themselves — the public detail endpoint has no
+current-caller awareness at all). See
+`backend/app/services/restaurant_service._caller_may_view_follower_count`
+for the exact gating: `current_user is not None and current_user.role in
+("owner", "admin")`, and every call site that passes a real
+`current_user` has already been through an ownership check upstream
+(this list's own `owner_id` filter, or `require_owner`/
+`require_brand_write_access` on the create/update endpoints below) —
+there is no separate per-brand re-check here.
 
 This is **not** a duplicate of `GET /search`: `/search` is the public
 geo/filter discovery endpoint (radius, cuisine/dietary/type filters,
@@ -274,7 +289,8 @@ Response:
   "cuisine_tags": [
     { "id": 7, "name": "hyderabadi", "display_name": "Hyderabadi", "category": "regional" }
   ],
-  "location_count": 3
+  "location_count": 3,
+  "follower_count": null
 }
 ```
 `website` is `null` when not set -- added alongside the CSV bulk-import
@@ -285,6 +301,10 @@ listing" CTA when `is_claimed` is `false`).
 `has_pending_claim` is `true` while a `claim_request` for the brand is in
 `pending_review` (boolean only, no claimant detail). The frontend then hides the
 claim CTA from everyone and shows admins a "Claim pending review" marker.
+`follower_count` is **always `null` on this public route** — see the
+dashboard-only note on `GET /restaurants` above. This route has no auth
+dependency at all, so there's no caller identity to gate on even in
+principle; the real count is only ever exposed via `GET /restaurants`.
 
 ### GET /restaurants/{id}/locations
 
@@ -367,7 +387,11 @@ distinct from the claim flow, which attaches an *existing*,
 admin-seeded, unclaimed brand to an owner instead of creating a new
 row — see `POST /claim`.
 
-Response: `201`, same shape as `GET /restaurants/{id}`.
+Response: `201`, same shape as `GET /restaurants/{id}` — **except**
+`follower_count`: this response is `POST`ed by the owner who just
+created their own brand, so it comes back a real number (`0`, for a
+brand-new brand) rather than the `null` the public detail endpoint
+always returns, same dashboard-caller gating as `GET /restaurants`.
 
 Audit: writes an `audit_log` row (`table_name="restaurant_brand"`,
 `action="create"`) per root CLAUDE.md "ALWAYS — Quality".
@@ -378,7 +402,10 @@ Auth: owner (must own the brand) or admin
 
 Body: any subset of `{ name, description, website, cuisine_tag_ids }`.
 
-Response: `200`, same shape as `GET /restaurants/{id}`.
+Response: `200`, same shape as `GET /restaurants/{id}` — same
+`follower_count` exception as `POST /restaurants` above: a real count,
+not `null`, since the caller has already proven ownership (or admin) of
+this exact brand via `require_brand_write_access`.
 
 Audit: `audit_log` row (`action="update"`, `old_val`/`new_val`
 populated).
@@ -1146,7 +1173,8 @@ Response: `200`
       "phone": "+14695551234",
       "is_verified": true,
       "is_paid": true,
-      "is_open_now": true
+      "is_open_now": true,
+      "follower_count": 12
     }
   ],
   "page": 1,
@@ -1162,6 +1190,16 @@ assignment rows on `is_active=true` locations are included — a
 soft-removed assignment or a soft-deleted location doesn't appear here
 (unlike the owner/admin-facing `GET /locations/{id}/managers`, which
 shows full history by default).
+
+`follower_count` — added 2026-09-22 alongside `RestaurantOut.
+follower_count` above (same dashboard-only-stat task). Unlike that field
+this one is **never `null`**: this whole endpoint is already hard-scoped
+server-side to the caller's own active `location_manager` assignments, so
+there's no public/other-caller variant of this response to gate a value
+against — every row returned here is one the caller is entitled to see in
+full. It's a count of `user_follow` rows against the location's parent
+`brand_id` (follows are brand-level, not location-level — see "Follows"
+below), so two locations under the same brand report the same number.
 
 ---
 
