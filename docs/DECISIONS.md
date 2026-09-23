@@ -1264,6 +1264,63 @@ actor_id, actor_role, before/after values.
 
 ## Authentication & Permissions
 
+**Admin registered-user count: read live from Cognito (IAM grant), not a new local table**
+2026-09-22 | Judgment call (root CLAUDE.md "Decision-Making Autonomy"),
+closing the gap `docs/API_CONTRACTS.md`'s `GET /admin/notifications`
+`new_users` limitation note already flagged: there is no local record of
+diner (`registered_user`) sign-ups. `owner_account` only gets a row for
+owners (lazily, on first `GET /auth/me`); `user_profile` (PR #162) only
+gets a row when a diner explicitly sets a display name, which most never
+do. Cognito is the only complete source of truth for "how many people
+signed up."
+
+Two paths considered:
+- **Path A (chosen): grant `cognito-idp:ListUsersInGroup`** (read-only,
+  scoped to the single user pool ARN) to the API Lambda's execution role
+  and call it live from `GET /admin/registered-user-count`
+  (`app/services/cognito_service.py` `count_users_in_group`,
+  paginated, summed server-side — no per-user data leaves Cognito). Same
+  IAM pattern already established and applied twice on this exact pool
+  (`CognitoListUsersForManagerAssignment`, added 2026-09-13;
+  `CognitoOwnerGroupAssignmentOnThisPoolOnly`, added 2026-09-19) — a
+  well-precedented, narrow, additive Terraform change with no new infra
+  topology.
+- **Path B (rejected): extend the Cognito post-confirmation Lambda**
+  (`app/lambda_handlers/cognito_post_confirmation.py`) to write a signup
+  row to Postgres at confirmation time, then count locally. Rejected after
+  reading that Lambda's own header comment: it is deliberately
+  zip-packaged and import-isolated (stdlib + boto3 only, no
+  sqlalchemy/fastapi/mangum — mirrors `resize_photo.py`'s reasoning) and
+  is **not in the VPC**, with no DB access today. Giving it DB access
+  means adding VPC networking, a DB secret, and a new dependency footprint
+  to a Lambda that was specifically kept minimal for cold-start cost and
+  blast-radius reasons — a real infra-topology change (root CLAUDE.md
+  "Ask Human When" territory: "requires touching more than one agent's
+  directory," here Infra networking + Backend + the Lambda's own packaging
+  contract), not a config tweak, to solve a problem a much smaller IAM
+  grant already solves cleanly.
+
+**Reading of "total registered users":** the `registered_user` pool group
+specifically (diners), not the whole user pool. The whole pool would also
+count `owner`/`manager`/`admin` accounts, which is not what an admin
+overview page asking "how many people signed up to browse/follow/save" is
+asking for — and it's the same reading `GET /admin/notifications`'s
+`new_users` limitation note pointed at when it first called out this gap
+("not diner (`registered_user`) sign-ups, managers or admins").
+
+**No caching added** — a live call is acceptable for an admin-only,
+low-traffic page; `ListUsersInGroup` is cheap relative to Lambda's own
+per-invocation cost. Revisit only if a future admin overview page starts
+polling this on an interval rather than loading it per-visit.
+
+*Rejected: Path B (see above); returning the local `owner_account`+
+`user_profile` count as a stand-in (would systematically undercount —
+exactly the gap being closed, not an approximation of it); a wildcard
+`cognito-idp:ListUsers` scan of the whole pool filtered client-side by
+group (would work but is a broader read than the task needs and no
+cheaper — `ListUsersInGroup` is the purpose-built action for "how many
+members does this group have").*
+
 **Frontend used the wrong Cognito token type for the session cookie — blocked every real owner from ever getting provisioned**
 2026-09-18 | Real, severe production bug, found live while testing the
 first real bulk-import against the deployed dev environment: `owner1` and

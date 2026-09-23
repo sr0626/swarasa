@@ -21,6 +21,11 @@ ListUsers`, filtered to this one user pool:
 `add_user_to_group` (claim approval -> `owner` group) additionally needs
 `cognito-idp:AdminAddUserToGroup` — see its docstring.
 
+`count_users_in_group` (added for `GET /admin/registered-user-count`, see
+docs/API_CONTRACTS.md) additionally needs `cognito-idp:ListUsersInGroup` —
+see its docstring for why this is a separate action/grant from the
+`ListUsers` lookups above rather than a reuse of them.
+
 IAM (root CLAUDE.md "AWS Best Practices" — least privilege): the lookups need
 exactly one new action, `cognito-idp:ListUsers`, scoped to exactly one
 resource — this app's single user pool ARN. No write actions
@@ -42,6 +47,7 @@ import boto3
 from botocore.exceptions import ClientError
 
 OWNER_GROUP = "owner"
+REGISTERED_USER_GROUP = "registered_user"
 
 _cognito_client = None
 
@@ -115,6 +121,57 @@ def find_email_by_sub(sub: str) -> str | None:
         if attr.get("Name") == "email":
             return attr.get("Value")
     return None
+
+
+def count_users_in_group(group_name: str) -> int:
+    """Count members of a Cognito pool group, scoped to this one pool.
+
+    Backs `GET /admin/registered-user-count` (docs/API_CONTRACTS.md) — the
+    admin "total registered users" figure. "Registered users" here means
+    the `registered_user` group specifically (diners), not the whole pool:
+    `owner`/`manager`/`admin` accounts are excluded on purpose, the same
+    reading `GET /admin/notifications`'s `new_users` limitation note
+    anticipated when it called out this exact gap.
+
+    Uses `ListUsersInGroup`, paginated via `NextToken`, summing page sizes
+    rather than materializing every user's attributes — this only needs a
+    count, not identities. This is a *different* IAM action from the
+    `ListUsers`-based lookups above (`find_sub_by_email`/
+    `find_email_by_sub`): `ListUsers` can filter by email/sub but has no
+    per-group filter, and `ListUsersInGroup` has no equivalent free-text
+    filter — they are complementary, not substitutable, so this module
+    grants both narrowly rather than trying to force one API to do both
+    jobs.
+
+    Raises `RuntimeError` when `COGNITO_USER_POOL_ID` is unset and
+    `botocore` `ClientError`/`BotoCoreError` on AWS failures — unlike the
+    read-time lookups above, there is no sensible fallback value for a
+    headline admin count, so this does not swallow errors; the caller
+    (the router) turns a failure into a generic 502 rather than a stale or
+    fabricated number (root CLAUDE.md "NEVER expose internal stack
+    details").
+
+    No caching: this is a live call on every request. Admin-only, low
+    traffic (one operator-facing page), and `ListUsersInGroup` is cheap
+    relative to Lambda's own per-invocation cost — not worth the added
+    complexity of a cache + invalidation story for Phase 1. Revisit if the
+    admin overview page starts polling this on an interval instead of a
+    per-visit load.
+    """
+    client = _get_client()
+    pool_id = _user_pool_id()
+    count = 0
+    next_token: str | None = None
+    while True:
+        kwargs = {"UserPoolId": pool_id, "GroupName": group_name, "Limit": 60}
+        if next_token:
+            kwargs["NextToken"] = next_token
+        response = client.list_users_in_group(**kwargs)
+        count += len(response.get("Users") or [])
+        next_token = response.get("NextToken")
+        if not next_token:
+            break
+    return count
 
 
 def add_user_to_group(username: str, group_name: str) -> None:

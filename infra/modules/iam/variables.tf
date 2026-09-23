@@ -87,7 +87,7 @@ variable "github_repo_id" {
 }
 
 variable "cognito_user_pool_arn" {
-  description = "Cognito User Pool ARN (module.cognito) — scopes the API Lambda's cognito-idp:ListUsers, AdminAddUserToGroup and AdminGetUser permissions to this single pool (manager email -> sub resolution; adding an approved claimant to the owner group)"
+  description = "Cognito User Pool ARN (module.cognito) — scopes the API Lambda's cognito-idp:ListUsers, AdminAddUserToGroup, AdminGetUser and ListUsersInGroup permissions to this single pool (manager email -> sub resolution; adding an approved claimant to the owner group; admin registered-user count)"
   type        = string
 }
 
