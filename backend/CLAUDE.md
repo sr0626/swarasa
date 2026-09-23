@@ -242,9 +242,13 @@ JWT_SECRET            Cognito JWT public key (fetched from Cognito endpoint)
 
 ## Phase 1 — Do NOT Build Yet
 - Stripe checkout, webhooks, subscription management (Phase 2)
-- Menu CRUD, deals engine, deal alerts (Phase 2) — note for when this is built:
-  full menu + prices is a FREE feature, only dish photos are paid-gated (see
-  DECISIONS.md "Full menu with prices moved to free tier")
+- Menu CRUD, deal alerts (Phase 2) — full menu + prices is a FREE feature,
+  only dish photos are paid-gated (see DECISIONS.md "Full menu with prices
+  moved to free tier"). **The deals engine itself was pulled forward and
+  built 2026-09-23** by direct user instruction (deals stayed in scope while
+  Stripe/billing/subscriptions/refunds remained deferred) — see
+  DECISIONS.md "Deals engine: free-tier, public-signal + registered-user-content
+  visibility". Deals are a FREE-tier feature, not paid-gated, per that decision.
 - Analytics endpoints (Phase 2)
 - `open_now` as a `/search` query filter (Phase 3 — see DECISIONS.md
   "Restaurant hours"; grouped with map view / NLS search). Display-only
@@ -255,8 +259,11 @@ JWT_SECRET            Cognito JWT public key (fetched from Cognito endpoint)
 
 ### NEVER
 - NEVER return paid-only content (dish photos beyond the free gallery limit,
-  deals, custom landing page, full analytics, promoted placement) without
-  checking `is_paid`. Full menu with prices is FREE — do not gate it.
+  custom landing page, full analytics, promoted placement) without
+  checking `is_paid`. Full menu with prices is FREE — do not gate it. Deals
+  are ALSO free-tier (see DECISIONS.md "Deals engine: free-tier,
+  public-signal + registered-user-content visibility") — never add an
+  `is_paid` check to deal creation or visibility.
 - NEVER trust JWT claims for manager location access — always query `location_manager` table
 - NEVER allow more than 2 active `location_manager` assignments per location on
   a paid tier (see DECISIONS.md "Assignable location managers capped at 2")
