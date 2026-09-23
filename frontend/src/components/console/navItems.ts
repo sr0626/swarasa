@@ -20,6 +20,7 @@ export interface ConsoleNavItem {
 export const ADMIN_NAV_ITEMS: ReadonlyArray<ConsoleNavItem> = [
   { href: "/account", label: "Profile", icon: "user" },
   { href: "/admin/overview", label: "Overview", icon: "chart" },
+  { href: "/admin/registered-users", label: "Registered users", icon: "user" },
   { href: "/admin/claims", label: "Claims", icon: "claims" },
   // Not named "Reports" -- that label is already taken by the
   // report-a-problem triage queue directly below. This page is called

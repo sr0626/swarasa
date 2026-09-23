@@ -20,6 +20,7 @@ from app.dependencies.pagination import Pagination, pagination_params
 from app.models.owner_account import OwnerAccount
 from app.schemas.admin_notifications import AdminNotificationsResponse
 from app.schemas.admin_overview import AdminOverviewResponse
+from app.schemas.admin_registered_users import RegisteredUsersResponse
 from app.schemas.admin_stats import RegisteredUserCountResponse
 from app.schemas.restaurant_bulk_import import (
     BulkImportRequest,
@@ -29,6 +30,7 @@ from app.schemas.restaurant_bulk_import import (
 from app.services import cognito_service
 from app.services.admin_notification_service import get_admin_notifications
 from app.services.admin_overview_service import get_admin_overview
+from app.services.admin_registered_users_service import get_registered_users
 from app.services.restaurant_bulk_import_service import BulkImportError, bulk_import_restaurants
 
 logger = logging.getLogger("app.routers.admin")
@@ -81,6 +83,36 @@ async def registered_user_count_endpoint(
         raise AppError(502, "Unable to retrieve registered user count", "upstream_error") from exc
 
     return RegisteredUserCountResponse(count=count)
+
+
+@router.get("/registered-users", response_model=RegisteredUsersResponse)
+async def registered_users_endpoint(
+    pagination: Pagination = Depends(pagination_params),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_admin),
+) -> RegisteredUsersResponse:
+    """Auth: admin only. Diner (`registered_user`) directory for the admin
+    console: email, Cognito status, signup date, and a best-effort
+    `last_seen_at` (see docs/API_CONTRACTS.md "GET /admin/registered-users",
+    docs/DECISIONS.md "Registered-user last-seen tracking").
+
+    Same live-Cognito-call posture as `GET /admin/registered-user-count`
+    (no caching, admin-only, low-traffic) — a `ClientError`/`BotoCoreError`/
+    missing-pool-id `RuntimeError` from the Cognito lookup becomes a
+    generic `502 upstream_error`, never a stale or fabricated list (root
+    CLAUDE.md "NEVER expose internal stack details").
+    """
+    try:
+        return await get_registered_users(db, pagination)
+    except ClientError as exc:
+        logger.warning(
+            "registered-users: Cognito ListUsersInGroup failed: %s",
+            exc.response.get("Error", {}).get("Code", "ClientError"),
+        )
+        raise AppError(502, "Unable to retrieve registered users", "upstream_error") from exc
+    except (BotoCoreError, RuntimeError) as exc:
+        logger.warning("registered-users: Cognito lookup failed: %s", type(exc).__name__)
+        raise AppError(502, "Unable to retrieve registered users", "upstream_error") from exc
 
 
 @router.get("/overview", response_model=AdminOverviewResponse)

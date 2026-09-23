@@ -14,8 +14,20 @@ alongside `app/models/user_profile.py` (see that model's docstring for the
 full rationale — a small generic table, read-your-write, deliberately not
 Cognito `updateUserAttributes`). `owner` never touches `user_profile`;
 `admin` has no editable profile source at all yet (unchanged, still 404s).
+
+`touch_last_seen` backs the admin "Registered users" report's
+"last visited" column (docs/PROJECT_PLAN.csv, docs/DECISIONS.md
+"Registered-user last-seen tracking"). Called from
+`app/dependencies/auth.py::_resolve_current_user` on every authenticated
+request for a `registered_user`/`manager` caller — see that module for why
+only those two roles are wired up (same `_PROFILE_TABLE_ROLES` split as
+above) and for the try/except that makes this fully best-effort from the
+caller's point of view (a failure here must never fail the request it rode
+in on).
 """
 from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -28,6 +40,13 @@ from app.schemas.auth import MeResponse, MeUpdateRequest, OwnerAccountOut, Profi
 from app.services import audit_service
 
 _PROFILE_TABLE_ROLES = {"registered_user", "manager"}
+
+# How stale `last_seen_at` has to be before an authenticated request writes
+# a fresh value. Not a precision requirement (this backs an admin "last
+# visited" report, not billing or security) — it exists purely to bound
+# write volume: without it, every single authenticated request from an
+# active user would issue a DB write. See `touch_last_seen` below.
+_LAST_SEEN_THROTTLE_MINUTES = 5
 
 
 async def get_owner_account_by_sub(db: AsyncSession, cognito_sub: str) -> OwnerAccount | None:
@@ -79,6 +98,50 @@ async def get_user_profile_by_sub(db: AsyncSession, cognito_sub: str) -> UserPro
         select(UserProfile).where(UserProfile.cognito_sub == cognito_sub)
     )
     return result.scalar_one_or_none()
+
+
+async def touch_last_seen(db: AsyncSession, cognito_sub: str) -> None:
+    """Upsert `user_profile.last_seen_at = now()` for `cognito_sub`,
+    throttled to at most one write per `_LAST_SEEN_THROTTLE_MINUTES`.
+
+    Unlike `get_user_profile_by_sub` (strictly read-only, per its own
+    docstring), this DOES lazily create a row — most `registered_user`
+    callers never set a display name, so waiting for one would mean most
+    diners never get a "last seen" value at all, defeating the point of
+    the admin report this backs.
+
+    Read-then-write (a plain `SELECT` followed by an `INSERT`/`UPDATE`),
+    not a single atomic `INSERT ... ON CONFLICT` — deliberately, so this
+    runs unchanged against both the real Postgres backend and the SQLite
+    engine `tests/integration/conftest.py` uses (a dialect-specific
+    upsert would only compile against one of the two). A lost update under
+    concurrent requests from the same user within the same instant is
+    possible in theory but harmless here: the field is a best-effort "last
+    visited" display value, not a source of truth anything else reads for
+    a correctness decision (contrast with `get_or_create_owner_account`,
+    which uses `IntegrityError` recovery because a *duplicate owner
+    account* would be a real bug, not just an off-by-a-few-seconds
+    timestamp).
+
+    Commits on its own (same as `get_or_create_owner_account`) — the
+    caller (`app/dependencies/auth.py`) invokes this from inside a
+    dependency that runs before the route body, wraps it in a broad
+    try/except, and rolls back on any failure so a problem here can never
+    surface as, or block, the caller's actual response.
+    """
+    now = datetime.now(timezone.utc)
+    threshold = now - timedelta(minutes=_LAST_SEEN_THROTTLE_MINUTES)
+
+    profile = await get_user_profile_by_sub(db, cognito_sub)
+    if profile is None:
+        db.add(UserProfile(cognito_sub=cognito_sub, last_seen_at=now))
+    elif profile.last_seen_at is None or profile.last_seen_at < threshold:
+        profile.last_seen_at = now
+    else:
+        # Throttled — last write was recent enough, skip the DB write.
+        return
+
+    await db.commit()
 
 
 def _owner_out(owner: OwnerAccount) -> OwnerAccountOut:

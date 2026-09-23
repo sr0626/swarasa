@@ -26,6 +26,11 @@ docs/API_CONTRACTS.md) additionally needs `cognito-idp:ListUsersInGroup` —
 see its docstring for why this is a separate action/grant from the
 `ListUsers` lookups above rather than a reuse of them.
 
+`list_registered_users` (added for `GET /admin/registered-users`, see
+docs/API_CONTRACTS.md) reuses that exact same `ListUsersInGroup` grant —
+no new IAM action or scope needed, same call shape, just returning the
+per-user records instead of only a running count.
+
 IAM (root CLAUDE.md "AWS Best Practices" — least privilege): the lookups need
 exactly one new action, `cognito-idp:ListUsers`, scoped to exactly one
 resource — this app's single user pool ARN. No write actions
@@ -42,6 +47,8 @@ modules.
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
+from datetime import datetime
 
 import boto3
 from botocore.exceptions import ClientError
@@ -172,6 +179,75 @@ def count_users_in_group(group_name: str) -> int:
         if not next_token:
             break
     return count
+
+
+@dataclass(frozen=True)
+class RegisteredUserRecord:
+    """One `registered_user` pool member, as returned by
+    `list_registered_users` below. `cognito_sub` falls back to `Username`
+    only in the (untested-in-practice, but not impossible) case a pool
+    member has no `sub` attribute in the `ListUsersInGroup` response —
+    `Username` is Cognito's own stable per-pool identifier either way."""
+
+    cognito_sub: str
+    email: str | None
+    status: str
+    signup_at: datetime | None
+
+
+def list_registered_users() -> list[RegisteredUserRecord]:
+    """List every member of the `registered_user` pool group, for the
+    admin "Registered users" report (`GET /admin/registered-users`, see
+    docs/API_CONTRACTS.md and `app/services/admin_registered_users_service.py`).
+
+    Same `ListUsersInGroup` action/grant as `count_users_in_group` (see
+    module docstring) — this is the "give me the records" sibling of that
+    "give me just the count" call, not a new permission.
+
+    JUDGMENT CALL (flagged for review): `ListUsersInGroup` paginates via an
+    opaque `NextToken` cursor, not `page`/`page_size` offsets — incompatible
+    with this project's usual `Pagination(page, page_size)` convention
+    (backend/CLAUDE.md "ALWAYS include pagination on list endpoints"),
+    which assumes a query-able local table. Rather than exposing Cognito's
+    cursor directly (a leaky, backend-specific pagination contract the
+    frontend would have to special-case) or building a local mirror table
+    (rejected for `count_users_in_group` for the same reasons — see
+    docs/DECISIONS.md "Admin registered-user count"), this function
+    fetches every page from Cognito (same bounded, admin-only, low-traffic
+    assumption already accepted for the count endpoint) and the caller
+    (`admin_registered_users_service.get_registered_users`) paginates the
+    resulting list in Python. Revisit only if the diner pool grows large
+    enough that a full `ListUsersInGroup` sweep becomes slow or costly on
+    every admin page-load — not a concern at Phase 1 scale.
+
+    Raises `RuntimeError`/`ClientError`/`BotoCoreError` same as
+    `count_users_in_group` — no silent fallback for an admin report's data.
+    """
+    client = _get_client()
+    pool_id = _user_pool_id()
+    records: list[RegisteredUserRecord] = []
+    next_token: str | None = None
+    while True:
+        kwargs = {"UserPoolId": pool_id, "GroupName": REGISTERED_USER_GROUP, "Limit": 60}
+        if next_token:
+            kwargs["NextToken"] = next_token
+        response = client.list_users_in_group(**kwargs)
+        for user in response.get("Users") or []:
+            attrs = {
+                attr.get("Name"): attr.get("Value") for attr in user.get("Attributes", [])
+            }
+            records.append(
+                RegisteredUserRecord(
+                    cognito_sub=attrs.get("sub") or user.get("Username", ""),
+                    email=attrs.get("email"),
+                    status=user.get("UserStatus", "UNKNOWN"),
+                    signup_at=user.get("UserCreateDate"),
+                )
+            )
+        next_token = response.get("NextToken")
+        if not next_token:
+            break
+    return records
 
 
 def add_user_to_group(username: str, group_name: str) -> None:
