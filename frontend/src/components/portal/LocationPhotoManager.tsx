@@ -1,13 +1,33 @@
 "use client";
 
 // Photo gallery management — the presigned S3 upload pattern from
-// frontend/src/lib/api/locations.ts (getLocationPhotoUploadUrl -> PUT to S3
-// directly -> createLocationPhoto), wired to a real file input for the
-// first time in this codebase (ClaimForm.tsx's document-upload proof
-// method wanted this same pattern but had no matching presigned-url
+// frontend/src/lib/api/locations.ts (getLocationPhotoUploadUrl -> multipart
+// POST to S3 directly -> createLocationPhoto), wired to a real file input
+// for the first time in this codebase (ClaimForm.tsx's document-upload
+// proof method wanted this same pattern but had no matching presigned-url
 // endpoint to call — see its own flagged gap comment; the location photos
 // sub-resource does have one, documented in docs/API_CONTRACTS.md
 // "Photos (`restaurant_photo`, sub-resource of `/locations/{id}`)").
+//
+// FIXED (manager photo-upload bug report): this previously PUT the raw
+// file straight to `upload_url` with no body encoding, a leftover from
+// before the backend's S3 resize pipeline (commit 3d7ce66, "complete the
+// S3 image resize pipeline") switched `POST /locations/{id}/photos/
+// upload-url` to a presigned **POST** (S3's `content-length-range`
+// condition — needed for BRD 5.3's 5MB cap — only exists for presigned
+// POST policies, not PUT; see docs/API_CONTRACTS.md and
+// backend/app/services/s3_service.py's `generate_location_photo_upload_url`
+// docstring). The frontend contract (`PhotoUploadUrlResponse`) never
+// gained the `fields` the backend started returning, so every upload —
+// owner, manager, or admin alike, this component is shared across all
+// three (frontend/src/app/portal/locations/[id]/page.tsx) — PUT to a
+// bucket-root URL with no signed policy and got back a non-2xx from S3,
+// surfacing as the generic "Uploading the image failed" message below.
+// It was reported against a manager session, but nothing here is
+// manager-specific: the bug reproduces for every role since the same S3
+// call path (and the same stale `fields`-less type) is shared by all of
+// them; a manager was simply the first to exercise this screen since the
+// resize pipeline shipped.
 //
 // Free/paid gallery limit (root CLAUDE.md "Tier model",
 // backend/app/services/photo_service.py's `gallery_limit_for` — 2 free /
@@ -32,25 +52,13 @@ import {
   setLocationPhotoCoverAction,
 } from "@/app/portal/locations/[id]/actions";
 import { ImageIcon, PlusIcon, TrashIcon } from "@/components/ui/icons";
+import { postFileToS3 } from "@/lib/photoUpload";
 import type { GalleryPhoto } from "@/types/location";
 
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 function galleryLimitFor(isPaid: boolean): number {
   return isPaid ? 10 : 2;
-}
-
-async function putFileToS3(uploadUrl: string, file: File): Promise<boolean> {
-  try {
-    const res = await fetch(uploadUrl, {
-      method: "PUT",
-      headers: { "Content-Type": file.type },
-      body: file,
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
 }
 
 export default function LocationPhotoManager({
@@ -91,8 +99,12 @@ export default function LocationPhotoManager({
     const uploadUrlResult = await getLocationPhotoUploadUrlAction(locationId, file.type);
     if (!uploadUrlResult.ok) return { ok: false, error: uploadUrlResult.error };
 
-    const putOk = await putFileToS3(uploadUrlResult.data.upload_url, file);
-    if (!putOk) {
+    const uploadOk = await postFileToS3(
+      uploadUrlResult.data.upload_url,
+      uploadUrlResult.data.fields,
+      file
+    );
+    if (!uploadOk) {
       return { ok: false, error: "Uploading the image failed. Please try again." };
     }
 

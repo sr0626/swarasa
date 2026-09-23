@@ -235,9 +235,12 @@ export async function updateLocationHoursAction(
 
 /**
  * POST /locations/{id}/photos/upload-url — step 1 of the presigned upload.
- * The client PUTs the file directly to the returned `upload_url` (never
- * through this action/Lambda, root CLAUDE.md's S3 presigned-URL pattern),
- * then calls `createLocationPhotoAction` below with the same `s3_key`.
+ * The client POSTs a multipart form (the returned `fields` + the file)
+ * directly to `upload_url` (never through this action/Lambda, root
+ * CLAUDE.md's S3 presigned-URL pattern — see
+ * `frontend/src/lib/api/locations.ts`'s `getLocationPhotoUploadUrl` for
+ * why it's POST, not PUT), then calls `createLocationPhotoAction` below
+ * with the same `s3_key`.
  */
 export async function getLocationPhotoUploadUrlAction(
   locationId: number,
@@ -262,7 +265,7 @@ export async function getLocationPhotoUploadUrlAction(
   }
 }
 
-/** POST /locations/{id}/photos — step 2, records the row after the S3 PUT succeeds. */
+/** POST /locations/{id}/photos — step 2, records the row after the S3 upload succeeds. */
 export async function createLocationPhotoAction(
   locationId: number,
   s3Key: string,

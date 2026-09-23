@@ -200,6 +200,16 @@ export interface PhotoUploadUrlInput {
 
 export interface PhotoUploadUrlResponse {
   upload_url: string;
+  /**
+   * Presigned-POST fields (docs/API_CONTRACTS.md "POST
+   * /locations/{id}/photos/upload-url") — every entry here must be sent
+   * as its own form field, alongside the file itself under the field
+   * name "file", in a multipart POST to `upload_url`. This is NOT a
+   * plain-PUT presigned URL (see backend/app/services/s3_service.py's
+   * `generate_location_photo_upload_url` docstring for why: S3's
+   * `content-length-range` enforcement only exists for presigned POST).
+   */
+  fields: Record<string, string>;
   s3_key: string;
   expires_in: number;
 }
