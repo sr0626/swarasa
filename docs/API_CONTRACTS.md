@@ -420,7 +420,12 @@ brand. Backend Dev's service layer should catch that and return `409
 Conflict` with a clear message rather than letting a DB integrity
 error surface (root CLAUDE.md "NEVER expose internal stack details in
 API error responses"). Callers must remove/reassign all of the brand's
-locations first.
+locations first — as of 2026-09-22, `DELETE /locations/{id}/permanent`
+below is the real way to do the "remove" half of that (each location must
+already be hidden, with no active manager/pending claim/pending reopen
+request — see that endpoint's own guardrail table); there is still no
+reassign-to-another-brand endpoint (`docs/DECISIONS.md` "Hard-delete a
+location" flags this as explicitly out of scope for now).
 
 **Flagged gap:** `restaurant_brand` has no `is_active`/soft-delete
 column in this schema (unlike `restaurant_location`), so there is no
@@ -826,6 +831,51 @@ same as before. `POST /locations/{id}/status` below is the new
 status-aware entry point for the other two self-service states
 (`coming_soon`, `closed_pending_reopen`); this `DELETE` is not being
 removed, just no longer the only way to hide a location.
+
+### DELETE /locations/{id}/permanent
+
+Auth: owner (owns parent brand) or admin — same
+`require_location_owner_or_admin` dependency as the soft-delete `DELETE
+/locations/{id}` above.
+
+**Real row delete — irreversible.** Added 2026-09-22 (`docs/DECISIONS.md`
+"Hard-delete a location") to close the dead end in `DELETE
+/restaurants/{id}`: that endpoint's `ON DELETE RESTRICT` 409 tells the
+caller to "remove or reassign its locations first," but before this
+endpoint existed, nothing could actually remove one — `DELETE
+/locations/{id}` only ever soft-hides. This is the new capability that
+makes that instruction true.
+
+Guardrails, checked in order, each its own `409` + `code` (never a raw DB
+integrity error, root CLAUDE.md "NEVER expose internal stack details"):
+
+| Order | Check | `code` |
+|---|---|---|
+| 1 | Location's `status` is not already `active` — must be hidden first (any of `owner_deactivated` / `coming_soon` / `closed_pending_reopen`) | `location_still_active` |
+| 2 | No `location_manager` row with `is_active=true` for this location | `location_has_active_manager` |
+| 3 | No `claim_request` with `status="pending_review"` referencing this location (via its nullable `location_id`) | `location_has_pending_claim` |
+| 4 | No `location_reopen_request` with `status="pending_review"` for this location | `location_has_pending_reopen_request` |
+
+Response: `204 No Content`. Audit: `audit_log` row
+(`table_name="restaurant_location"`, `action="delete"`, `old_val` a
+snapshot of `status`/`address_line1`/`city`/`state`/`brand_id`,
+`new_val=null`) — written and committed together with the row delete in
+the same transaction, so the audit trail and the delete never diverge.
+
+**Cascading child rows (DB-level `ON DELETE`, not application code,
+`docs/DATA_MODEL.md`):** `restaurant_hours` and `restaurant_photo`
+(`CASCADE`), `location_reopen_request` (`CASCADE` — safe, guardrail 4
+above already guarantees none are pending), and every `location_manager`
+row for this location — active or historically inactive (`CASCADE`).
+`claim_request.location_id` and `listing_report.location_id` are `SET
+NULL`; those rows survive with their location pointer cleared. See
+`docs/DECISIONS.md` "Hard-delete a location" for the judgment call on
+accepting the loss of inactive manager history as part of this cascade.
+
+**Not the same endpoint as `DELETE /locations/{id}`** — that one is
+unchanged (still a soft-hide) and stays the default "hide this listing"
+action. This one is a separate, more destructive action with its own
+route, never silently substituted for the other.
 
 ### POST /locations/{id}/status
 

@@ -7,11 +7,13 @@ from __future__ import annotations
 from decimal import Decimal
 
 from geoalchemy2.functions import ST_MakePoint, ST_SetSRID
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
+from app.models.claim_request import ClaimRequest
 from app.models.location_manager import LocationManager
+from app.models.location_reopen_request import LocationReopenRequest
 from app.models.restaurant_brand import RestaurantBrand
 from app.models.restaurant_location import RestaurantLocation
 from app.schemas.hours import HourEntryIn, HoursResponse
@@ -381,6 +383,164 @@ async def update_location_status(
     )
     await db.commit()
     return await get_location(db, location.id, current_user)
+
+
+async def remove_location(db: AsyncSession, location_id: int, current_user) -> None:
+    """`DELETE /locations/{id}/permanent` — a REAL, irreversible row delete.
+    Not to be confused with `delete_location` above (the long-standing
+    soft-hide that only flips `status`) — this actually removes the
+    `restaurant_location` row, which is what finally lets an owner/admin
+    clear `restaurant_brand.locations` and hard-delete a brand via `DELETE
+    /restaurants/{id}` (docs/API_CONTRACTS.md "DELETE /restaurants/{id}":
+    that route's `ON DELETE RESTRICT` 409 told callers to "remove or
+    reassign its locations first," but nothing before this endpoint could
+    actually do that removal — see docs/DECISIONS.md "Hard-delete a
+    location" for the full gap this closes).
+
+    Auth: owner (owns parent brand) or admin — same
+    `require_location_owner_or_admin` dependency as the soft-delete route,
+    enforced at the router.
+
+    Guardrails, checked in order, each a clean 409 (never a raw DB
+    integrity error, root CLAUDE.md "NEVER expose internal stack
+    details"):
+      1. The location must already be in a non-`active` status. A live,
+         publicly-visible location can't be hard-deleted directly — the
+         caller has to hide it first (any of the three hidden statuses is
+         fine), which also means they've already seen and accepted that
+         it's coming down before the irreversible step.
+      2. No active `location_manager` assignment. A manager could be mid-
+         session against this location; removing it out from under them
+         is a worse failure mode than asking the owner/admin to revoke the
+         assignment first (`DELETE /locations/{id}/managers/{manager_id}`).
+      3. No `claim_request` in `pending_review` referencing this location
+         (via its nullable `location_id` — the phone_verification proof
+         path, see `app/models/claim_request.py`). An admin mid-review of
+         a claim against this location's phone number shouldn't have the
+         location disappear underneath that review.
+      4. No `location_reopen_request` in `pending_review` for this
+         location. Same reasoning as (3) — don't let a location vanish
+         while an admin decision about it is in flight.
+
+    Rows this cascades away via the DB's own FK actions (never done here
+    manually — `app/models/*.py` already declares each one, same pattern
+    `delete_restaurant` above relies on for its own `ON DELETE RESTRICT`):
+    `restaurant_hours` (CASCADE), `restaurant_photo` (CASCADE),
+    `location_reopen_request` (CASCADE — safe, guardrail 4 above already
+    guarantees none are pending), and ALL `location_manager` rows for this
+    location, active or historically-inactive (CASCADE). `claim_request.
+    location_id` / `listing_report.location_id` are `SET NULL` — those
+    rows survive with their location pointer cleared.
+
+    JUDGMENT CALL (flagged for review): cascading away a location's
+    *inactive* `location_manager` history (past assignments/revocations)
+    is a real loss of that particular audit trail, even though the
+    `audit_log` row this function itself writes survives independently
+    (`audit_log` has no FK to `restaurant_location`). Accepted as the
+    correct tradeoff for a genuinely-destructive, explicitly-confirmed
+    action — the alternative (refusing to hard-delete until every
+    historical manager row is manually purged) would make this feature
+    unusable for exactly the locations most likely to need it (an
+    established listing with manager history). Guardrail 2 above still
+    refuses on any *active* assignment, so no currently-working manager
+    is ever surprised by this.
+    """
+    location = await get_location_or_404(db, location_id)
+
+    if location.status == RestaurantLocation.STATUS_ACTIVE:
+        raise AppError(
+            409,
+            "This location is still active. Hide, mark coming soon, or close it "
+            "before removing it permanently.",
+            "location_still_active",
+        )
+
+    active_manager = (
+        await db.execute(
+            select(LocationManager.id)
+            .where(
+                LocationManager.location_id == location_id,
+                LocationManager.is_active == True,  # noqa: E712
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if active_manager is not None:
+        raise AppError(
+            409,
+            "This location still has an active manager assignment. Remove the "
+            "manager before removing the location.",
+            "location_has_active_manager",
+        )
+
+    pending_claim = (
+        await db.execute(
+            select(ClaimRequest.id)
+            .where(
+                ClaimRequest.location_id == location_id,
+                ClaimRequest.status == "pending_review",
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if pending_claim is not None:
+        raise AppError(
+            409,
+            "This location has a pending ownership claim under review. Wait for "
+            "that review to finish before removing it.",
+            "location_has_pending_claim",
+        )
+
+    pending_reopen = (
+        await db.execute(
+            select(LocationReopenRequest.id)
+            .where(
+                LocationReopenRequest.location_id == location_id,
+                LocationReopenRequest.status == "pending_review",
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if pending_reopen is not None:
+        raise AppError(
+            409,
+            "This location has a pending reopen request under review. Wait for "
+            "that review to finish before removing it.",
+            "location_has_pending_reopen_request",
+        )
+
+    old_val = {
+        "status": location.status,
+        "address_line1": location.address_line1,
+        "city": location.city,
+        "state": location.state,
+        "brand_id": location.brand_id,
+    }
+    await audit_service.log(
+        db,
+        table_name="restaurant_location",
+        record_id=location.id,
+        action="delete",
+        actor_id=current_user.cognito_sub,
+        actor_role=current_user.role,
+        old_val=old_val,
+        new_val=None,
+    )
+    # A Core-level `delete()`, not `db.delete(location)` (session-level
+    # unit-of-work delete) — deliberately. `RestaurantLocation.managers` /
+    # `.hours` are plain `relationship()`s with no `passive_deletes=True`
+    # (Architect-owned models, out of scope to change here), so a
+    # session-level delete makes SQLAlchemy load those collections and
+    # proactively try to NULL their FK columns before deleting the parent —
+    # which 500s on `location_manager.location_id` / `restaurant_hours.
+    # location_id` (both `NOT NULL`) even though the DB's own `ON DELETE
+    # CASCADE` (docs/DATA_MODEL.md) would have handled every child row
+    # correctly on its own. This bulk `delete()` goes straight to the DB
+    # without walking ORM relationships, so the real `ON DELETE
+    # CASCADE`/`SET NULL` FK actions do the cascading, exactly as this
+    # function's own docstring describes.
+    await db.execute(delete(RestaurantLocation).where(RestaurantLocation.id == location.id))
+    await db.commit()
 
 
 async def list_locations_for_brand(

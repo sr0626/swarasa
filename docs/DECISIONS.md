@@ -851,6 +851,77 @@ that can't be silently un-done by mistake.
   `docs/API_CONTRACTS.md` "GET /locations/{id}" "Status-aware
   visibility".
 
+**Hard-delete a location: new `DELETE /locations/{id}/permanent` endpoint, gated on already-hidden status + no active manager/pending claim/pending reopen — closes the "remove or reassign its locations first" dead end in `DELETE /restaurants/{id}`**
+2026-09-22 | Confirmed bug: `DELETE /restaurants/{id}` 409s with "Cannot
+delete a restaurant that still has locations. Remove or reassign its
+locations first" whenever `restaurant_location.brand_id`'s `ON DELETE
+RESTRICT` fires — but no endpoint existed that could actually remove a
+location (the existing `DELETE /locations/{id}` only soft-hides,
+`status -> owner_deactivated`, row kept) or reassign one to another brand
+(no such endpoint at all). Every real listing with any location history
+hit a permanent dead end trying to delete the brand. Picked the smallest
+option that's actually correct (root CLAUDE.md "Decision-Making
+Autonomy") over the fallback of just fixing the error message, since the
+capability itself was in reach:
+
+- **New route, not a repurposed `DELETE /locations/{id}`:** that route's
+  contract (`docs/API_CONTRACTS.md`, `app/models/restaurant_location.py`)
+  is a settled soft-hide with real callers (owner console's location
+  editor before this task, `admin/listings` moderation panel) — changing
+  its behavior in place would silently turn every existing caller's
+  "hide" into a "destroy." `DELETE /locations/{id}/permanent` is a
+  distinct, unambiguous, separately-authorized action instead, same auth
+  (`require_location_owner_or_admin`) as the soft version.
+- **Guardrail order — status first, then manager, then the two pending-review
+  tables:** (1) location must already be non-`active` (any of the three
+  hidden statuses) — a live, public listing can't be hard-deleted in one
+  step; the caller has to hide it first, which doubles as a confirmation
+  that they've accepted it's coming down. (2) no *active*
+  `location_manager` row — don't remove a location a manager is actively
+  working. (3) no `claim_request` in `pending_review` referencing this
+  location via its nullable `location_id` (the phone_verification proof
+  path). (4) no `location_reopen_request` in `pending_review` for this
+  location. Each 409s with its own `code` (`location_still_active`,
+  `location_has_active_manager`, `location_has_pending_claim`,
+  `location_has_pending_reopen_request`) rather than one generic message.
+- **Cascading child rows is accepted, including losing INACTIVE
+  `location_manager` history:** `restaurant_hours`, `restaurant_photo`,
+  and `location_reopen_request` are all `ON DELETE CASCADE` on
+  `location_id` already (`docs/DATA_MODEL.md`); so is `location_manager`
+  — which means a hard delete also removes that location's past
+  (already-inactive) manager assignments, not just the active one
+  guardrail (2) already refuses on. `claim_request.location_id` and
+  `listing_report.location_id` are `SET NULL`, so those rows survive with
+  their location pointer cleared. Accepted rather than blocking on it:
+  the `audit_log` row this endpoint writes (`action="delete"`,
+  `old_val` snapshot of status/address/brand_id) has no FK to
+  `restaurant_location` and survives independently, and refusing hard
+  delete until every historical manager row is manually purged would make
+  the feature useless for exactly the established listings most likely to
+  need it.
+  *Rejected: also gating on inactive manager history (defeats the
+  feature's purpose for any location with a manager past); silently
+  nulling `location_manager.location_id` instead of cascading (that
+  column isn't nullable, and making it so would weaken the paid-tier
+  manager-cap queries elsewhere that assume a location_id is always
+  real)*.
+- **Frontend: a "Remove this location" danger-zone action added to the
+  owner/admin location editor (`LocationStatusControl.tsx`), visible only
+  when `status !== "active"`** (mirroring the backend's own first
+  guardrail rather than duplicating it as a second source of truth), with
+  a real two-step confirmation distinct from every other "soft" toggle
+  already in that component — the copy says explicitly that this is
+  permanent and cannot be undone. On success the page navigates back to
+  the caller's console (`/account` for owner, `/admin/listings` for
+  admin) rather than re-rendering, since the location it was showing no
+  longer exists.
+  *Rejected: also wiring a "reassign this location to another brand"
+  endpoint — out of scope for this fix; a single-location brand (the
+  common case per the task's own framing) is fully unblocked by hard
+  delete alone, and multi-brand reassignment is a distinct, bigger
+  feature with its own ownership-transfer questions (billing, manager
+  assignments, claim history) better decided on its own.*
+
 **CSV bulk restaurant import: `website` is brand-level, geocoding happens on the human's machine (not inside the Lambda), CSV extends the existing `bulk_import_restaurants` command rather than forking a new one**
 2026-09-17 | Combined schema+backend decision (root CLAUDE.md
 "Decision-Making Autonomy"), closing the user request "upload a CSV with
