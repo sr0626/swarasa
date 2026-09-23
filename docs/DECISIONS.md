@@ -392,6 +392,25 @@ fields, s3_key, expires_in}` (added `fields`) instead of the previous
 change (root CLAUDE.md "never change an API contract silently"); no
 frontend consumer existed yet (this pipeline was "Not Started" end to end
 before this change), so the blast radius is this backend + its docs only.
+**Correction, 2026-09-23 (the "no frontend consumer" sentence above was
+wrong; left as written for history):** a consumer DID exist —
+`frontend/src/components/portal/LocationPhotoManager.tsx` (added
+2026-09-13, `253113e`) already called `getLocationPhotoUploadUrl` and did a
+plain `fetch(uploadUrl, { method: "PUT", body: file })`, and the
+`PhotoUploadUrlResponse` type did not declare `fields`. The contract change
+therefore broke every cover/gallery photo upload (owner, manager and admin
+share that component) from 2026-09-16 until PR #183 (`5b77d2f`) switched the
+client to a multipart `POST` of every presigned `fields` entry followed by
+the file (`frontend/src/lib/photoUpload.ts`). Current pipeline, verified
+against code: `POST /locations/{id}/photos/upload-url` returns a presigned
+POST (5MB `content-length-range`, `backend/app/services/s3_service.py`) ->
+client uploads direct to S3 under `raw/` -> S3 event (filtered to `raw/`)
+-> resize Lambda (`infra/modules/lambda_resize`,
+`backend/app/lambda_handlers/resize_photo.py`) writes `processed/` (1200px)
+and `thumbnails/` (400px), then deletes the `raw/` original -> client
+`POST /locations/{id}/photos` records the predicted keys. Lesson: a "no
+consumer exists" claim about a contract change needs a grep of
+`frontend/src`, not a reading of the plan's status column.
 *Rejected: presigned PUT with a signed Content-Length parameter (confirmed
 not supported — Content-Length isn't signable on a SigV4 query-string
 presigned URL), app-side-only size validation with no S3-side enforcement
@@ -843,6 +862,59 @@ Infra to revisit if this pattern gets used often enough to want it).*
 
 ## Database & Data Model
 
+**Registered-user activity tracking (searches + tile clicks): `user_activity_event` table, registered users only, best-effort, 12-month retention with no new infra**
+2026-09-23 | User-approved ("go with your suggestion") after the click-history
+question was parked as out of scope in "Registered-user last-seen tracking"
+below. Source: PR #194 (`backend/app/services/activity_service.py`,
+`backend/app/models/user_activity_event.py`, `backend/app/routers/activity.py`,
+migration `0012_user_activity_event`, renumbered from 0011 to sit on top of
+`0011_brand_deleted_at`). Decided (root CLAUDE.md "Decision-Making Autonomy"):
+
+- **What is recorded:** only two event types — a `search` (from `GET /search`,
+  page 1 only so paging one result set is one search; a search with no
+  criteria at all — no `q`, filters, `loc` or deals flag — is skipped as
+  noise) and a `tile_click` (`POST /activity/tile-click`, 204, `404` for an
+  unknown brand or a location not belonging to that brand). Stored per row:
+  `user_sub`, `event_type`, a small JSON payload, `created_at`.
+- **Who:** `registered_user` ONLY — never anonymous, owner, manager or admin.
+  The route dependency gates it AND the service re-checks the role, so a
+  future mis-wired route still cannot write another role's row.
+- **Bounded payload:** every stored string/list is control-char-stripped,
+  whitespace-collapsed and clipped (`MAX_QUERY_LEN`/`MAX_LOCATION_TEXT_LEN`
+  100, at most `MAX_TAGS` 10 tags per facet, each `MAX_TAG_LEN` 50), so a
+  client cannot stuff arbitrary data into the log.
+- **Best-effort:** recording is wrapped in a broad try/except + rollback
+  (same pattern as `_touch_last_seen_best_effort`); a failure is logged and
+  never fails or slows the request it rides on. The tile-click endpoint still
+  returns 204 when only the write failed.
+- **Retention: 12 months, one constant** (`ACTIVITY_RETENTION_DAYS = 365`
+  in `activity_service.py`). Enforced two ways with NO new AWS resource:
+  read-side filtering (admin list and CCPA export ignore rows older than the
+  cutoff, so an expired row is never shown even if not yet purged — this is
+  the authoritative rule) plus a throttled opportunistic physical purge
+  (`maybe_purge_expired`, at most once per hour per Lambda container, after
+  a successful write, table-wide, bounded batches). *Rejected: the
+  `deal_expiry` EventBridge cron — that handler is still a
+  not-yet-deployable placeholder package, and coupling a privacy purge to a
+  deals job would make retention silently depend on it.* Known limitation of
+  the opportunistic approach: physical purge only advances while some
+  registered user is writing; the read-side filter covers that gap for
+  display and export.
+- **Admin visibility:** `GET /admin/registered-users/{user_sub}/activity`
+  (admin only, newest first, optional `event_type`, paginated) and the
+  `/admin/registered-users/[userSub]` page — per user, not a platform-wide
+  clickstream browser.
+- **Privacy (CCPA):** included in the data export (within the retention
+  window) and hard-deleted (every row for the sub, including any not yet
+  purged) on an approved deletion request — pure behavioural data, same
+  treatment as `user_follow`. No `audit_log` entry: the table is not on the
+  audit-required list and `audit_log.record_id` is numeric while `user_sub`
+  is a Cognito sub string.
+*Rejected: recording anonymous or non-registered-user traffic (privacy
+surface with no product need); a platform-wide analytics/clickstream system
+(Phase 2 analytics scope); a purge cron Lambda (see above); logging every
+page of a paginated search.*
+
 **Delete listing becomes a soft delete (`restaurant_brand.deleted_at`) that auto-deactivates every active location; supersedes the hard-delete/409 behaviour of `DELETE /restaurants/{id}`**
 2026-09-23 | User bug report: after deleting a location, "Delete listing" still
 failed with "This restaurant still has locations attached — remove or
@@ -870,6 +942,19 @@ not a hard delete. Decided (root CLAUDE.md "Decision-Making Autonomy"):
   and sees deleted listings only behind `GET /restaurants?status=deleted`.
 - `DELETE /locations/{id}/permanent` (hard delete of ONE location, PR #176)
   is unchanged.
+- **Verified 2026-09-23 against merged code** (`restaurant_service.delete_restaurant`/
+  `restore_restaurant`, migration `0011_brand_deleted_at`): the bullets above
+  match. Deleted brands are also excluded from the admin overview and the
+  admin Owners report counts (`admin_overview_service`, `admin_owners_service`).
+- **Known gaps, deliberately not fixed in PR #193 (follow-ups):**
+  (1) the admin notification counts/queues (`admin_notification_service`
+  `_claims`/`_reports`) do not filter on `deleted_at`, so pending claims and
+  new listing reports that belong to a deleted brand still inflate the badge
+  and appear in the list; (2) a reopen request for a `closed_pending_reopen`
+  location of a deleted brand can still be approved (`location_reopen_service`
+  has no brand check) — the location becomes `active` but stays invisible
+  everywhere until the brand is restored, so the approval has no visible
+  effect and the admin gets no hint why.
 *Rejected: adding a brand-level `status` enum (over-modelled for one
 boolean-ish need); flipping `closed_pending_reopen`/`coming_soon` locations
 too (loses information and bypasses the admin reopen gate); keeping the hard
@@ -1512,6 +1597,50 @@ bug in a future audit-log query).*
 
 ## Authentication & Permissions
 
+**Display name is set-once: `PATCH /auth/me` returns `409 name_locked` on a change; admins change a name only through the `set_user_name` management command**
+2026-09-23 | User-requested. Source: PR #195
+(`backend/app/services/auth_service.py::_reject_name_change_if_locked` /
+`update_me`, `backend/app/scripts/set_user_name.py`, `docs/SCRIPTS.md`).
+Decided (root CLAUDE.md "Decision-Making Autonomy"):
+
+- **Rule:** once a non-empty `full_name` is stored (owner ->
+  `owner_account.full_name`; registered_user/manager ->
+  `user_profile.full_name`), a `PATCH /auth/me` carrying a DIFFERENT
+  `full_name` is rejected `409` with `code: "name_locked"` and nothing is
+  written. First set works; re-sending the identical stored name (compared
+  after trimming) is a harmless no-op 200; phone-only edits for owners are
+  unaffected, and the lock check runs before any field is touched so a
+  rejected rename never half-applies a phone change riding in the same
+  request. `409` (state conflict) rather than `403`: the caller is
+  authorized on the route. Enforced server-side; the account UI merely
+  hides the form and shows the name read-only.
+- **Admin override is a Lambda management command, not an endpoint or UI:**
+  `set_user_name` (`{"_management_command": "set_user_name", "email" |
+  "cognito_sub", "full_name"}`). Rare, ops-only, and IAM
+  `lambda:InvokeFunction` is already the trust boundary for that pattern,
+  so no new public surface, no new authz code, no frontend. It only CHANGES
+  an already-set name and refuses "no name yet" (a never-signed-in owner's
+  name could land in the wrong table).
+- **Audit trail:** an `owner_account` rename by the command is written to
+  `audit_log` (actor `system:set_user_name`, role `admin`, old/new value —
+  `owner_account` is on the audited-entity list). A `user_profile` rename
+  (registered_user/manager) is logged to CloudWatch only, because
+  `audit_log.record_id` is numeric and cannot hold a Cognito `sub` — the
+  same reason `update_me` does not audit `user_profile` writes.
+- **Interaction with CCPA erasure — verified, with a gap:** approved
+  deletion (`privacy_service`) sets `owner_account.full_name = NULL`, which
+  correctly unlocks a redacted owner row. It does NOT touch
+  `user_profile.full_name` at all (nor does the export include it), so for
+  a registered_user/manager the stored name survives erasure and stays
+  locked. This predates the lock (the name PII simply was never covered)
+  but the lock makes it more visible; recorded as a follow-up for the
+  privacy path, not fixed here.
+*Rejected: an admin API endpoint or admin UI for renames (new public
+surface and authz/UI work for a rare ops task); `403` instead of `409`;
+letting the management command set a first name for someone with none;
+audit-logging `user_profile` renames in `audit_log` (numeric `record_id`
+cannot hold a Cognito sub).*
+
 **Admin registered-user count: read live from Cognito (IAM grant), not a new local table**
 2026-09-22 | Judgment call (root CLAUDE.md "Decision-Making Autonomy"),
 closing the gap `docs/API_CONTRACTS.md`'s `GET /admin/notifications`
@@ -1648,6 +1777,10 @@ surface, a retention-period decision, and a re-review of what "browsing
 history" implies platform-wide. Flagged as a follow-up needing its own
 scoping/design conversation, not guessed at inside this task. See the PR
 description for the same note.
+**Update 2026-09-23:** the follow-up happened — click history and search
+criteria are now built for `registered_user` only, with a 12-month
+retention and CCPA export/delete coverage; see "Registered-user activity
+tracking (searches + tile clicks)" in this section.
 
 *Rejected: a single atomic Postgres upsert (see above — dialect-portability
 tradeoff); tracking `owner`/`admin` too (see above — scope + table-identity
