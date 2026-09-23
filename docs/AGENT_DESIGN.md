@@ -104,7 +104,7 @@ what the endpoint looks like. You are the communication layer between agents.
     CLAUDE.md
   /docs/
     AGENT_DESIGN.md       ← this file
-    BRD_v37_Restaurant_Platform.docx          ← business requirements
+    BRD_v38_Restaurant_Platform.docx          ← business requirements
 ```
 
 ### Active agents (from Phase 1)
