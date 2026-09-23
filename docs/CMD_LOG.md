@@ -537,3 +537,39 @@ terraform -chdir=infra apply -var-file=envs/dev.tfvars   # user (x2)
 python3 scripts/list_users.py   # user
 aws sso login --profile swarasa-dev   # user (expired session)
 ```
+
+## 2026-09-23
+```bash
+git push -u origin fix/follow-icon-position-bug   # claude
+git push -u origin feat/owner-preview-registered-user-view   # claude
+git push -u origin feat/follower-count-owner-dashboard   # claude
+git push -u origin feat/manager-activity-feed-and-owner-scope   # claude
+git push -u origin fix/delete-listing-dead-end   # claude
+git push -u origin feat/admin-listings-filters   # claude
+git push -u origin fix/console-closed-now-label   # claude
+git push -u origin feat/admin-tile-follower-count   # claude
+git push -u origin feat/registered-user-count   # claude
+git push -u origin feat/admin-platform-reports   # claude
+git push -u origin fix/manager-location-name-and-copy   # claude
+git push -u origin fix/manager-photo-upload-failure   # claude
+git push -u origin feat/admin-registered-users-report   # claude
+git push -u origin feature/deals-engine-backend   # claude
+git push -u origin docs/deals-policy-conflict-resolution   # claude
+git push -u origin infra/deal-expiry-lambda-packaging   # claude
+git push -u origin fix/alembic-merge-0009-heads   # claude
+git push -u origin feature/deals-engine-frontend   # claude
+git push -u origin docs/brd-v38-current-functionality   # claude
+git push -u origin docs/wave5-tracker-status-cmdlog   # claude
+aws sso login --profile swarasa-dev   # user  (expired session, x2)
+aws sts get-caller-identity --profile swarasa-dev   # user  (first run in the wrong account 044336301301, no effect; then the correct account 091823298313)
+aws ecr describe-images --repository-name swarasa-api-dev --profile swarasa-dev --region us-east-1 --query 'sort_by(imageDetails,&imagePushedAt)[-1].{tag:imageTags,pushedAt:imagePushedAt}'   # user
+aws lambda get-function --function-name swarasa-api-dev --profile swarasa-dev --region us-east-1 --query 'Code.ImageUri' --output text   # user
+terraform init -reconfigure   # user  (infra/)
+terraform plan -var-file=envs/dev.tfvars -var="lambda_image_uri=<swarasa-api-dev image URI>"   # user  (infra/, swarasa-dev; x3)
+terraform apply -var-file=envs/dev.tfvars -var="lambda_image_uri=<swarasa-api-dev image URI>"   # user  (infra/, swarasa-dev; 1 added, 3 changed, 1 destroyed: deal_expiry Lambda replaced zip -> container image)
+aws lambda invoke --function-name swarasa-deal-expiry-dev --profile swarasa-dev --region us-east-1 ...   # user  (x3; first two failed -- old code, then `deal` table not yet migrated; third succeeded, {"expired": 0})
+aws logs tail /aws/lambda/swarasa-deal-expiry-dev --profile swarasa-dev --region us-east-1 ...   # user  (x2)
+aws lambda invoke --function-name swarasa-api-dev --payload '{"_management_command": "alembic_upgrade"}' --profile swarasa-dev --region us-east-1 ...   # user  (x3; first failed 'Multiple head revisions' before #190 deployed, then applied 0009_deal + 0009_user_profile_last_seen_at + 0010, then no-op; order of the deal-expiry/alembic invokes above is approximate)
+python3 scripts/create_test_users.py   # user
+python3 scripts/list_users.py   # user
+```
