@@ -1877,6 +1877,23 @@ the body, it's always the authenticated caller (root CLAUDE.md "Permission
 model" — never trust a client-supplied identity for a write that should be
 self-scoped).
 
+**Name lock (added 2026-09-23 — user decision "once the name is set, the
+only way to change it is contacting an admin"):** `full_name` is
+set-once. While no non-empty name is stored (`owner_account.full_name` /
+`user_profile.full_name`), the first `PATCH` sets it as before. Once a
+name is stored, a `PATCH` carrying a *different* `full_name` is rejected:
+`409`, `{"detail": "Your name is already set and can't be changed here.
+Contact an admin if it needs to be updated.", "code": "name_locked"}` —
+nothing in the request is applied (a `phone` change in the same request
+does not half-apply). Re-sending the identical stored name (compared after
+trimming) is a harmless no-op `200`. Omitting `full_name` never trips the
+lock, so an owner's `phone`-only `PATCH` keeps working. No schema change.
+The account UI stops rendering the name form once a name exists, but this
+server-side check is the enforcement. Admin path: the `set_user_name`
+Lambda management command (`backend/app/scripts/set_user_name.py`,
+`docs/SCRIPTS.md`) — audit-logged for `owner_account`; it only changes an
+already-set name.
+
 Response for an `owner` caller: `200`, `owner_account` shape from `GET
 /auth/me` (unchanged by this generalization — still lazily provisions
 `owner_account` on first write, still audit-logged).

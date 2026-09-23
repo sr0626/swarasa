@@ -40,6 +40,18 @@ export function firstNameFor(me: AuthMe): string | null {
   return full ? (full.split(/\s+/)[0] ?? null) : null;
 }
 
+/** True once a display name is set (non-empty after trimming). A set name is
+ * locked: the UI never renders an editable name field for it again and the
+ * backend rejects a change (`PATCH /auth/me` -> 409 `name_locked`); an admin
+ * changes it on request. Shared by every role's account view so they can't
+ * drift. */
+export function isNameLocked(fullName: string | null | undefined): boolean {
+  return (fullName?.trim() ?? "") !== "";
+}
+
+/** Short copy shown wherever a locked name is displayed read-only. */
+export const NAME_LOCKED_NOTE = "To change your name, please contact an admin.";
+
 export const cardClass =
   "rounded-brand-card border border-brand-border bg-white p-5 shadow-brand-card sm:p-6";
 
