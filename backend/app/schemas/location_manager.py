@@ -50,6 +50,12 @@ class ManagedLocationOut(BaseModel):
     """
 
     id: int
+    # Added: the panel showing "Locations I manage" had no way to display
+    # which RESTAURANT a location belongs to — location_name is an optional
+    # per-location label (e.g. "Downtown"), not the brand/restaurant name,
+    # so a manager with locations under different restaurants saw address
+    # rows with no restaurant identity at all. Found live 2026-09-23.
+    brand_name: str
     location_name: str | None
     address_line1: str
     city: str

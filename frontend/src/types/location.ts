@@ -259,6 +259,11 @@ export interface LocationManagersResponse {
  */
 export interface ManagedLocation {
   id: number;
+  /** The restaurant this location belongs to — distinct from
+   * `location_name` (an optional per-location label like "Downtown").
+   * Added so a manager with locations under different restaurants can
+   * tell them apart. Found live 2026-09-23. */
+  brand_name: string;
   location_name: string | null;
   address_line1: string;
   city: string;
