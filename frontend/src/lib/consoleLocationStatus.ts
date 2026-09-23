@@ -18,7 +18,13 @@ import type { LocationHour } from "@/types/location";
 export type ConsoleTodayStatus =
   | { kind: "open_now" }
   | { kind: "opens_at"; time: string }
+  /** Genuinely closed for the ENTIRE day — no hours row, "hours unknown"
+   * (is_closed: null), or is_closed: true. */
   | { kind: "closed_today" }
+  /** Has hours today, but "now" is already past close_time — the location
+   * WAS open today and no longer is, distinct from never having opened.
+   * Split out from `closed_today` per direct user feedback 2026-09-23. */
+  | { kind: "closed_now" }
   /** Can't tell (no timezone, unresolvable timezone, etc.) — caller renders
    * nothing extra rather than guessing. */
   | { kind: "unknown" };
@@ -67,16 +73,12 @@ function currentTimeOfDay(timeZone: string, now: Date): string | null {
  * all. `hours`/`timezone` are only consulted to tell "hasn't opened yet"
  * apart from "closed all day" when it's NOT currently open.
  *
- * JUDGMENT CALL (flagged in this fix's PR/report): a day that HAS hours but
- * where "now" is already past `close_time` (already had its window today,
- * not before open, not currently open) also resolves to `closed_today`
- * here, same as a day with no hours row at all. The task brief only
- * specified two buckets — "opens later today, before close" -> opens_at,
- * and "closed all day / no hours" -> closed_today — and didn't cover
- * "already closed for the day"; showing "Opens at <a time that already
- * passed>" would be actively misleading, so `closed_today` is the safer
- * reuse of a bucket the brief already defined, rather than inventing a
- * third label ("Opens tomorrow at X") the brief never asked for.
+ * A day that HAS hours but where "now" is already past `close_time`
+ * resolves to `closed_now`, distinct from `closed_today` (no hours at all /
+ * genuinely closed the whole day) — direct user feedback 2026-09-23: "use
+ * 'closed today' label only if it's closed for the entire day, otherwise
+ * say 'closed now'". Still no third label for "opens tomorrow at X" — the
+ * console doesn't have tomorrow's hours in scope here.
  */
 export function describeConsoleTodayStatus(
   isOpenNow: boolean | null | undefined,
@@ -104,5 +106,5 @@ export function describeConsoleTodayStatus(
   if (nowTime !== null && nowTime < today.open_time) {
     return { kind: "opens_at", time: formatClockTime(today.open_time) };
   }
-  return { kind: "closed_today" };
+  return { kind: "closed_now" };
 }
