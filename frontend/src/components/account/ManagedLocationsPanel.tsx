@@ -67,14 +67,15 @@ export default function ManagedLocationsPanel({
       {!loadError && locations.length > 0 && (
         <ul className="mt-4 flex flex-col gap-3">
           {locations.map(({ location, todayStatus }) => {
-            const label = location.location_name ?? location.address_line1;
+            const label = `${location.brand_name} — ${location.location_name ?? location.address_line1}`;
             return (
               <li
                 key={location.id}
                 className="flex flex-col gap-3 rounded-brand-control border border-brand-border p-4 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="min-w-0">
-                  <p className="flex items-start gap-2 text-sm font-semibold text-brand-ink">
+                  <p className="text-sm font-semibold text-brand-ink">{location.brand_name}</p>
+                  <p className="mt-0.5 flex items-start gap-2 text-sm text-brand-ink-muted">
                     <LocationPinIcon className="mt-0.5 h-4 w-4 shrink-0 text-brand-ink-subtle" />
                     <span className="break-words">
                       {location.location_name ? `${location.location_name} — ` : ""}

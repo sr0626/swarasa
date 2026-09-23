@@ -400,9 +400,11 @@ async def list_managed_locations(db: AsyncSession, current_user, pagination):
     for row in rows:
         is_open_now = await hours_service.is_open_now_for_location(db, row.id, row.timezone)
         follower_count = await follow_service.count_followers_for_brand(db, row.brand_id)
+        brand = await db.get(RestaurantBrand, row.brand_id)
         results.append(
             ManagedLocationOut(
                 id=row.id,
+                brand_name=brand.name if brand else "",
                 location_name=row.location_name,
                 address_line1=row.address_line1,
                 city=row.city,
