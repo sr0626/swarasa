@@ -141,7 +141,12 @@ export async function updateLocationHours(
 /**
  * POST /locations/{id}/photos/upload-url — step 1 of the S3 presigned
  * upload flow (root CLAUDE.md media pattern: presigned URL, never through
- * Lambda). The client PUTs the file to `upload_url` directly, then calls
+ * Lambda). This is a presigned **POST** (not PUT) — the client submits
+ * `upload_url` as a multipart form, every entry in `fields` as its own
+ * form field plus the file itself under the field name `file` (S3's
+ * presigned-POST convention; see docs/API_CONTRACTS.md "POST
+ * /locations/{id}/photos/upload-url" for why: only presigned POST can
+ * enforce the 5MB `content-length-range` cap). Then calls
  * `createLocationPhoto` below with the same `s3_key`.
  */
 export async function getLocationPhotoUploadUrl(
@@ -156,7 +161,7 @@ export async function getLocationPhotoUploadUrl(
   );
 }
 
-/** POST /locations/{id}/photos — step 2, records the row after the S3 PUT succeeds. */
+/** POST /locations/{id}/photos — step 2, records the row after the S3 upload succeeds. */
 export async function createLocationPhoto(
   id: number,
   input: CreatePhotoInput,
