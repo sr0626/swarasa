@@ -4,9 +4,11 @@
 // listing" experience: the filter bar (GET form, URL-driven — see
 // docs/API_CONTRACTS.md "GET /restaurants" filters), the active-filter
 // chip row, the brand list (+ already SSR-loaded locations), pagination,
-// and the two real moderation actions (`deleteRestaurantAction`,
-// `deactivateLocationAction` in `actions.ts`) against
-// `DELETE /restaurants/{id}` and `DELETE /locations/{id}`.
+// and the real moderation actions (`deleteRestaurantAction`,
+// `restoreRestaurantAction`, `deactivateLocationAction` in `actions.ts`)
+// against `DELETE /restaurants/{id}` (a SOFT delete that also deactivates
+// every location — guarded by an explicit warning confirmation below),
+// `POST /restaurants/{id}/restore` and `DELETE /locations/{id}`.
 //
 // Filtering/pagination is server-driven, same pattern as `/search`: the
 // filter form is a plain `<form method="get">` and pagination/active-filter
@@ -23,10 +25,12 @@ import { useState } from "react";
 import {
   deactivateLocationAction,
   deleteRestaurantAction,
+  restoreRestaurantAction,
 } from "@/app/admin/listings/actions";
+import { deleteListingWarning, type ListingStatusFilter } from "@/lib/adminListings";
 import OpenStatusBadge from "@/components/ui/OpenStatusBadge";
 import { PencilIcon, TrashIcon } from "@/components/ui/icons";
-import type { LocationStatus, LocationSummary } from "@/types/location";
+import type { LocationSummary } from "@/types/location";
 import type { RestaurantBrand } from "@/types/restaurant";
 
 export interface BrandWithLocations {
@@ -42,7 +46,7 @@ export interface BrandWithLocations {
 export interface AdminListingsFilters {
   ownerEmail?: string;
   name?: string;
-  status?: LocationStatus;
+  status?: ListingStatusFilter;
   isPaid?: boolean;
   city?: string;
   isClaimed?: boolean;
@@ -55,18 +59,20 @@ export interface AdminListingsFilters {
   sort?: "followers";
 }
 
-const STATUS_OPTIONS: ReadonlyArray<{ value: LocationStatus; label: string }> = [
+const STATUS_OPTIONS: ReadonlyArray<{ value: ListingStatusFilter; label: string }> = [
   { value: "active", label: "Active" },
   { value: "owner_deactivated", label: "Hidden — owner deactivated" },
   { value: "coming_soon", label: "Coming soon" },
   { value: "closed_pending_reopen", label: "Closed — pending reopen" },
+  { value: "deleted", label: "Deleted listings" },
 ];
 
-const STATUS_LABELS: Record<LocationStatus, string> = {
+const STATUS_LABELS: Record<ListingStatusFilter, string> = {
   active: "Active",
   owner_deactivated: "Hidden — owner deactivated",
   coming_soon: "Coming soon",
   closed_pending_reopen: "Closed — pending reopen",
+  deleted: "Deleted listings",
 };
 
 /** Builds `/admin/listings?...` for the given filters + page, omitting
@@ -317,6 +323,7 @@ export default function AdminListingsPanel({
                   expanded={expanded.has(entry.brand.id)}
                   onToggleExpanded={() => toggleExpanded(entry.brand.id)}
                   onDeleted={() => removeBrand(entry.brand.id)}
+                  onRestored={() => removeBrand(entry.brand.id)}
                   onLocationDeactivated={(locationId) => removeLocation(entry.brand.id, locationId)}
                 />
               </li>
@@ -378,24 +385,36 @@ function BrandRow({
   expanded,
   onToggleExpanded,
   onDeleted,
+  onRestored,
   onLocationDeactivated,
 }: {
   entry: BrandWithLocations;
   expanded: boolean;
   onToggleExpanded: () => void;
   onDeleted: () => void;
+  onRestored: () => void;
   onLocationDeactivated: (locationId: number) => void;
 }) {
   const { brand, locations, locationsError } = entry;
+  const isDeleted = Boolean(brand.deleted_at);
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [restoring, setRestoring] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleDelete() {
-    if (!confirming) {
-      setConfirming(true);
-      return;
+  async function handleRestore() {
+    setRestoring(true);
+    setError(null);
+    const result = await restoreRestaurantAction(brand.id);
+    setRestoring(false);
+    if (result.ok) {
+      onRestored();
+    } else {
+      setError(result.error);
     }
+  }
+
+  async function handleDelete() {
     setDeleting(true);
     setError(null);
     const result = await deleteRestaurantAction(brand.id);
@@ -414,6 +433,11 @@ function BrandRow({
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="font-display text-lg font-bold text-brand-ink">{brand.name}</h2>
+            {isDeleted && (
+              <span className="inline-flex items-center rounded-brand-pill bg-brand-closed-bg px-2.5 py-1 text-xs font-semibold text-brand-closed">
+                Deleted
+              </span>
+            )}
             {brand.is_claimed ? (
               <span className="inline-flex items-center rounded-brand-pill bg-brand-success-bg px-2.5 py-1 text-xs font-semibold text-brand-success">
                 Claimed
@@ -453,38 +477,77 @@ function BrandRow({
         </div>
 
         <div className="flex items-center gap-2">
-          <a
-            href={`/restaurant/${brand.slug}`}
-            target="_blank"
-            rel="noreferrer"
-            className="flex min-h-[40px] items-center justify-center rounded-brand-control border border-brand-border px-3 text-xs font-semibold text-brand-ink-muted transition hover:bg-brand-chip"
-          >
-            View live
-          </a>
-          <button
-            type="button"
-            onClick={handleDelete}
-            disabled={deleting}
-            className={
-              confirming
-                ? "flex min-h-[40px] items-center gap-1.5 rounded-brand-control bg-brand-closed px-3 text-xs font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-                : "flex min-h-[40px] items-center gap-1.5 rounded-brand-control border border-brand-closed px-3 text-xs font-semibold text-brand-closed transition hover:bg-brand-closed-bg disabled:cursor-not-allowed disabled:opacity-60"
-            }
-          >
-            <TrashIcon className="h-3.5 w-3.5" />
-            {deleting ? "Deleting..." : confirming ? "Confirm delete" : "Delete listing"}
-          </button>
-          {confirming && (
+          {isDeleted ? (
             <button
               type="button"
-              onClick={() => setConfirming(false)}
-              className="text-xs font-medium text-brand-ink-subtle underline"
+              onClick={handleRestore}
+              disabled={restoring}
+              className="flex min-h-[40px] items-center justify-center rounded-brand-control bg-brand-ink px-3 text-xs font-semibold text-brand-bg transition hover:bg-brand-ink/90 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Cancel
+              {restoring ? "Restoring..." : "Restore listing"}
             </button>
+          ) : (
+            <>
+              <a
+                href={`/restaurant/${brand.slug}`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex min-h-[40px] items-center justify-center rounded-brand-control border border-brand-border px-3 text-xs font-semibold text-brand-ink-muted transition hover:bg-brand-chip"
+              >
+                View live
+              </a>
+              {!confirming && (
+                <button
+                  type="button"
+                  onClick={() => setConfirming(true)}
+                  className="flex min-h-[40px] items-center gap-1.5 rounded-brand-control border border-brand-closed px-3 text-xs font-semibold text-brand-closed transition hover:bg-brand-closed-bg"
+                >
+                  <TrashIcon className="h-3.5 w-3.5" />
+                  Delete listing
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
+
+      {confirming && !isDeleted && (
+        <div
+          role="alertdialog"
+          aria-labelledby={`delete-warning-title-${brand.id}`}
+          aria-describedby={`delete-warning-body-${brand.id}`}
+          className="mt-3 rounded-brand-control border border-brand-closed bg-brand-closed-bg p-4"
+        >
+          <p
+            id={`delete-warning-title-${brand.id}`}
+            className="text-sm font-semibold text-brand-closed"
+          >
+            Delete &ldquo;{brand.name}&rdquo;?
+          </p>
+          <p id={`delete-warning-body-${brand.id}`} className="mt-1 text-sm text-brand-ink">
+            {deleteListingWarning(brand.location_count)}
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={deleting}
+              className="flex min-h-[40px] items-center gap-1.5 rounded-brand-control bg-brand-closed px-3 text-xs font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <TrashIcon className="h-3.5 w-3.5" />
+              {deleting ? "Deleting..." : "Confirm delete"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirming(false)}
+              disabled={deleting}
+              className="flex min-h-[40px] items-center justify-center rounded-brand-control border border-brand-border bg-white px-3 text-xs font-semibold text-brand-ink transition hover:bg-brand-chip disabled:opacity-60"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {error && (
         <p className="mt-3 rounded-brand-control bg-brand-closed-bg px-3 py-2.5 text-sm text-brand-closed">

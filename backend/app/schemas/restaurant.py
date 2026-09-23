@@ -19,6 +19,15 @@ from app.schemas.location import LocationStatusValue
 # `restaurant_service.list_restaurants`.
 RestaurantSortValue = Literal["followers"]
 
+# `GET /restaurants?status=` accepts every real `restaurant_location.status`
+# value PLUS the pseudo-status `deleted` (admin only): "only soft-deleted
+# listings" — see `restaurant_service.list_restaurants`. Kept here, NOT
+# added to `LocationStatusValue`, because that type also validates the
+# `POST /locations/{id}/status` body, where `deleted` must stay illegal.
+RestaurantListStatusValue = Literal[
+    "active", "owner_deactivated", "coming_soon", "closed_pending_reopen", "deleted"
+]
+
 
 class RestaurantOut(BaseModel):
     id: int
@@ -46,6 +55,11 @@ class RestaurantOut(BaseModel):
     # list and for the owner/admin who just created/updated the brand —
     # see `restaurant_service._brand_to_out`'s `current_user` parameter.
     follower_count: int | None = None
+    # Soft-delete timestamp (restaurant_brand.deleted_at). Always `null` for
+    # a live brand — and a deleted brand is only ever returned to an admin
+    # (`GET /restaurants?status=deleted`, `POST /restaurants/{id}/restore`),
+    # never on a public/owner path.
+    deleted_at: datetime | None = None
 
 
 class RestaurantCreate(BaseModel):

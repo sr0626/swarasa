@@ -26,7 +26,7 @@ import AdminListingsPanel, {
   type AdminListingsFilters,
   type BrandWithLocations,
 } from "@/components/admin/AdminListingsPanel";
-import type { LocationStatus } from "@/types/location";
+import { parseListingStatusFilter } from "@/lib/adminListings";
 import type { RestaurantBrand } from "@/types/restaurant";
 
 export const metadata: Metadata = {
@@ -38,13 +38,6 @@ const PAGE_SIZE = 20;
 // See portal/dashboard/page.tsx's DASHBOARD_FETCH_CONCURRENCY — same DB
 // connection-pool storm fix (PR #101), same reasoning.
 const LISTINGS_FETCH_CONCURRENCY = 5;
-
-const LOCATION_STATUSES: readonly LocationStatus[] = [
-  "active",
-  "owner_deactivated",
-  "coming_soon",
-  "closed_pending_reopen",
-];
 
 interface AdminListingsPageProps {
   searchParams: {
@@ -64,10 +57,6 @@ function parsePositiveInt(value: string | undefined): number | undefined {
   if (!value) return undefined;
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
-}
-
-function parseStatus(value: string | undefined): LocationStatus | undefined {
-  return LOCATION_STATUSES.find((s) => s === value);
 }
 
 function parseSort(value: string | undefined): "followers" | undefined {
@@ -94,7 +83,9 @@ function trimmedOrUndefined(value: string | undefined): string | undefined {
  * `GET /restaurants/{id}/locations` call. Brands with no locations skip
  * the extra request. */
 async function loadLocationsForBrand(brand: RestaurantBrand): Promise<BrandWithLocations> {
-  if (brand.location_count === 0) {
+  // A soft-deleted listing (`status=deleted` view) has no visible locations
+  // and the public locations endpoint 404s for it — skip the fetch.
+  if (brand.location_count === 0 || brand.deleted_at) {
     return { brand, locations: [], locationsError: null };
   }
   try {
@@ -120,7 +111,7 @@ export default async function AdminListingsPage({ searchParams }: AdminListingsP
   const filters: AdminListingsFilters = {
     ownerEmail: trimmedOrUndefined(searchParams.owner_email),
     name: trimmedOrUndefined(searchParams.name),
-    status: parseStatus(searchParams.status),
+    status: parseListingStatusFilter(searchParams.status),
     isPaid: parseTriState(searchParams.is_paid),
     city: trimmedOrUndefined(searchParams.city),
     isClaimed: parseTriState(searchParams.is_claimed),
@@ -156,8 +147,9 @@ export default async function AdminListingsPage({ searchParams }: AdminListingsP
         Listings
       </h1>
       <p className="mt-2 text-sm text-brand-ink-muted">
-        Every restaurant on the platform, across all owners. Filter to find one, then delete a
-        listing entirely or deactivate one of its locations.
+        Every restaurant on the platform, across all owners. Filter to find one, then delete
+        the listing (hides it and deactivates all its locations; restorable via Status: Deleted)
+        or deactivate a single location.
       </p>
 
       {loadError ? (

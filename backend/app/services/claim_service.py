@@ -132,7 +132,7 @@ async def list_claims(
 
 async def create_claim(db: AsyncSession, current_user, body: ClaimCreate) -> ClaimRequest:
     brand = await db.get(RestaurantBrand, body.brand_id)
-    if brand is None:
+    if brand is None or brand.deleted_at is not None:
         raise AppError(404, "Restaurant not found", "not_found")
 
     location: RestaurantLocation | None = None

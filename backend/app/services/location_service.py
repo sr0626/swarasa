@@ -162,6 +162,13 @@ async def _caller_may_view_hidden_location(
     return False
 
 
+async def _brand_is_deleted(db: AsyncSession, brand_id: int) -> bool:
+    deleted_at = (
+        await db.execute(select(RestaurantBrand.deleted_at).where(RestaurantBrand.id == brand_id))
+    ).scalar_one_or_none()
+    return deleted_at is not None
+
+
 async def get_location(
     db: AsyncSession, location_id: int, current_user=None
 ) -> LocationOut:
@@ -177,6 +184,13 @@ async def get_location(
     """
     location = await db.get(RestaurantLocation, location_id)
     if location is None:
+        raise AppError(404, "Location not found", "not_found")
+    # A location of a soft-deleted brand (`restaurant_brand.deleted_at`)
+    # 404s for everyone but an admin — including its owner and assigned
+    # managers, who would otherwise pass the hidden-location check below.
+    if await _brand_is_deleted(db, location.brand_id) and (
+        current_user is None or current_user.role != "admin"
+    ):
         raise AppError(404, "Location not found", "not_found")
     if not location.is_active and not await _caller_may_view_hidden_location(
         db, location, current_user
@@ -201,7 +215,7 @@ async def get_location_or_404(db: AsyncSession, location_id: int) -> RestaurantL
 
 async def create_location(db: AsyncSession, body: LocationCreate, current_user) -> LocationOut:
     brand = await db.get(RestaurantBrand, body.brand_id)
-    if brand is None:
+    if brand is None or brand.deleted_at is not None:
         raise AppError(404, "Restaurant not found", "not_found")
 
     owner = await auth_service.get_owner_account_by_sub(db, current_user.cognito_sub)
@@ -576,6 +590,10 @@ async def list_locations_for_brand(
     """
     brand = await db.get(RestaurantBrand, brand_id)
     if brand is None:
+        raise AppError(404, "Restaurant not found", "not_found")
+    # Soft-deleted brand: 404 for everyone but an admin (owner console
+    # included) — see `get_location`.
+    if brand.deleted_at is not None and (current_user is None or current_user.role != "admin"):
         raise AppError(404, "Restaurant not found", "not_found")
 
     include_inactive = await _caller_may_see_inactive_locations(db, brand, current_user)

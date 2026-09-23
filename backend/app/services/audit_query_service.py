@@ -184,6 +184,9 @@ def _summarize(table_name: str, action: str, old_val: dict | None, new_val: dict
     if table_name == "restaurant_location" and set(old_val) == {"is_active"} and set(new_val) == {"is_active"}:
         return "Location reactivated" if new_val.get("is_active") else "Location deactivated"
 
+    if table_name == "restaurant_brand" and "deleted_at" in new_val:
+        return "Restaurant deleted by an administrator" if new_val["deleted_at"] else "Restaurant restored"
+
     if table_name == "restaurant_brand" and new_val.get("is_claimed") and not old_val.get("is_claimed"):
         return "Restaurant claimed"
 

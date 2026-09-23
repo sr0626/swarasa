@@ -22,11 +22,11 @@ from app.dependencies.auth import (
 from app.dependencies.db import get_db
 from app.dependencies.pagination import Pagination, pagination_params
 from app.schemas.follow import FollowOut
-from app.schemas.location import LocationStatusValue
 from app.schemas.restaurant import (
     LocationListResponse,
     RestaurantCreate,
     RestaurantListResponse,
+    RestaurantListStatusValue,
     RestaurantOut,
     RestaurantSortValue,
     RestaurantUpdate,
@@ -57,11 +57,14 @@ async def list_restaurants(
         description="Admin only. Case-insensitive substring match against "
         "restaurant_brand.name.",
     ),
-    location_status: LocationStatusValue | None = Query(
+    location_status: RestaurantListStatusValue | None = Query(
         default=None,
         alias="status",
         description="Admin only. Matches a brand if ANY of its locations "
-        "currently has this restaurant_location.status value.",
+        "currently has this restaurant_location.status value. The "
+        "pseudo-value `deleted` instead returns ONLY soft-deleted "
+        "listings; every other request (and every owner request) excludes "
+        "soft-deleted listings.",
     ),
     is_paid: bool | None = Query(
         default=None,
@@ -180,7 +183,21 @@ async def delete_restaurant(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(require_admin),
 ) -> None:
+    """Admin only. SOFT delete: stamps `restaurant_brand.deleted_at` and
+    deactivates every active location of the brand in the same transaction.
+    Idempotent, never 409s (docs/API_CONTRACTS.md "DELETE /restaurants/{id}")."""
     await restaurant_service.delete_restaurant(db, brand_id, current_user)
+
+
+@router.post("/{brand_id}/restore", response_model=RestaurantOut)
+async def restore_restaurant(
+    brand_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_admin),
+) -> RestaurantOut:
+    """Admin only. Clears `deleted_at`; the brand's locations stay
+    deactivated until re-enabled via `POST /locations/{id}/status`."""
+    return await restaurant_service.restore_restaurant(db, brand_id, current_user)
 
 
 @router.post("/{brand_id}/follow", response_model=FollowOut)

@@ -55,7 +55,11 @@ async def _restaurant_overview(db: AsyncSession) -> RestaurantOverview:
     `total`).
     """
     total = (
-        await db.execute(select(func.count()).select_from(RestaurantBrand))
+        await db.execute(
+            select(func.count())
+            .select_from(RestaurantBrand)
+            .where(RestaurantBrand.deleted_at.is_(None))
+        )
     ).scalar_one()
 
     status_rows = (
@@ -63,7 +67,10 @@ async def _restaurant_overview(db: AsyncSession) -> RestaurantOverview:
             select(
                 RestaurantLocation.status,
                 func.count(func.distinct(RestaurantLocation.brand_id)),
-            ).group_by(RestaurantLocation.status)
+            )
+            .join(RestaurantBrand, RestaurantBrand.id == RestaurantLocation.brand_id)
+            .where(RestaurantBrand.deleted_at.is_(None))
+            .group_by(RestaurantLocation.status)
         )
     ).all()
     by_status = _empty_status_counts()
@@ -76,7 +83,10 @@ async def _restaurant_overview(db: AsyncSession) -> RestaurantOverview:
             select(
                 RestaurantLocation.is_paid,
                 func.count(func.distinct(RestaurantLocation.brand_id)),
-            ).group_by(RestaurantLocation.is_paid)
+            )
+            .join(RestaurantBrand, RestaurantBrand.id == RestaurantLocation.brand_id)
+            .where(RestaurantBrand.deleted_at.is_(None))
+            .group_by(RestaurantLocation.is_paid)
         )
     ).all()
     paid = free = 0
@@ -112,7 +122,7 @@ async def _owner_overview(db: AsyncSession, pagination: Pagination) -> OwnerOver
     total_owners = (
         await db.execute(
             select(func.count(func.distinct(RestaurantBrand.owner_id))).where(
-                RestaurantBrand.owner_id.is_not(None)
+                RestaurantBrand.owner_id.is_not(None), RestaurantBrand.deleted_at.is_(None)
             )
         )
     ).scalar_one()
@@ -121,6 +131,7 @@ async def _owner_overview(db: AsyncSession, pagination: Pagination) -> OwnerOver
         await db.execute(
             select(OwnerAccount.id, OwnerAccount.email)
             .join(RestaurantBrand, RestaurantBrand.owner_id == OwnerAccount.id)
+            .where(RestaurantBrand.deleted_at.is_(None))
             .distinct()
             .order_by(OwnerAccount.email, OwnerAccount.id)
             .offset(pagination.offset)
@@ -139,7 +150,9 @@ async def _owner_overview(db: AsyncSession, pagination: Pagination) -> OwnerOver
                     func.count(RestaurantLocation.id),
                 )
                 .join(RestaurantLocation, RestaurantLocation.brand_id == RestaurantBrand.id)
-                .where(RestaurantBrand.owner_id.in_(owner_ids))
+                .where(
+                    RestaurantBrand.owner_id.in_(owner_ids), RestaurantBrand.deleted_at.is_(None)
+                )
                 .group_by(RestaurantBrand.owner_id, RestaurantLocation.status)
             )
         ).all()

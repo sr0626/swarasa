@@ -189,6 +189,14 @@ async def _find_or_create_brand(
     result = await db.execute(select(RestaurantBrand).where(RestaurantBrand.slug == slug))
     existing = result.scalar_one_or_none()
     if existing is not None:
+        if existing.deleted_at is not None:
+            # Soft-deleted listing keeps its slug reserved — never silently
+            # attach new locations to (or resurrect) a deleted brand.
+            raise BulkImportError(
+                f"A restaurant with slug {slug!r} was deleted by an admin -- "
+                f"restore it (POST /restaurants/{{id}}/restore) or import "
+                f"under a different name."
+            )
         if existing.owner_id != owner_id:
             raise BulkImportError(
                 f"A restaurant with slug {slug!r} already exists under a "

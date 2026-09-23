@@ -7,13 +7,12 @@
 // (not just from the page's own `requireSession` gate) since a Server
 // Action is a real network endpoint Next.js exposes, callable on its own.
 //
-// Both actions call real, already-documented endpoints
-// (docs/API_CONTRACTS.md "DELETE /restaurants/{id}" and
-// "DELETE /locations/{id}") — no new backend endpoint was needed for
-// moderation itself.
+// Every action calls a real, documented endpoint (docs/API_CONTRACTS.md
+// "DELETE /restaurants/{id}", "POST /restaurants/{id}/restore" and
+// "DELETE /locations/{id}").
 import { ApiError } from "@/lib/api/client";
 import { deleteLocation } from "@/lib/api/locations";
-import { deleteRestaurant } from "@/lib/api/restaurants";
+import { deleteRestaurant, restoreRestaurant } from "@/lib/api/restaurants";
 import { getServerSession } from "@/lib/auth/session";
 
 export type ListingActionResult = { ok: true } | { ok: false; error: string };
@@ -32,11 +31,11 @@ async function requireAdminAccessToken(): Promise<
 }
 
 /**
- * DELETE /restaurants/{id} — auth: admin only. Hard delete. The database's
- * `ON DELETE RESTRICT` on `restaurant_location.brand_id` means this 409s
- * while the brand still has any (active or inactive) locations — surfaced
- * here as-is rather than swallowed, so the admin knows to remove/reassign
- * locations first (docs/API_CONTRACTS.md "DELETE /restaurants/{id}").
+ * DELETE /restaurants/{id} — auth: admin only. SOFT delete: the backend
+ * stamps `deleted_at` and deactivates all of the brand's active locations
+ * in one transaction (the caller shows the warning confirmation first —
+ * see AdminListingsPanel.tsx). Nothing is erased and there is no 409
+ * "locations attached" path anymore.
  */
 export async function deleteRestaurantAction(brandId: number): Promise<ListingActionResult> {
   const admin = await requireAdminAccessToken();
@@ -50,12 +49,27 @@ export async function deleteRestaurantAction(brandId: number): Promise<ListingAc
       if (error.status === 404) {
         return { ok: false, error: `No restaurant found with id #${brandId}.` };
       }
-      if (error.status === 409) {
-        return {
-          ok: false,
-          error:
-            "This restaurant still has locations attached — remove or reassign them before deleting the listing.",
-        };
+      return { ok: false, error: error.message };
+    }
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+}
+
+/**
+ * POST /restaurants/{id}/restore — auth: admin only. Un-deletes a listing.
+ * Its locations stay deactivated until re-enabled via their normal path.
+ */
+export async function restoreRestaurantAction(brandId: number): Promise<ListingActionResult> {
+  const admin = await requireAdminAccessToken();
+  if (!admin.ok) return admin;
+
+  try {
+    await restoreRestaurant(brandId, admin.accessToken);
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof ApiError) {
+      if (error.status === 404) {
+        return { ok: false, error: `No restaurant found with id #${brandId}.` };
       }
       return { ok: false, error: error.message };
     }

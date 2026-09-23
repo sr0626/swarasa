@@ -65,12 +65,14 @@ async def get_admin_owners(
         count_stmt = count_stmt.where(search_clause)
     total = (await db.execute(count_stmt)).scalar_one()
 
+    # Soft-deleted brands (`restaurant_brand.deleted_at`) are excluded from
+    # every per-owner count below.
     brand_sq = (
         select(
             RestaurantBrand.owner_id.label("owner_id"),
             func.count(RestaurantBrand.id).label("brand_count"),
         )
-        .where(RestaurantBrand.owner_id.is_not(None))
+        .where(RestaurantBrand.owner_id.is_not(None), RestaurantBrand.deleted_at.is_(None))
         .group_by(RestaurantBrand.owner_id)
         .subquery("brand_agg")
     )
@@ -93,7 +95,7 @@ async def get_admin_owners(
             .label("verified"),
         )
         .join(RestaurantLocation, RestaurantLocation.brand_id == RestaurantBrand.id)
-        .where(RestaurantBrand.owner_id.is_not(None))
+        .where(RestaurantBrand.owner_id.is_not(None), RestaurantBrand.deleted_at.is_(None))
         .group_by(RestaurantBrand.owner_id)
         .subquery("location_agg")
     )
@@ -104,7 +106,7 @@ async def get_admin_owners(
             func.count(UserFollow.id).label("follower_count"),
         )
         .join(UserFollow, UserFollow.brand_id == RestaurantBrand.id)
-        .where(RestaurantBrand.owner_id.is_not(None))
+        .where(RestaurantBrand.owner_id.is_not(None), RestaurantBrand.deleted_at.is_(None))
         .group_by(RestaurantBrand.owner_id)
         .subquery("follow_agg")
     )
@@ -128,6 +130,7 @@ async def get_admin_owners(
         .join(LocationReopenRequest, LocationReopenRequest.location_id == RestaurantLocation.id)
         .where(
             RestaurantBrand.owner_id.is_not(None),
+            RestaurantBrand.deleted_at.is_(None),
             LocationReopenRequest.status == PENDING_REVIEW,
         )
         .group_by(RestaurantBrand.owner_id)

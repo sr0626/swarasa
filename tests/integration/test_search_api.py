@@ -135,3 +135,29 @@ async def test_search_is_public_no_auth_header_required(pg_client, pg_db_session
     # (docs/API_CONTRACTS.md "GET /search": "Auth: none (public)").
     response = await pg_client.get("/search", params={"lat": IRVING_LAT, "lng": IRVING_LNG})
     assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_search_excludes_locations_of_a_soft_deleted_brand(pg_client, pg_db_session):
+    """`restaurant_brand.deleted_at` (migration 0011): even a location that is
+    still `active` (e.g. re-enabled behind a deleted brand's back) must not
+    surface in geo or text search."""
+    from datetime import datetime, timezone
+
+    brand = await create_brand(
+        pg_db_session,
+        is_claimed=True,
+        name="Deleted Listing Kitchen",
+        deleted_at=datetime.now(timezone.utc),
+    )
+    loc = await create_location(pg_db_session, brand_id=brand.id, is_active=True, is_verified=True)
+    await pg_db_session.commit()
+    await _set_geom(pg_db_session, loc.id, IRVING_LAT, IRVING_LNG)
+
+    geo = await pg_client.get("/search", params={"lat": IRVING_LAT, "lng": IRVING_LNG, "radius": 15})
+    assert geo.status_code == 200
+    assert loc.id not in [r["nearest_location"]["location_id"] for r in geo.json()["results"]]
+
+    text = await pg_client.get("/search", params={"q": "Deleted Listing"})
+    assert text.status_code == 200
+    assert loc.id not in [r["nearest_location"]["location_id"] for r in text.json()["results"]]
