@@ -6,6 +6,7 @@
 // owner/manager console wants actionable wording instead of a bare
 // "Closed": "Opens at 11:00 AM" when the location just hasn't opened yet
 // today, "Closed today" when it's closed all day (or hours aren't set),
+// "Closed now" when it HAD hours today but is already past close_time,
 // otherwise the existing "Open Now" indicator.
 //
 // Status is computed by lib/consoleLocationStatus.ts's
@@ -28,6 +29,8 @@ export default function LocationStatusChip({ status }: { status: ConsoleTodaySta
       );
     case "closed_today":
       return <span className={`${base} bg-brand-closed-bg text-brand-closed`}>Closed today</span>;
+    case "closed_now":
+      return <span className={`${base} bg-brand-closed-bg text-brand-closed`}>Closed now</span>;
     case "unknown":
     default:
       return null;
