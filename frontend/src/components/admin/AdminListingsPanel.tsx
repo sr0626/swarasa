@@ -46,6 +46,13 @@ export interface AdminListingsFilters {
   isPaid?: boolean;
   city?: string;
   isClaimed?: boolean;
+  /** `GET /restaurants`'s `sort` param (docs/API_CONTRACTS.md "GET
+   * /restaurants") -- not a filter (doesn't narrow the result set), but
+   * lives alongside the filters here since it's driven by the same URL
+   * query string / `<form method="get">`. Omitted keeps the default
+   * (newest/id) order. Deliberately excluded from `activeFilterChips`
+   * below -- it's a sort choice, not a "narrowed by" chip. */
+  sort?: "followers";
 }
 
 const STATUS_OPTIONS: ReadonlyArray<{ value: LocationStatus; label: string }> = [
@@ -74,6 +81,7 @@ function buildListingsHref(filters: AdminListingsFilters, page: number): string 
   if (filters.isPaid !== undefined) params.set("is_paid", String(filters.isPaid));
   if (filters.city) params.set("city", filters.city);
   if (filters.isClaimed !== undefined) params.set("is_claimed", String(filters.isClaimed));
+  if (filters.sort) params.set("sort", filters.sort);
   if (page > 1) params.set("page", String(page));
   const qs = params.toString();
   return qs ? `/admin/listings?${qs}` : "/admin/listings";
@@ -237,6 +245,20 @@ export default function AdminListingsPanel({
             <option value="">Any</option>
             <option value="true">Claimed</option>
             <option value="false">Unclaimed</option>
+          </select>
+        </div>
+        <div>
+          <label htmlFor="sort" className="text-sm font-semibold text-brand-ink">
+            Sort
+          </label>
+          <select
+            id="sort"
+            name="sort"
+            defaultValue={filters.sort ?? ""}
+            className="mt-2 min-h-[40px] rounded-brand-control border border-brand-border bg-white px-3 text-sm text-brand-ink focus:border-brand-accent focus:outline-none"
+          >
+            <option value="">Newest</option>
+            <option value="followers">Most followed</option>
           </select>
         </div>
         <button
@@ -406,7 +428,9 @@ function BrandRow({
             /{brand.slug} &middot; owner {brand.owner_id ?? "none"} &middot; {brand.location_count}{" "}
             location{brand.location_count === 1 ? "" : "s"}
             {/* Admin-only field (see restaurant_service._caller_may_view_follower_count,
-                PR #174) — null only if the backend response somehow predates that PR. */}
+                PR #174) — null only if the backend response somehow predates that PR.
+                Now doubles as the visible number behind the sort=followers "Most
+                followed" control below. */}
             {brand.follower_count !== null && brand.follower_count !== undefined && (
               <>
                 {" "}

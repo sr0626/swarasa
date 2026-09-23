@@ -10,6 +10,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  BarChartIcon,
   ClipboardCheckIcon,
   ClockIcon,
   FlagIcon,
@@ -27,6 +28,7 @@ const ICONS: Record<ConsoleNavIcon, (props: IconProps) => JSX.Element> = {
   store: StoreIcon,
   plus: PlusIcon,
   clock: ClockIcon,
+  chart: BarChartIcon,
 };
 
 function isActive(pathname: string, href: string): boolean {

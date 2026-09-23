@@ -56,6 +56,7 @@ interface AdminListingsPageProps {
     is_paid?: string;
     city?: string;
     is_claimed?: string;
+    sort?: string;
   };
 }
 
@@ -67,6 +68,10 @@ function parsePositiveInt(value: string | undefined): number | undefined {
 
 function parseStatus(value: string | undefined): LocationStatus | undefined {
   return LOCATION_STATUSES.find((s) => s === value);
+}
+
+function parseSort(value: string | undefined): "followers" | undefined {
+  return value === "followers" ? "followers" : undefined;
 }
 
 /** "true"/"false" only — anything else (missing, malformed) is "no filter",
@@ -119,6 +124,7 @@ export default async function AdminListingsPage({ searchParams }: AdminListingsP
     isPaid: parseTriState(searchParams.is_paid),
     city: trimmedOrUndefined(searchParams.city),
     isClaimed: parseTriState(searchParams.is_claimed),
+    sort: parseSort(searchParams.sort),
   };
 
   let brands: RestaurantBrand[] = [];

@@ -331,3 +331,17 @@ export function HeartFilledIcon(props: IconProps) {
     </svg>
   );
 }
+
+/** Added for the admin "Platform Overview" nav item (`/admin/overview`) —
+ * a simple ascending bar chart, distinct from `StoreIcon` (Listings) and
+ * `FlagIcon` (Reports) so the three read apart at a glance in the sidebar. */
+export function BarChartIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} {...props}>
+      <path d="M4 20V10" />
+      <path d="M11 20V4" />
+      <path d="M18 20v-7" />
+      <path d="M3 20h18" />
+    </svg>
+  );
+}
