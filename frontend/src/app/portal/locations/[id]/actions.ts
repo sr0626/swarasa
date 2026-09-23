@@ -27,6 +27,7 @@ import {
   updateLocationStatus,
 } from "@/lib/api/locations";
 import { submitReopenRequest } from "@/lib/api/locationReopen";
+import { createLocationDeal, deleteLocationDeal, updateLocationDeal } from "@/lib/api/deals";
 import { getServerSession } from "@/lib/auth/session";
 import { geocodeAddress } from "@/lib/geocode";
 import {
@@ -41,6 +42,8 @@ import {
   createReopenRequestSchema,
   updateLocationStatusSchema,
 } from "@/lib/validation/locationReopen";
+import { dealFormSchema, updateDealFormSchema } from "@/lib/validation/deal";
+import type { CreateDealInput, Deal, UpdateDealInput } from "@/types/deal";
 import type {
   LocationDetail,
   LocationHour,
@@ -494,5 +497,100 @@ export async function removeLocationAction(locationId: number): Promise<ActionRe
     return { ok: true, data: null };
   } catch (error) {
     return { ok: false, error: messageFor(error, "Could not remove this location.") };
+  }
+}
+
+// ---- Deals (docs/API_CONTRACTS.md "Deals (`deal`)") -----------------------
+// Free-tier feature: no `is_paid` check anywhere below (product decision,
+// 2026-09-23). Owner, assigned manager and admin all pass
+// `requireLocationSession`; the backend's `require_location_write_access`
+// re-validates ownership/assignment on every call.
+
+/**
+ * Deal writes change what the public sees ("Deal(s) available today"
+ * badge on search tiles and the detail page), so purge the search page and
+ * homepage too — tiles read `has_deal_today` through a 60s-cached public GET.
+ */
+function revalidateDealPaths(locationId: number): void {
+  revalidateLocationPaths(locationId);
+  revalidatePath("/search");
+  revalidatePath("/");
+}
+
+/** POST /locations/{id}/deals. */
+export async function createLocationDealAction(
+  locationId: number,
+  input: unknown
+): Promise<ActionResult<Deal>> {
+  const auth = await requireLocationSession();
+  if (!auth.ok) return auth;
+
+  const parsed = dealFormSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Please check the deal and try again.",
+    };
+  }
+
+  try {
+    // applicable_days is validated 0..6 at runtime; zod infers `number[]`.
+    const deal = await createLocationDeal(
+      locationId,
+      parsed.data as CreateDealInput,
+      auth.accessToken
+    );
+    revalidateDealPaths(locationId);
+    return { ok: true, data: deal };
+  } catch (error) {
+    return { ok: false, error: messageFor(error, "Could not save this deal.") };
+  }
+}
+
+/** PATCH /locations/{id}/deals/{deal_id} — full edit, or just `is_active`. */
+export async function updateLocationDealAction(
+  locationId: number,
+  dealId: number,
+  input: unknown
+): Promise<ActionResult<Deal>> {
+  const auth = await requireLocationSession();
+  if (!auth.ok) return auth;
+
+  const parsed = updateDealFormSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Please check the deal and try again.",
+    };
+  }
+
+  try {
+    const deal = await updateLocationDeal(
+      locationId,
+      dealId,
+      parsed.data as UpdateDealInput,
+      auth.accessToken
+    );
+    revalidateDealPaths(locationId);
+    return { ok: true, data: deal };
+  } catch (error) {
+    return { ok: false, error: messageFor(error, "Could not update this deal.") };
+  }
+}
+
+/** DELETE /locations/{id}/deals/{deal_id} — hard delete. */
+export async function deleteLocationDealAction(
+  locationId: number,
+  dealId: number
+): Promise<ActionResult<null>> {
+  const auth = await requireLocationSession();
+  if (!auth.ok) return auth;
+
+  try {
+    await deleteLocationDeal(locationId, dealId, auth.accessToken);
+    revalidateDealPaths(locationId);
+    return { ok: true, data: null };
+  } catch (error) {
+    return { ok: false, error: messageFor(error, "Could not delete this deal.") };
   }
 }

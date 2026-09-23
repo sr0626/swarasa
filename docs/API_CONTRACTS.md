@@ -1055,6 +1055,31 @@ Response: `204`.
 Audit: `audit_log` row (`action="delete"`, `old_val` = full field
 snapshot at time of delete, `new_val=null`).
 
+### Frontend surface (added 2026-09-23)
+
+How the frontend consumes the endpoints above (typed client
+`frontend/src/lib/api/deals.ts`, types `frontend/src/types/deal.ts`):
+
+- **Management UI** — "Deals & specials" section of the location editor
+  (`/portal/locations/{id}`, `#deals`; `/portal/locations/{id}/deals`
+  redirects there). Same access rule as hours/photos: owner, assigned
+  manager, admin. Lists every deal (active or not) from `GET
+  /locations/{id}/deals`; create/edit send the full form each save (blank
+  dates clear `start_at`/`end_at`; no day selected is sent as
+  `applicable_days: null`, never `[]`); activate/deactivate is `PATCH
+  {is_active}`; delete is two-step confirm then `DELETE`. No `is_paid`
+  check anywhere (deals are free-tier).
+- **Search** — Filters dropdown "Deals today" toggle, URL param
+  `deals_today=true`, sent to the API as `has_deals_today=true`. Tiles show
+  the content-free "Deal(s) available today" badge when
+  `nearest_location.has_deal_today` is true — for every viewer, since a
+  search result never carries deal content.
+- **Restaurant detail** — SSR; `getLocationById` is called WITH the
+  viewer's access token when signed in, so `deals_today` reflects their
+  content access. `deals_today` array present -> full deal cards
+  (title/description); `null` with `has_deal_today: true` -> the
+  content-free badge only.
+
 ---
 
 ## Location reopen requests (`location_reopen_request`)

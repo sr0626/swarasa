@@ -15,15 +15,18 @@ import Link from "next/link";
 import { requireSession } from "@/lib/auth/guards";
 import TopBar from "@/components/home/TopBar";
 import { getLocationById, getLocationManagers } from "@/lib/api/locations";
+import { getLocationDeals } from "@/lib/api/deals";
 import LocationInfoForm from "@/components/portal/LocationInfoForm";
 import LocationAboutForm from "@/components/portal/LocationAboutForm";
 import LocationHoursEditor from "@/components/portal/LocationHoursEditor";
+import LocationDealsManager from "@/components/portal/LocationDealsManager";
 import LocationPhotoManager from "@/components/portal/LocationPhotoManager";
 import LocationManagerAssignment from "@/components/portal/LocationManagerAssignment";
 import LocationStatusControl from "@/components/portal/LocationStatusControl";
 import LocationStatusBadge from "@/components/portal/LocationStatusBadge";
 import NewListingNotice, { parseNewListingParam } from "@/components/portal/NewListingNotice";
 import InfoPanel from "@/components/ui/InfoPanel";
+import type { Deal } from "@/types/deal";
 import type { LocationDetail, LocationManager } from "@/types/location";
 
 export const metadata: Metadata = {
@@ -109,6 +112,18 @@ export default async function PortalLocationPage({ params, searchParams }: Locat
     return <NotFoundOrNoAccess role={session.role} />;
   }
 
+  // Deals management list (every deal, active or not). Same access rule as
+  // hours/photos (owner / assigned manager / admin), already established by
+  // the managers probe above. A failure here shows an error panel in place
+  // of the editor rather than an empty list, so an owner never mistakes
+  // "couldn't load" for "no deals" (and double-adds).
+  let deals: Deal[] | null = null;
+  try {
+    deals = (await getLocationDeals(locationId, session.accessToken)).results;
+  } catch {
+    deals = null;
+  }
+
   const isOwner = session.role === "owner";
   const isAdmin = session.role === "admin";
   const back = backTarget(session.role);
@@ -149,6 +164,14 @@ export default async function PortalLocationPage({ params, searchParams }: Locat
           <LocationInfoForm location={location} />
           <LocationAboutForm locationId={location.id} about={location.about} specialties={location.specialties} />
           <LocationHoursEditor locationId={location.id} hours={location.hours} />
+          {deals ? (
+            <LocationDealsManager locationId={location.id} initialDeals={deals} />
+          ) : (
+            <InfoPanel
+              title="Deals couldn't be loaded"
+              body="We couldn't load this location's deals right now. Refresh the page to try again."
+            />
+          )}
           <LocationPhotoManager
             locationId={location.id}
             isPaid={location.is_paid}
