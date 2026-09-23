@@ -1323,6 +1323,41 @@ for that identity. `category`/`details`/`status` are never touched.
 table list (see its own model docstring), so this redaction gets no
 `audit_log` entry, same as `claim_request`'s.
 
+**Amendment 2026-09-23 — `user_profile` added to export/deletion scope
+(PR #198), hard-deleted on approval:** `user_profile` (the
+`registered_user`/`manager` display name + `last_seen_at`, PRs #162,
+#184) was never wired into the flow above, so a diner's or manager's name
+survived an approved erasure and was missing from their export. Now:
+- **Erasure hard-deletes the requester's `user_profile` row** — every
+  column on it is personal data, nothing has an FK to it, and it is not on
+  root CLAUDE.md's audit-required table list, so (like `user_follow` and
+  `user_activity_event`, unlike the redacted `location_manager` /
+  `claim_request` rows) there is nothing worth keeping a tombstone for.
+  The row is keyed by Cognito `sub`, so it is matched the same way as the
+  other tables, not by current role.
+- **Releases the PR #195 name lock for that identity:** the set-once rule
+  keys off a stored name, so with the row gone the person can set a name
+  again (the owner path already did this via `owner_account.full_name =
+  NULL`).
+- **Lazy last-seen tracking can recreate a row afterwards.** Erasure does
+  not delete the Cognito account (see the scope decision above), so the
+  next authenticated request by the same identity may recreate a
+  `user_profile` row through `touch_last_seen`, containing only a fresh
+  `last_seen_at` and never the erased name. That is new post-erasure
+  activity, not retained data, and is expected — not a bug.
+- **Export:** `GET /auth/me/data-export` gains `user_profile`
+  (`full_name`, `last_seen_at`, `updated_at`; `null` when the caller has no
+  row), and `data_scope.user_profile` on the deletion request is `0` or
+  `1`, mirroring `owner_account`. The export notice text now mentions the
+  display name and last-seen time.
+- **Dev script:** `backend/app/scripts/delete_user_data.py` (the
+  dev-only hard-wipe) also clears `user_profile` so it matches the
+  approved-erasure behavior. No migration.
+*Rejected: nulling `full_name` but keeping the row (the remaining
+`last_seen_at` is also personal data, so a partial wipe protects less for
+no benefit); redacting to a tombstone marker (no dependents or audit need,
+unlike `location_manager`).*
+
 **Owner-scoped restaurant list: bare `GET /restaurants`, not `/restaurants/mine` or a `/search` variant**
 2026-09-13 | Architect decision, made while writing the contract to unblock
 the owner portal dashboard (there was no way for an authenticated owner to
@@ -1634,7 +1669,9 @@ Decided (root CLAUDE.md "Decision-Making Autonomy"):
   a registered_user/manager the stored name survives erasure and stays
   locked. This predates the lock (the name PII simply was never covered)
   but the lock makes it more visible; recorded as a follow-up for the
-  privacy path, not fixed here.
+  privacy path, not fixed here. **Resolved 2026-09-23 (PR #198):** approved
+  erasure now hard-deletes `user_profile` (unlocking the name) and the
+  export includes it — see the CCPA amendment dated 2026-09-23.
 *Rejected: an admin API endpoint or admin UI for renames (new public
 surface and authz/UI work for a rare ops task); `403` instead of `409`;
 letting the management command set a first name for someone with none;
