@@ -24,6 +24,7 @@ import Link from "next/link";
 import { requireSession } from "@/lib/auth/guards";
 import { ApiError } from "@/lib/api/client";
 import { getAdminOverview } from "@/lib/api/adminOverview";
+import { getRegisteredUserCount } from "@/lib/api/adminStats";
 import type { LocationStatus } from "@/types/location";
 
 export const metadata: Metadata = {
@@ -74,6 +75,19 @@ export default async function AdminOverviewPage({ searchParams }: AdminOverviewP
       error instanceof ApiError
         ? error.message
         : "Something went wrong loading the platform overview. Please try again.";
+  }
+
+  // Separate endpoint, separate failure mode (docs/API_CONTRACTS.md "GET
+  // /admin/registered-user-count" -- a live Cognito call that can 502 on
+  // an upstream error). Fetched and error-handled independently of
+  // `overview` above so a Cognito hiccup degrades this one tile, not the
+  // whole page.
+  let registeredUserCount: number | null = null;
+  let registeredUserCountUnavailable = false;
+  try {
+    registeredUserCount = (await getRegisteredUserCount(session.accessToken)).count;
+  } catch {
+    registeredUserCountUnavailable = true;
   }
 
   const totalOwnerPages = overview ? Math.max(1, Math.ceil(overview.owners.total_owners / PAGE_SIZE)) : 1;
@@ -135,19 +149,22 @@ export default async function AdminOverviewPage({ searchParams }: AdminOverviewP
           <h2 className="mt-8 font-display text-lg font-bold text-brand-ink">Owners</h2>
           <div aria-label="Owner counts" className="mt-3 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">
             <StatTile label="Total owners" value={overview.owners.total_owners} />
-            <div className="rounded-brand-card border border-dashed border-brand-border bg-white p-4 shadow-brand-card sm:p-5">
-              <p className="text-xs font-semibold uppercase tracking-wide text-brand-ink-subtle">
-                Registered users
-              </p>
-              <p className="mt-1 font-display text-lg font-semibold text-brand-ink-subtle">Coming soon</p>
-              {/* TODO: total registered-user count is a separate, parallel task
-                  (needs a Cognito ListUsers grant from Infra, or a
-                  post-confirmation hook — see docs/API_CONTRACTS.md "GET
-                  /admin/overview" registered_user_count). Not built here. */}
-              <p className="mt-1 text-xs text-brand-ink-subtle">
-                Tracked in a companion PR — needs Cognito access, out of scope here.
-              </p>
-            </div>
+            {/* Sourced from a separate endpoint (GET /admin/registered-user-count,
+                a live Cognito call), not GET /admin/overview's own
+                registered_user_count field (which stays null by design -- see
+                docs/API_CONTRACTS.md "GET /admin/overview"). Handled as its own
+                loading/error state above so a Cognito hiccup only degrades this
+                one tile. */}
+            {registeredUserCountUnavailable ? (
+              <div className="rounded-brand-card border border-dashed border-brand-border bg-white p-4 shadow-brand-card sm:p-5">
+                <p className="text-xs font-semibold uppercase tracking-wide text-brand-ink-subtle">
+                  Registered users
+                </p>
+                <p className="mt-1 text-sm text-brand-closed">Unavailable right now</p>
+              </div>
+            ) : (
+              <StatTile label="Registered users" value={registeredUserCount ?? 0} />
+            )}
           </div>
 
           <p className="mt-4 text-sm text-brand-ink-subtle">
