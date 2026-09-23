@@ -16,8 +16,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import AppError
 from app.dependencies.auth import CurrentUser, require_admin
 from app.dependencies.db import get_db
+from app.dependencies.pagination import Pagination, pagination_params
 from app.models.owner_account import OwnerAccount
 from app.schemas.admin_notifications import AdminNotificationsResponse
+from app.schemas.admin_overview import AdminOverviewResponse
 from app.schemas.admin_stats import RegisteredUserCountResponse
 from app.schemas.restaurant_bulk_import import (
     BulkImportRequest,
@@ -26,6 +28,7 @@ from app.schemas.restaurant_bulk_import import (
 )
 from app.services import cognito_service
 from app.services.admin_notification_service import get_admin_notifications
+from app.services.admin_overview_service import get_admin_overview
 from app.services.restaurant_bulk_import_service import BulkImportError, bulk_import_restaurants
 
 logger = logging.getLogger("app.routers.admin")
@@ -78,6 +81,20 @@ async def registered_user_count_endpoint(
         raise AppError(502, "Unable to retrieve registered user count", "upstream_error") from exc
 
     return RegisteredUserCountResponse(count=count)
+
+
+@router.get("/overview", response_model=AdminOverviewResponse)
+async def admin_overview_endpoint(
+    pagination: Pagination = Depends(pagination_params),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_admin),
+) -> AdminOverviewResponse:
+    """Auth: admin only. Platform-wide restaurant/tier/owner aggregate for
+    the "Platform Overview" admin page (docs/API_CONTRACTS.md "Admin
+    platform overview"). `page`/`page_size` paginate the owner breakdown
+    list only — the restaurant/tier counts in the response are always
+    platform-wide totals, never paginated."""
+    return await get_admin_overview(db, pagination)
 
 
 @router.post("/restaurants/bulk-import", response_model=BulkImportResponse)

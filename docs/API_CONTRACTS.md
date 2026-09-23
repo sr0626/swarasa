@@ -223,6 +223,7 @@ Query params:
 | is_paid | bool, optional | **Admin only.** JUDGMENT CALL: **matches a brand if ANY of its locations has this `is_paid` value** — same "any location" rule as `status`/`city` here, chosen for consistency rather than requiring every location to match (a multi-location brand with one paid and one free location matches both `is_paid=true` and `is_paid=false`). |
 | city | string, optional, max 120 | **Admin only.** Case-insensitive **exact** match (not substring — deliberately stricter than `name`/`owner_email`, since city names are short, well-known values an admin types precisely, not a fuzzy search) against `restaurant_location.city`. JUDGMENT CALL: **matches a brand if ANY of its locations is in that city** — a brand can have locations in multiple cities (e.g. Plano and Dallas); filtering by `city=plano` returns it, and so does `city=dallas`, same as `status`/`is_paid` above. |
 | is_claimed | bool, optional | **Admin only.** Exact match against `restaurant_brand.is_claimed` (brand-level field, no "any location" ambiguity). |
+| sort | string, optional | **Not admin-only** (unlike every filter above) — available to any caller of this endpoint. Added 2026-09-22 for the admin listings "Most followed" sort control. Omitted keeps the existing default order (`id` ascending, unchanged). `followers` orders by `follower_count` descending, ties broken by `id` ascending; 422 on any other value. |
 | page | int, optional, default 1 | |
 | page_size | int, optional, default 20, max 100 | |
 
@@ -2132,6 +2133,102 @@ Errors:
 |---|---|---|
 | 403 | `forbidden` | caller is not admin |
 | 502 | `upstream_error` | Cognito `ListUsersInGroup` call failed |
+
+### GET /admin/overview
+
+Auth: admin only. Platform-wide restaurant/tier/owner aggregate behind the
+admin console's **"Platform Overview"** page (`/admin/overview` —
+deliberately not named "Reports": that name is already taken by the
+report-a-problem triage queue, `/admin/reports`). Computed per request
+(no push/cache), in a small, fixed number of `GROUP BY` queries — never
+one query per owner or per status value (see
+`app/services/admin_overview_service.py`).
+
+Query params:
+| Param | Type | Notes |
+|---|---|---|
+| page | int, optional, default 1 | Paginates `owners.results` only. |
+| page_size | int, optional, default 20, max 100 | |
+
+Response: `200`
+```json
+{
+  "restaurants": {
+    "total": 42,
+    "by_status": {
+      "active": 35,
+      "owner_deactivated": 4,
+      "coming_soon": 2,
+      "closed_pending_reopen": 1
+    },
+    "by_tier": { "paid": 9, "free": 36 }
+  },
+  "owners": {
+    "total_owners": 18,
+    "results": [
+      {
+        "owner_id": 5,
+        "email": "asha@example.com",
+        "restaurant_count": 3,
+        "by_status": { "active": 2, "owner_deactivated": 0, "coming_soon": 1, "closed_pending_reopen": 0 }
+      }
+    ],
+    "page": 1,
+    "page_size": 20,
+    "total": 18
+  },
+  "registered_user_count": null
+}
+```
+
+**JUDGMENT CALL — two different counting grains in one response, by
+design (documented in `app/schemas/admin_overview.py` and
+`app/services/admin_overview_service.py`; flagged for review):**
+
+- **`restaurants` is brand-grain**, using the exact same "matches a brand
+  if ANY of its locations satisfies this" semantics `GET /restaurants`'
+  `status`/`is_paid` filters already use (PR #177) — chosen so every
+  number here is identical to the `total` a caller gets back from
+  `GET /restaurants?status=<x>` / `?is_paid=<x>`, and so the overview
+  page's "view list" links (`/admin/listings?status=<x>`,
+  `/admin/listings?is_paid=<x>`) always agree with the tile they came
+  from. Consequence: `by_status`/`by_tier` are **not mutually exclusive**
+  and do **not** have to sum to `total` — a brand with one `active` and
+  one `coming_soon` location is counted in both status buckets, same as
+  it would match both filter values as two separate `GET /restaurants`
+  calls. `total` itself is a plain, unfiltered `restaurant_brand` count.
+- **`owners[].restaurant_count`/`by_status` is location-grain** — a
+  straightforward `GROUP BY (owner_id, status)` count of that owner's
+  actual `restaurant_location` rows. There is no click-through list this
+  table needs to stay link-consistent with, so it uses the arithmetically
+  clean unit instead: `by_status` values always sum to
+  `restaurant_count`, unlike `restaurants.by_status` above.
+
+"Paid" throughout = **"has at least one paid location"** (`is_paid=true`
+on `restaurant_location`), never a brand-level stored field — `is_paid`
+only exists on `restaurant_location` (root CLAUDE.md "Tier model").
+
+`owners.total_owners` = count of unique owners with **at least one
+brand** (`restaurant_brand.owner_id IS NOT NULL`, grouped) — an
+`owner_account` row with zero brands (signed up, never listed anything)
+is excluded, same as `owners.results`. `owners.results` is ordered by
+`email` ascending, then `id` (stable tiebreak).
+
+`registered_user_count` is **always `null`** on THIS endpoint — kept out
+of scope for `GET /admin/overview` by design, rather than folded in
+after the fact. The real count is a separate call: `GET
+/admin/registered-user-count` (documented directly above), added by a
+companion PR that landed on `main` while this endpoint was in review. The
+`/admin/overview` frontend page fetches both endpoints independently
+(two ordinary typed API calls) and renders them together — this
+endpoint's own shape was deliberately not changed to absorb the other
+one's data, so each stays a single-responsibility aggregate (a local-DB
+`GROUP BY` here vs. a live Cognito call there) that can fail
+independently without taking the other down. `registered_user_count`
+stays on this response as a stable placeholder field regardless, in case
+a future caller wants both counts from one call.
+
+Errors: `403 forbidden` for any non-admin caller.
 
 ### POST /admin/restaurants/bulk-import
 

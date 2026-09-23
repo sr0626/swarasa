@@ -31,6 +31,11 @@ export interface AdminRestaurantListFilters {
   isClaimed?: boolean;
 }
 
+/** `GET /restaurants` `sort` query param — NOT admin-only, unlike
+ * `AdminRestaurantListFilters` above (docs/API_CONTRACTS.md "GET
+ * /restaurants"). Omitted keeps the existing default order unchanged. */
+export type RestaurantSort = "followers";
+
 /**
  * GET /restaurants — auth: owner or admin (docs/API_CONTRACTS.md, added
  * 2026-09-13 to unblock the owner portal dashboard). Owner caller: always
@@ -45,7 +50,7 @@ export interface AdminRestaurantListFilters {
  * assigned locations; the dashboard page handles that role separately.
  */
 export async function getMyRestaurants(
-  params: PaginationParams & AdminRestaurantListFilters = {},
+  params: PaginationParams & AdminRestaurantListFilters & { sort?: RestaurantSort } = {},
   accessToken: string
 ): Promise<PaginatedResponse<RestaurantBrand>> {
   const query = toQueryString({
@@ -56,6 +61,7 @@ export async function getMyRestaurants(
     is_paid: params.isPaid,
     city: params.city,
     is_claimed: params.isClaimed,
+    sort: params.sort,
     page: params.page,
     page_size: params.page_size,
   });
