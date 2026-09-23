@@ -36,6 +36,7 @@ from app.models.owner_account import OwnerAccount
 from app.models.restaurant_brand import RestaurantBrand
 from app.models.restaurant_location import RestaurantLocation
 from app.models.restaurant_photo import RestaurantPhoto
+from app.models.user_activity_event import UserActivityEvent
 from app.models.user_follow import UserFollow
 from app.models.user_profile import UserProfile
 
@@ -320,6 +321,21 @@ async def create_user_profile(db: AsyncSession, **overrides) -> UserProfile:
     db.add(profile)
     await db.flush()
     return profile
+
+
+async def create_activity_event(db: AsyncSession, **overrides) -> UserActivityEvent:
+    """A `user_activity_event` row. Defaults to a `search` event; pass
+    `created_at=` to backdate (e.g. past the retention window)."""
+    values = {
+        "user_sub": _cognito_sub(),
+        "event_type": "search",
+        "payload": {"q": "biryani", "result_count": 3},
+    }
+    values.update(overrides)
+    event = UserActivityEvent(**values)
+    db.add(event)
+    await db.flush()
+    return event
 
 
 def submitted_recently() -> datetime:

@@ -262,6 +262,28 @@ async def get_current_user_optional(
     return await _resolve_current_user(authorization, db)
 
 
+async def get_current_user_lenient(
+    authorization: str | None = Header(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> CurrentUser | None:
+    """Like `get_current_user_optional`, but ALSO returns `None` (instead of
+    raising 401) when a token is presented but invalid/expired.
+
+    For a public route whose only use of identity is a best-effort side
+    effect (currently: `GET /search` recording a signed-in diner's search
+    history — see `app/services/activity_service.py`). A stale token must
+    never turn a public search into a 401, and nothing else on that route
+    depends on who the caller is. Do NOT use this where identity gates
+    access or changes what is returned — use `get_current_user_optional`
+    (bad credentials => clear 401) there.
+    """
+    try:
+        return await _resolve_current_user(authorization, db)
+    except Exception:  # noqa: BLE001 - see docstring: identity here is best-effort only
+        logger.info("lenient auth: ignoring unusable credentials", exc_info=True)
+        return None
+
+
 async def require_owner(
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),

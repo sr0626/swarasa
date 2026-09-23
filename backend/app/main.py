@@ -12,6 +12,7 @@ from mangum import Mangum
 
 from app.core.errors import register_exception_handlers
 from app.routers import (
+    activity,
     admin,
     auth,
     claim,
@@ -32,6 +33,7 @@ register_exception_handlers(app)
 
 app.include_router(health.router)
 app.include_router(search.router)
+app.include_router(activity.router)
 app.include_router(restaurants.router)
 app.include_router(locations.router)
 app.include_router(deals.router)

@@ -44,7 +44,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
@@ -55,8 +55,10 @@ from app.models.data_deletion_request import DataDeletionRequest
 from app.models.listing_report import ListingReport
 from app.models.location_manager import LocationManager
 from app.models.owner_account import OwnerAccount
+from app.models.user_activity_event import UserActivityEvent
 from app.models.user_follow import UserFollow
 from app.schemas.privacy import (
+    ActivityEventExportOut,
     AuditLogExportOut,
     ClaimRequestExportOut,
     DataDeletionListResponse,
@@ -68,7 +70,7 @@ from app.schemas.privacy import (
     LocationManagerExportOut,
     OwnerAccountExportOut,
 )
-from app.services import audit_service
+from app.services import activity_service, audit_service
 from app.services.auth_service import get_owner_account_by_sub
 
 # Shared tombstone value for a redacted identity column — not per-row
@@ -80,7 +82,9 @@ _REDACTED_MARKER = "deleted-user"
 _EXPORT_NOTICE = (
     "This export covers personal data held directly by this app "
     "(location manager assignments, restaurant follows, claim requests, "
-    "listing reports you submitted while signed in, and your owner "
+    "listing reports you submitted while signed in, the searches and "
+    "restaurant tiles you clicked while signed in as a registered user "
+    "(kept for 12 months), and your owner "
     "account record if you have one). Cognito account "
     "details (login email, password, MFA) are managed separately by AWS "
     "Cognito and are not included here. Entries under audit_log_entries "
@@ -119,6 +123,9 @@ async def _gather(db: AsyncSession, cognito_sub: str) -> dict[str, Any]:
         )
     ).scalars().all()
 
+    # Within the retention window only — see activity_service.
+    activity_rows = await activity_service.list_user_activity_for_export(db, cognito_sub)
+
     audit_rows = (
         await db.execute(
             select(AuditLog)
@@ -133,6 +140,7 @@ async def _gather(db: AsyncSession, cognito_sub: str) -> dict[str, Any]:
         "follows": follow_rows,
         "claims": claim_rows,
         "listing_reports": listing_report_rows,
+        "activity": activity_rows,
         "audit": audit_rows,
     }
 
@@ -146,6 +154,7 @@ def _data_scope(gathered: dict[str, Any]) -> dict[str, int]:
         "claim_requests": len(gathered["claims"]),
         "claim_requests_pending": pending_claims,
         "listing_reports": len(gathered["listing_reports"]),
+        "activity_events": len(gathered["activity"]),
         "audit_log_entries": len(gathered["audit"]),
     }
 
@@ -216,6 +225,12 @@ async def export_my_data(db: AsyncSession, current_user) -> DataExportOut:
                 reviewed_at=r.reviewed_at,
             )
             for r in gathered["listing_reports"]
+        ],
+        activity_events=[
+            ActivityEventExportOut(
+                event_type=e.event_type, created_at=e.created_at, payload=e.payload
+            )
+            for e in gathered["activity"]
         ],
         audit_log_entries=[
             AuditLogExportOut(
@@ -369,6 +384,13 @@ async def approve_deletion_request(
     # user_follow: hard delete — pure preference data, no retention need.
     for follow in gathered["follows"]:
         await db.delete(follow)
+
+    # user_activity_event: hard delete every row for this sub (including any
+    # past-retention rows not yet purged) — pure behavioural data, no
+    # retention need, same as user_follow. Not on the audit-required list.
+    await db.execute(
+        delete(UserActivityEvent).where(UserActivityEvent.user_sub == cognito_sub)
+    )
 
     # location_manager: redact the identifying column, deactivate if
     # still active. On root CLAUDE.md's audit-required table list, so

@@ -8,9 +8,10 @@ from the specific Irving, TX real-data seed it also unblocks).
 from __future__ import annotations
 
 import logging
+from typing import Literal
 
 from botocore.exceptions import BotoCoreError, ClientError
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Path, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
@@ -18,6 +19,7 @@ from app.dependencies.auth import CurrentUser, require_admin
 from app.dependencies.db import get_db
 from app.dependencies.pagination import Pagination, pagination_params
 from app.models.owner_account import OwnerAccount
+from app.schemas.activity import UserActivityResponse
 from app.schemas.admin_notifications import AdminNotificationsResponse
 from app.schemas.admin_overview import AdminOverviewResponse
 from app.schemas.admin_owners import AdminOwnersResponse, OwnerSort
@@ -28,7 +30,7 @@ from app.schemas.restaurant_bulk_import import (
     BulkImportResponse,
     BulkImportRowOut,
 )
-from app.services import cognito_service
+from app.services import activity_service, cognito_service
 from app.services.admin_notification_service import get_admin_notifications
 from app.services.admin_overview_service import get_admin_overview
 from app.services.admin_owners_service import get_admin_owners
@@ -138,6 +140,25 @@ async def admin_owners_endpoint(
     only (no Cognito call); no billing fields. See docs/API_CONTRACTS.md
     "GET /admin/owners"."""
     return await get_admin_owners(db, pagination, search=q, sort=sort)
+
+
+@router.get(
+    "/registered-users/{user_sub}/activity", response_model=UserActivityResponse
+)
+async def registered_user_activity_endpoint(
+    user_sub: str = Path(min_length=1, max_length=36),
+    event_type: Literal["search", "tile_click"] | None = Query(default=None),
+    pagination: Pagination = Depends(pagination_params),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_admin),
+) -> UserActivityResponse:
+    """Auth: admin only. One diner's recorded searches and restaurant-tile
+    clicks, newest first, within the 12-month retention window (see
+    docs/API_CONTRACTS.md "GET /admin/registered-users/{user_sub}/activity"
+    and docs/DECISIONS.md "Registered-user activity tracking"). Local DB
+    only — no Cognito call, so it stays fast; it does not verify that
+    `user_sub` is a real diner (an unknown sub simply has no events)."""
+    return await activity_service.list_user_activity(db, user_sub, pagination, event_type)
 
 
 @router.get("/overview", response_model=AdminOverviewResponse)

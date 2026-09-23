@@ -59,6 +59,19 @@ class ListingReportExportOut(BaseModel):
     reviewed_at: datetime | None
 
 
+class ActivityEventExportOut(BaseModel):
+    """A recorded search or restaurant-tile click by the caller (registered
+    users only — see `app/services/activity_service.py`). Only events inside
+    the 12-month retention window are exported. `payload` is exactly what was
+    stored (query text, filters, location text, result count / brand_id,
+    location_id, source).
+    """
+
+    event_type: str
+    created_at: datetime
+    payload: dict[str, Any]
+
+
 class AuditLogExportOut(BaseModel):
     """Actions the caller themselves performed, per DECISIONS.md "CCPA
     data export/deletion" — included for transparency, but retained (not
@@ -83,6 +96,7 @@ class DataExportOut(BaseModel):
     follows: list[FollowExportOut]
     claim_requests: list[ClaimRequestExportOut]
     listing_reports: list[ListingReportExportOut]
+    activity_events: list[ActivityEventExportOut]
     audit_log_entries: list[AuditLogExportOut]
     notice: str
 
