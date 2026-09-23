@@ -148,7 +148,14 @@ export default async function AdminOverviewPage({ searchParams }: AdminOverviewP
 
           <h2 className="mt-8 font-display text-lg font-bold text-brand-ink">Owners</h2>
           <div aria-label="Owner counts" className="mt-3 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">
-            <StatTile label="Total owners" value={overview.owners.total_owners} />
+            {/* Links to the full owner report (GET /admin/owners). That list also
+                includes owners with no restaurant yet, so its total can exceed
+                this tile (owners with >= 1 restaurant). */}
+            <StatTile
+              label="Total owners"
+              value={overview.owners.total_owners}
+              href="/admin/owners"
+            />
             {/* Sourced from a separate endpoint (GET /admin/registered-user-count,
                 a live Cognito call), not GET /admin/overview's own
                 registered_user_count field (which stays null by design -- see
