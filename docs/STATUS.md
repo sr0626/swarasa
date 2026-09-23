@@ -28,7 +28,42 @@ fully satisfied and asked to stop iterating for now, with an explicit intent
 to revisit later, not a final sign-off.
 
 ## Open PRs
-- None open as of 2026-09-22.
+- None open as of 2026-09-23 (other than this batched docs PR itself).
+
+## Landed 2026-09-23, wave 5 (#172-#190)
+- **Deals engine live in dev** (deals reopened by the user 2026-09-23;
+  payments/billing stay deferred). Deals are FREE-tier, no `is_paid` gate:
+  - Backend (#185): `deal` table (`0009_deal`), owner/assigned-manager/admin
+    CRUD, `GET /search?has_deals_today`, public `has_deal_today` boolean,
+    deal content only for registered_user/admin/owning owner/assigned
+    manager; `deal_expiry` cron flips expired deals with an audit row.
+  - Policy docs reconciled (#186): public sees only "deal(s) available
+    today"; root/backend `CLAUDE.md` + `DECISIONS.md` updated.
+  - `deal_expiry` Lambda now a container image reusing the API image
+    (#187), applied to dev via terraform 2026-09-23.
+  - Frontend (#188): "Deals & specials" section in the location editor,
+    "Deals today" search filter, tile badge, restaurant-page deal cards.
+  - Two parallel `0009` Alembic heads merged (`0010_merge_0009_heads`) +
+    `deal_expiry` engine dispose in `finally` + single-head guard test
+    (#190).
+  - Live in dev: `alembic_upgrade` applied (deal + last_seen_at
+    migrations); `deal_expiry` Lambda runs and returns `{"expired": 0}`.
+- Admin: Platform Overview page + `sort=followers` (#181); registered-user
+  count, Cognito-backed (#180); registered-users report + `last_seen_at`
+  tracking (#184); listings filters by owner/name/status/tier/city/claimed
+  (#177); follower count on the listings tile (#178).
+- Follower count on owner/manager dashboards only (#174); manager activity
+  feed, narrower than owner's (#175); owner/manager preview of the
+  diner-only follow icon on their own listing (#173).
+- Real hard-delete for a location, closing the delete-brand dead end
+  (#176).
+- Fixes: follow icon position + stale My Favourites (#172); "Closed now" vs
+  "Closed today" on console tiles (#179); manager location list shows the
+  restaurant name + "Forgot password?" copy (#182); manager/owner/admin
+  photo upload (frontend was still using PUT against a presigned-POST URL)
+  (#183).
+- BRD v3.8 (#189): current functionality by role, future items, known gaps;
+  deals aligned as free-tier.
 
 ## Landed 2026-09-22, wave 4 (#165-#170)
 - Terraform: S3 lifecycle plan warning fixed; DynamoDB `use_lockfile`
@@ -101,14 +136,17 @@ to revisit later, not a final sign-off.
 - Claim approval adds the claimant to the Cognito `owner` group (#138 IAM applied to dev, #139).
 - Geocode backfill run on dev: all 26 restaurants now have coordinates (#140, #143, #145).
 - Owner console: single Business account page at `/account` (#142, #147); Add restaurant collects address/phone/website and geocodes (#144); authenticated fetches uncached (#141); scripts guide `docs/SCRIPTS.md` (#146).
-- Payments/subscriptions/refunds/deals deferred by decision.
+- Payments/subscriptions/refunds deferred by decision (deals were deferred
+  here too, reopened 2026-09-23 -- see wave 5).
 
-## Known gaps (2026-09-22)
-- Restaurant status lifecycle (activate/deactivate/coming-soon/closed-pending-reopen) drafted but NOT shipped: backend models/migration exist on branch `feature/restaurant-status-lifecycle`, but the router isn't wired in, no tests, no frontend.
-- Admin claims UI doesn't yet show the `owner_group_granted` flag.
+## Known gaps (2026-09-23)
+- Manager's own dashboard list (`GET /auth/me/managed-locations`) still
+  filters to active locations only (hidden/coming-soon ones don't show).
+- Admin new-user feed covers owner accounts only (no local diner user table;
+  diner count/report are Cognito-backed via #180/#184).
+- Social login not started. Payments/billing/refunds/payment reports
+  deferred by decision. Deal alerts to followers not started.
 - `NEXT_PUBLIC_CONTACT_EMAIL` set in Amplify (#150, applied to dev).
-- Admin new-user feed covers owner accounts only (no local diner user table).
-- Social login not started. Deals/refunds/payments deferred by decision.
 
 ## Architect (schema + contracts)
 - [x] 13 entities modeled, 2 migrations written (never run)
@@ -148,7 +186,8 @@ to revisit later, not a final sign-off.
       `audit_log` retained untouched. See DECISIONS.md "CCPA data
       export/deletion" for the full reasoning — closes the tracked
       `docs/PROJECT_PLAN.csv` gap
-- [ ] Menu, deals, Stripe — Phase 2, not started (correctly)
+- [x] Deals engine (#185, live in dev, free-tier)
+- [ ] Menu, Stripe — Phase 2, not started (correctly)
 - [x] Dev/test seed script (`backend/app/scripts/seed_dev_data.py`, PR #46)
       — small, idempotent owner/brand/location/manager/claim rows across 3
       "(Dev Seed)"-labeled brands. Blocked on a human step it can't do
