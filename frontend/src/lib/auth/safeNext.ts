@@ -26,6 +26,19 @@ export function withNext(href: string, next: string | null | undefined): string 
 }
 
 /**
+ * "Sign in to see deals" target for signed-out visitors (product decision
+ * 2026-09-23: unregistered users see only the content-free "Deal(s)
+ * available today" badge and must sign in / register -- same as Follow -- to
+ * see deal details). The same `/login?next=<current path>` mechanism as
+ * FollowButton's signed-out link; `next` is validated by `safeNextPath`, so
+ * an unsafe path yields plain `/login`. The login page links on to /signup
+ * preserving `next`, so one href covers both sign-in and sign-up.
+ */
+export function dealSignInHref(currentPath: string): string {
+  return withNext("/login", safeNextPath(currentPath));
+}
+
+/**
  * Whether `role` can actually use `path` -- so a diner who signs in from a
  * link meant for owners lands on the normal homepage instead of being
  * bounced by the destination's own guard straight back to /login. Mirrors

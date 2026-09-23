@@ -13,6 +13,7 @@ import type { ActivitySource } from "@/types/userActivity";
 import TrackedTileLink from "@/components/listing/TrackedTileLink";
 import { formatPhone } from "@/lib/formatPhone";
 import DealBadge from "@/components/ui/DealBadge";
+import DealSignInLink from "@/components/ui/DealSignInLink";
 import DefaultRestaurantImage from "@/components/ui/DefaultRestaurantImage";
 import FollowButton from "@/components/ui/FollowButton";
 import {
@@ -58,6 +59,10 @@ export default function RestaurantCard({
   clickSource,
 }: RestaurantCardProps) {
   const { nearest_location } = item;
+  // Signed out = the follow icon is shown (so the viewer isn't an owner/
+  // manager/admin) but the viewer isn't a registered user. Fails closed:
+  // with the default `showFollowButton=false` no sign-in CTA ever renders.
+  const isSignedOut = showFollowButton && !isRegisteredUser;
   const visibleTags = item.cuisine_tags.slice(0, 3);
   const coverPhoto = item.cover_photo_thumbnail_url ?? item.cover_photo_url;
   const fullAddress = `${nearest_location.address_line1}, ${nearest_location.city}, ${nearest_location.state} ${nearest_location.postal_code}`;
@@ -177,6 +182,9 @@ export default function RestaurantCard({
             closeTime={nearest_location.close_time}
           />
           {nearest_location.has_deal_today && <DealBadge />}
+          {nearest_location.has_deal_today && isSignedOut && (
+            <DealSignInLink currentPath={currentPath} />
+          )}
           {!item.is_claimed && (
             <span className="ml-auto text-xs font-medium text-brand-ink-subtle">
               Unclaimed

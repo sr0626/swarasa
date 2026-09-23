@@ -11,6 +11,7 @@
 // itself (see app/restaurant/[slug]/page.tsx for where the access token is
 // attached to the `getLocationById` call that produces this data).
 import DealBadge from "@/components/ui/DealBadge";
+import DealSignInLink from "@/components/ui/DealSignInLink";
 import { TagIcon } from "@/components/ui/icons";
 import type { DealPublic } from "@/types/deal";
 
@@ -25,9 +26,17 @@ interface RestaurantDealsProps {
    * badge, per `hasDealToday`); a real (non-empty, in practice) array =
    * full content. */
   dealsToday: DealPublic[] | null;
+  /** This page's path, passed ONLY for a signed-out visitor — adds the
+   * "Sign in to see deals" link (returns here after sign-in). Omitted for
+   * every signed-in role, whose UI is unchanged. */
+  signInReturnPath?: string;
 }
 
-export default function RestaurantDeals({ hasDealToday, dealsToday }: RestaurantDealsProps) {
+export default function RestaurantDeals({
+  hasDealToday,
+  dealsToday,
+  signInReturnPath,
+}: RestaurantDealsProps) {
   if (!hasDealToday) return null;
 
   if (!dealsToday || dealsToday.length === 0) {
@@ -36,8 +45,9 @@ export default function RestaurantDeals({ hasDealToday, dealsToday }: Restaurant
     // title/description, no explanation of why (that would itself hint at
     // there being more to see for some viewers and not others).
     return (
-      <section aria-label="Deals" className="flex">
+      <section aria-label="Deals" className="flex flex-wrap items-center gap-x-3">
         <DealBadge />
+        {signInReturnPath && <DealSignInLink currentPath={signInReturnPath} />}
       </section>
     );
   }
