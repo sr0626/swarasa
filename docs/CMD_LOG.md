@@ -565,6 +565,10 @@ git push -u origin feat/soft-delete-listing   # claude
 git push -u origin feat/lock-display-name   # claude
 git push -u origin feat/user-activity-tracking   # claude
 git push -u origin docs/wave6-tracker-status-cmdlog   # claude
+git push -u origin docs/decisions-wave6   # claude
+git push -u origin fix/ccpa-user-profile-coverage   # claude
+git push -u origin docs/wave7-tracker-status-cmdlog   # claude
+git push -u origin docs/decisions-ccpa-profile   # claude
 aws sso login --profile swarasa-dev   # user  (expired session, x2)
 aws sts get-caller-identity --profile swarasa-dev   # user  (first run in the wrong account 044336301301, no effect; then the correct account 091823298313)
 aws ecr describe-images --repository-name swarasa-api-dev --profile swarasa-dev --region us-east-1 --query 'sort_by(imageDetails,&imagePushedAt)[-1].{tag:imageTags,pushedAt:imagePushedAt}'   # user
