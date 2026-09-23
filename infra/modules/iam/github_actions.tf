@@ -3,8 +3,11 @@
 # "Key Patterns", `role-to-assume: ${{ secrets.DEV_DEPLOY_ROLE_ARN }}`).
 # Scoped to exactly two things per devops/CLAUDE.md "NEVER — give the
 # pipeline's IAM role permissions beyond what it needs": ECR push/pull on
-# the one backend repo (module.ecr) and lambda:UpdateFunctionCode on the one
-# API function. Nothing account-wide, no static keys (OIDC only).
+# the one backend repo (module.ecr) and lambda:UpdateFunctionCode on the API
+# function AND the deal-expiry function (both run the same image — see
+# local.deal_expiry_lambda_arn below for why this role now names two
+# function ARNs instead of one). Nothing account-wide, no static keys
+# (OIDC only).
 # -------------------------------------------------------------------
 
 # One GitHub OIDC provider per AWS account, shared by any workflow in this
@@ -70,6 +73,19 @@ locals {
   # module's service_name for this Lambda ever changes — see DECISIONS.md
   # "Multi-service scaling".
   api_lambda_arn = "arn:aws:lambda:${var.aws_region}:${var.account_id}:function:${var.project}-${var.service_name}-${var.env}"
+
+  # Same constructed-not-referenced reasoning as api_lambda_arn above —
+  # avoids a circular dependency on module.lambda (which depends on this
+  # iam module for its execution role ARNs). Added when deal_expiry moved
+  # from a zip placeholder to a container image REUSING the API Lambda's
+  # own image (infra/modules/lambda/main.tf's aws_lambda_function.deal_expiry
+  # comment): deploy-backend.yml's "Point deal-expiry Lambda at the same new
+  # image" step now calls lambda:UpdateFunctionCode on this function too, so
+  # this role needs it in its Resource list below. Name is constructed from
+  # modules/lambda/main.tf's fixed `deal_expiry_function_name` local
+  # (`"${var.project}-deal-expiry-${var.env}"` — not parameterized by
+  # service_name, same as that resource: a single cross-service cron job).
+  deal_expiry_lambda_arn = "arn:aws:lambda:${var.aws_region}:${var.account_id}:function:${var.project}-deal-expiry-${var.env}"
 
   # Same constructed-not-referenced reasoning as api_lambda_arn above
   # (avoids a circular dependency on module.lambda_resize, which itself
@@ -190,7 +206,14 @@ resource "aws_iam_role_policy" "github_actions_deploy" {
           # step failed with AccessDeniedException on this specific action.
           "lambda:GetFunctionConfiguration",
         ]
-        Resource = local.api_lambda_arn
+        # Two ARNs, not one, since deal_expiry moved to a container image
+        # REUSING this same pipeline's image (see local.deal_expiry_lambda_arn
+        # above) — deploy-backend.yml now updates both functions' code from
+        # the one image it builds. Still not a wildcard: an explicit list of
+        # the exact two function ARNs this one pipeline is allowed to touch,
+        # same least-privilege posture as before, just enumerating a second
+        # resource instead of widening to "any function."
+        Resource = [local.api_lambda_arn, local.deal_expiry_lambda_arn]
       }
     ]
   })

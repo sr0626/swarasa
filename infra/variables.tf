@@ -73,6 +73,18 @@ variable "lambda_image_uri" {
     very first apply of a new environment. `terraform plan` never wants to
     revert a later DevOps deploy back to this value (or the default) because
     `aws_lambda_function.api` has `lifecycle.ignore_changes = [image_uri]`.
+
+    Also used, unchanged, as the deal-expiry Lambda's `image_uri`
+    (`aws_lambda_function.deal_expiry` in modules/lambda/main.tf) — deal
+    expiry deliberately reuses the API Lambda's own image rather than
+    getting a second ECR repo/Dockerfile (see that resource's comment for
+    why), so the two functions are always pointed at the same image by
+    construction, distinguished only by `image_config.command`. The
+    `:bootstrap` tag may not exist by the time this Lambda is first created
+    if `module.ecr`'s lifecycle policy has already expired it (it only
+    keeps the most recent 20 tagged images) — if so, pass the API Lambda's
+    currently-deployed image URI explicitly instead (see this PR's
+    description for the exact command).
   EOT
   type        = string
   default     = null
