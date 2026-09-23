@@ -1890,6 +1890,31 @@ City search uses admin-configured bounding box. No location = city default.
 May 2026 | Clear incentive for public visitors to create a free account.
 Registration is the gate, not payment.
 *Rejected: Deals public (removes registration incentive)*
+**AMENDED 2026-09-23, see below — the "not even a public signal" reading of
+this entry no longer holds; the registration-is-the-gate spirit is kept,
+narrowed to just the deal's content.**
+
+**Deals engine: free-tier, public-signal + registered-user-content visibility (supersedes the May 2026 entry above)**
+2026-09-23 | Direct user instruction, verbatim: "a user should be able to
+search restaurant with deals today... When unregistered user does the
+search, just show as Deal(s) available today, but don't show what it is. To
+see they have to register (just like follow)." User confirmed both points
+explicitly when flagged as conflicting with pre-existing docs: (1) deals are
+FREE-tier — no `is_paid` gate on creation or visibility, correcting root
+CLAUDE.md's and backend/CLAUDE.md's earlier listing of deals as paid-gated
+content; (2) content visibility is registered_user-and-up, public callers
+get ONLY a boolean "has a deal today" signal (`has_deal_today`), never the
+deal's title/description — this narrows the May 2026 entry above (which
+read as "no public signal at all") to "no public CONTENT," while keeping
+its actual intent (registration is the gate to the deal itself, not to
+knowing one exists). User's own words confirming this narrower reading,
+2026-09-23: "only deals are hidden from public users, at this point."
+Built in PR #185 (`backend/app/services/restaurant_service.py`'s
+`_caller_may_view_follower_count`-style caller-aware gating, reused for
+`deals_today`).
+*Rejected: fully hidden from public (the May 2026 entry's literal reading) —
+directly contradicts the 2026-09-23 instruction; paid-tier gating — directly
+contradicts the free-for-everyone confirmation*
 
 **Online ordering = redirect link model in Phase 4 (not on-platform checkout)**
 May 2026 | Platform links to restaurant's own ordering system (DoorDash, their own URL).
