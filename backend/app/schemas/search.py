@@ -35,6 +35,14 @@ class NearestLocationOut(BaseModel):
     open_time: time | None = None
     close_time: time | None = None
     is_closed: bool | None = None
+    # Public "does THIS nearest location have an active deal today" badge
+    # signal — content-free by design (docs/DECISIONS.md "Deals: public
+    # boolean signal, gated content"); every caller sees this, including
+    # anonymous. Reflects only the nearest location shown on this card, not
+    # "any location of this brand" (that broader condition is what the
+    # `has_deals_today` query filter uses instead — see
+    # app/services/search_service.py).
+    has_deal_today: bool
 
 
 class SearchResultOut(BaseModel):

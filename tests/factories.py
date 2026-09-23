@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.claim_request import ClaimRequest
 from app.models.cuisine_tag import CuisineTag
 from app.models.data_deletion_request import DataDeletionRequest
+from app.models.deal import Deal
 from app.models.listing_report import ListingReport
 from app.models.location_manager import LocationManager
 from app.models.owner_account import OwnerAccount
@@ -199,6 +200,25 @@ class UserProfileFactory(factory.Factory):
     full_name = FactoryFaker("name")
 
 
+class DealFactory(factory.Factory):
+    """`applicable_days=None` (every day) and `start_at=None`/`end_at=None`
+    (indefinite) by default — mirrors the tests/CLAUDE.md key pattern of a
+    factory whose defaults are the "unrestricted" case, so a test only
+    overrides the specific field(s) it's exercising."""
+
+    class Meta:
+        model = Deal
+
+    location_id = factory.Sequence(lambda n: n + 1)
+    deal_type = "deal"
+    title = FactoryFaker("catch_phrase")
+    description = None
+    applicable_days = None
+    start_at = None
+    end_at = None
+    is_active = True
+
+
 class RestaurantPhotoFactory(factory.Factory):
     class Meta:
         model = RestaurantPhoto
@@ -265,6 +285,13 @@ async def create_listing_report(db: AsyncSession, **overrides) -> ListingReport:
     db.add(report)
     await db.flush()
     return report
+
+
+async def create_deal(db: AsyncSession, **overrides) -> Deal:
+    deal = DealFactory(**overrides)
+    db.add(deal)
+    await db.flush()
+    return deal
 
 
 async def create_photo(db: AsyncSession, **overrides) -> RestaurantPhoto:

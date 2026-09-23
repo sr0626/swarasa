@@ -21,11 +21,18 @@ async def search(
     dietary: list[str] | None = Query(default=None, alias="dietary[]"),
     type_: list[str] | None = Query(default=None, alias="type[]"),
     q: str | None = Query(default=None, max_length=100),
+    has_deals_today: bool | None = Query(
+        default=None,
+        description="When true, only return brands with at least one "
+        "location that has an active deal matching today (any candidate "
+        "location within the radius/filter set, not just the nearest one "
+        "shown on the card).",
+    ),
     pagination: Pagination = Depends(pagination_params),
     db: AsyncSession = Depends(get_db),
 ) -> SearchResponse:
     results, total = await search_service.search(
-        db, lat, lng, radius, cuisine, dietary, type_, pagination, q
+        db, lat, lng, radius, cuisine, dietary, type_, pagination, q, has_deals_today
     )
     return SearchResponse(
         results=results, page=pagination.page, page_size=pagination.page_size, total=total

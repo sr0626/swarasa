@@ -19,8 +19,9 @@ from datetime import time
 import pytest
 
 from app.dependencies.pagination import Pagination
+from app.models.deal import Deal
 from app.models.restaurant_brand import RestaurantBrand
-from app.services import hours_service, search_service
+from app.services import deal_service, hours_service, search_service
 
 
 class _FakeResult:
@@ -35,13 +36,28 @@ class _FakeResult:
 
 
 class _FakeSession:
-    """Only ever asked for the brand rollup query in these tests —
-    `_fetch_candidates` is monkeypatched out, so no geo SQL is executed."""
+    """Asked for two queries per `search()` call now (added alongside the
+    deals-engine `has_deal_today`/`has_deals_today` work, 2026-09-23):
+    `deal_service.get_active_deals_map`'s bulk deal lookup FIRST, then the
+    brand rollup query — `_fetch_candidates` itself is monkeypatched out
+    in every test below, so no geo SQL ever executes. Distinguishes the
+    two purely by call order (there are only ever these two), not by
+    inspecting the statement — simplest fake that keeps every existing
+    test in this file correct after `search()` gained the extra query.
+    `deals` defaults to empty: none of the pre-existing tests below care
+    about deal data, only the sort/rollup/pagination logic; deal-specific
+    behavior has its own tests further down this file.
+    """
 
-    def __init__(self, brands: list[RestaurantBrand]):
+    def __init__(self, brands: list[RestaurantBrand], deals: list | None = None):
         self._brands = brands
+        self._deals = deals or []
+        self._call_count = 0
 
     async def execute(self, _stmt):
+        self._call_count += 1
+        if self._call_count == 1:
+            return _FakeResult(self._deals)
         return _FakeResult(self._brands)
 
 
@@ -65,6 +81,21 @@ def _row(**overrides) -> "search_service._CandidateRow":
 
 def _brand(id_: int, name: str) -> RestaurantBrand:
     return RestaurantBrand(id=id_, name=name, slug=name.lower(), is_claimed=True, owner_id=None)
+
+
+def _deal(**overrides) -> Deal:
+    defaults = dict(
+        location_id=1,
+        deal_type="deal",
+        title="Test Deal",
+        description=None,
+        applicable_days=None,
+        start_at=None,
+        end_at=None,
+        is_active=True,
+    )
+    defaults.update(overrides)
+    return Deal(**defaults)
 
 
 async def _no_tags(db, brand_ids):
@@ -350,3 +381,129 @@ async def test_unlocated_text_hit_is_returned_with_null_distance(monkeypatch: py
     assert by_name["Katha Kitchen"].nearest_location.distance_mi is None
     assert by_name["Spice Route"].nearest_location.distance_mi == 4.0
     assert [r.name for r in results] == ["Spice Route", "Katha Kitchen"]  # located first
+
+
+# --- deals engine: has_deal_today badge + has_deals_today filter (2026-09-23) --
+
+
+@pytest.mark.asyncio
+async def test_has_deal_today_true_when_nearest_location_has_a_matching_deal(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    async def _fake_fetch(*args, **kwargs):
+        return [_row(location_id=1, brand_id=1)]
+
+    monkeypatch.setattr(search_service, "_fetch_candidates", _fake_fetch)
+    db = _FakeSession(brands=[_brand(1, "Spice Route")], deals=[_deal(location_id=1)])
+
+    results, _ = await search_service.search(
+        db, 32.8, -96.9, 15, None, None, None, Pagination(page=1, page_size=20)
+    )
+    assert results[0].nearest_location.has_deal_today is True
+
+
+@pytest.mark.asyncio
+async def test_has_deal_today_false_when_no_deal_at_all(monkeypatch: pytest.MonkeyPatch):
+    async def _fake_fetch(*args, **kwargs):
+        return [_row(location_id=1, brand_id=1)]
+
+    monkeypatch.setattr(search_service, "_fetch_candidates", _fake_fetch)
+    db = _FakeSession(brands=[_brand(1, "Spice Route")], deals=[])
+
+    results, _ = await search_service.search(
+        db, 32.8, -96.9, 15, None, None, None, Pagination(page=1, page_size=20)
+    )
+    assert results[0].nearest_location.has_deal_today is False
+
+
+@pytest.mark.asyncio
+async def test_has_deal_today_false_when_matching_deal_is_inactive(monkeypatch: pytest.MonkeyPatch):
+    async def _fake_fetch(*args, **kwargs):
+        return [_row(location_id=1, brand_id=1)]
+
+    monkeypatch.setattr(search_service, "_fetch_candidates", _fake_fetch)
+    # get_active_deals_map's own query already filters to is_active=True in
+    # real Postgres -- this canned deal is inactive, simulating what a real
+    # query would simply never return in the first place.
+    db = _FakeSession(brands=[_brand(1, "Spice Route")], deals=[])
+
+    results, _ = await search_service.search(
+        db, 32.8, -96.9, 15, None, None, None, Pagination(page=1, page_size=20)
+    )
+    assert results[0].nearest_location.has_deal_today is False
+
+
+@pytest.mark.asyncio
+async def test_has_deals_today_filter_keeps_brand_via_a_non_nearest_location(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """The filter is brand-level ("ANY candidate location"), but the badge
+    on the card is location-level (nearest only) — this proves they're
+    computed independently: the nearest location (2) has no deal, but a
+    farther location (1) of the SAME brand does, so the brand still
+    passes `has_deals_today=true` while the card's own badge stays False.
+    """
+    rows = [
+        _row(location_id=1, brand_id=1, distance_mi=8.0),
+        _row(location_id=2, brand_id=1, distance_mi=3.0),
+    ]
+
+    async def _fake_fetch(*args, **kwargs):
+        return rows
+
+    monkeypatch.setattr(search_service, "_fetch_candidates", _fake_fetch)
+    db = _FakeSession(brands=[_brand(1, "Spice Route")], deals=[_deal(location_id=1)])
+
+    results, total = await search_service.search(
+        db,
+        32.8,
+        -96.9,
+        15,
+        None,
+        None,
+        None,
+        Pagination(page=1, page_size=20),
+        has_deals_today=True,
+    )
+    assert total == 1
+    assert results[0].nearest_location.location_id == 2
+    assert results[0].nearest_location.has_deal_today is False
+
+
+@pytest.mark.asyncio
+async def test_has_deals_today_filter_excludes_brand_with_no_deal_anywhere(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    async def _fake_fetch(*args, **kwargs):
+        return [_row(location_id=1, brand_id=1)]
+
+    monkeypatch.setattr(search_service, "_fetch_candidates", _fake_fetch)
+    db = _FakeSession(brands=[_brand(1, "Spice Route")], deals=[])
+
+    results, total = await search_service.search(
+        db,
+        32.8,
+        -96.9,
+        15,
+        None,
+        None,
+        None,
+        Pagination(page=1, page_size=20),
+        has_deals_today=True,
+    )
+    assert results == []
+    assert total == 0
+
+
+@pytest.mark.asyncio
+async def test_has_deals_today_omitted_or_false_returns_everything(monkeypatch: pytest.MonkeyPatch):
+    async def _fake_fetch(*args, **kwargs):
+        return [_row(location_id=1, brand_id=1)]
+
+    monkeypatch.setattr(search_service, "_fetch_candidates", _fake_fetch)
+    db = _FakeSession(brands=[_brand(1, "Spice Route")], deals=[])
+
+    results, total = await search_service.search(
+        db, 32.8, -96.9, 15, None, None, None, Pagination(page=1, page_size=20), has_deals_today=False
+    )
+    assert total == 1  # not filtered out despite having no deal at all

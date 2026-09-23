@@ -60,6 +60,7 @@ Query params:
 | q | string, optional, max 100 | Free-text search: case-insensitive substring match on the restaurant (brand) **name**, or a cuisine tag whose name/display name **exactly** equals the text (case-insensitive; never a tag substring, to keep results precise). **Added 2026-09-19** (user request: search should match restaurant names). When `q` is present the radius and coordinates are NOT required -- a name search finds the restaurant wherever it is, including locations that failed geocoding; those come back with `nearest_location.distance_mi: null` and sort after located results. Still combinable with `cuisine[]`/`dietary[]`/`type[]` (AND). |
 | page | int, optional, default 1 | |
 | page_size | int, optional, default 20, max 100 | |
+| has_deals_today | bool, optional | **Added 2026-09-23** (deals engine). When `true`, only brands with **at least one candidate location** (within the current radius/cuisine/dietary/type/q filter set — not just the nearest one shown on the card) that has an active deal matching today are returned. See `docs/DECISIONS.md` "Deals: public boolean signal, gated content". |
 
 Note: `open_now` is deliberately **not** a query param here — deferred
 to Phase 3 (DECISIONS.md "Restaurant hours").
@@ -89,7 +90,8 @@ Response:
         "is_open_now": true,
         "open_time": "11:00:00",
         "close_time": "21:00:00",
-        "is_closed": false
+        "is_closed": false,
+        "has_deal_today": false
       },
       "location_count_nearby": 3,
       "cover_photo_url": null,
@@ -132,6 +134,14 @@ Notes:
   photo, not some brand-wide concept — there isn't one. A brand with
   multiple locations and no cover photo on the nearest one shows
   `null` even if a farther location of the same brand has one.
+- `nearest_location.has_deal_today` (added 2026-09-23) — public,
+  content-free "badge" signal for the **nearest** location shown on this
+  card only (not "any location of this brand" — that broader condition
+  is what `has_deals_today` filters on above). `true`/`false` for every
+  caller, including anonymous; never accompanied by deal title/
+  description here — see `GET /locations/{id}`'s `deals_today` for the
+  content-gated array. `docs/DECISIONS.md` "Deals: public boolean
+  signal, gated content".
 
 ---
 
@@ -492,7 +502,9 @@ Response:
   ],
   "cover_photo_url": null,
   "cover_photo_thumbnail_url": null,
-  "gallery_photos": []
+  "gallery_photos": [],
+  "has_deal_today": true,
+  "deals_today": null
 }
 ```
 Notes:
@@ -538,6 +550,29 @@ location (see `frontend/src/lib/api/locations.ts` `getLocationById`'s
   array of objects, not bare URL strings — the `id` is needed for the
   `PATCH`/`DELETE` photo endpoints below), ordered by `display_order`, sourced
   from `restaurant_photo` rows with `is_cover=false`.
+- **Deals (added 2026-09-23 — deals engine, `docs/DECISIONS.md` "Deals:
+  public boolean signal, gated content"):**
+  - `has_deal_today` — `bool`, always populated for every caller
+    including anonymous. `true` when this location has at least one
+    active deal whose day pattern/date window matches today (in the
+    location's own timezone). This is a "fact," never deal content.
+  - `deals_today` — `null` when the caller may not view deal CONTENT
+    (anonymous, public, or an authenticated caller with no relationship
+    to this location); an array (possibly `[]`, exactly when
+    `has_deal_today` is `false`) when they may — a signed-in
+    `registered_user`, `admin`, or this location's own `owner`/an
+    actively-assigned `manager`. Each entry is
+    `{ id, deal_type, title, description }` — `deal_type` is `"deal"` or
+    `"special"` (`docs/DATA_MODEL.md` "deal"). Distinguish "no deals
+    today" (`[]`) from "content withheld" (`null`) — show the
+    registration/sign-in prompt only for the `null` case when
+    `has_deal_today` is `true`.
+    **JUDGMENT CALL, unresolved (flagged for human confirmation):** this
+    gate is caller-role-based only — it does NOT check
+    `restaurant_location.is_paid`, which appears to conflict with root
+    CLAUDE.md's "is_paid=false locations: ... deals ... are NOT returned
+    by API" line. See `docs/DECISIONS.md`'s dedicated flagged entry for
+    the full reasoning; not silently resolved either way.
 
 ### POST /locations
 
@@ -924,6 +959,101 @@ so retrying an already-applied change never fails.
 
 Audit: `audit_log` row (`action="update"`, `old_val`/`new_val` each
 `{"status": "..."}`).
+
+---
+
+## Deals (`deal`)
+
+Added 2026-09-23 — deals engine, explicitly authorized mid-Phase-1 (see
+`docs/DECISIONS.md` "Deals: Phase 2 scope explicitly authorized
+mid-Phase-1"). These four endpoints are the owner/manager/admin
+MANAGEMENT view — always full content, including inactive deals. The
+PUBLIC, content-gated read of a location's deals lives on `GET
+/locations/{id}` (`has_deal_today`/`deals_today`) and `GET /search`
+(`has_deal_today` badge only), not here — see those sections above.
+
+`deal_type` is `"deal"` or `"special"` (`docs/DATA_MODEL.md` "deal" —
+pre-existing `docs/DECISIONS.md` "deal type ENUM" decision; display
+metadata only, doesn't affect matching/expiry). `applicable_days` is a
+list of int, 0=Monday..6=Sunday (matches `restaurant_hours.day_of_week`
+exactly) — `null`/omitted means every day; an empty list is rejected
+(422). `start_at`/`end_at` are ISO 8601 timestamps (not dates) —
+`null`/omitted `start_at` means active immediately, `null`/omitted
+`end_at` means runs indefinitely until deactivated.
+
+### GET /locations/{id}/deals
+
+Auth: owner (owns parent brand), manager with an active
+`location_manager` row for this location, or admin — same
+`require_location_write_access` dependency as the photos/hours
+sub-resources (backend/app/dependencies/auth.py).
+
+Response:
+```json
+{
+  "results": [
+    {
+      "id": 12,
+      "location_id": 456,
+      "deal_type": "deal",
+      "title": "Buy 1 Get 1 Biryani",
+      "description": "Every Tuesday, dine-in only.",
+      "applicable_days": [1],
+      "start_at": null,
+      "end_at": "2026-12-31T05:59:59Z",
+      "is_active": true,
+      "created_at": "2026-09-23T14:00:00Z",
+      "updated_at": "2026-09-23T14:00:00Z"
+    }
+  ]
+}
+```
+Every deal for this location, active or not (used by the deal editor),
+newest-created first. Not paginated — Phase 2 per-location deal counts
+are small enough that pagination would be premature (same reasoning as
+`GET /locations/{id}/managers`).
+
+### POST /locations/{id}/deals
+
+Auth: same as `GET /locations/{id}/deals` above.
+
+Body: `{ deal_type?, title, description?, applicable_days?, start_at?,
+end_at?, is_active? }` — `deal_type` defaults to `"deal"`, `is_active`
+defaults to `true`. `title` required (1-255 chars). `start_at` must be
+before `end_at` when both are present (422 otherwise).
+
+Response: `201`, full `DealOut` (same shape as one entry in `GET
+/locations/{id}/deals`'s `results` array).
+
+Audit: `audit_log` row (`table_name="deal"`, `action="create"`,
+`new_val` = full field snapshot, `old_val=null`).
+
+### PATCH /locations/{id}/deals/{deal_id}
+
+Auth: same as above. Partial update, `exclude_unset` semantics matching
+`PATCH /locations/{id}` — an omitted field leaves the stored value
+untouched; an explicit `null` on a nullable field (`description`,
+`applicable_days`, `start_at`, `end_at`) clears it; an explicit `null`
+on `deal_type`/`title`/`is_active` (non-nullable) is a `400`. Used to
+toggle `is_active` (owner/manager "pause" control) as well as edit
+content.
+
+Response: `200`, full `DealOut`.
+
+Audit: `audit_log` row (`action="update"`, `old_val`/`new_val` full
+before/after field snapshots).
+
+### DELETE /locations/{id}/deals/{deal_id}
+
+Auth: same as above. Real, hard delete (`docs/DECISIONS.md` "DELETE
+/locations/{id}/deals/{deal_id} is a real, hard delete" — a deal has no
+downstream FK dependents, unlike `restaurant_location`). Use `PATCH
+{"is_active": false}` instead to hide-but-keep a deal.
+
+Response: `204`.
+
+Audit: `audit_log` row (`action="delete"`, `old_val` = full field
+snapshot at time of delete, `new_val=null`).
 
 ---
 

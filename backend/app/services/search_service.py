@@ -34,7 +34,7 @@ from app.models.cuisine_tag import CuisineTag
 from app.models.restaurant_location import RestaurantLocation
 from app.schemas.cuisine import CuisineTagOut
 from app.schemas.search import NearestLocationOut, SearchResultOut
-from app.services import cuisine_service, hours_service, photo_service, s3_service
+from app.services import cuisine_service, deal_service, hours_service, photo_service, s3_service
 
 _METERS_PER_MILE = 1609.34
 
@@ -178,6 +178,7 @@ async def search(
     type_: list[str] | None,
     pagination,
     q: str | None = None,
+    has_deals_today: bool | None = None,
 ) -> tuple[list[SearchResultOut], int]:
     effective_lat = lat if lat is not None else _DEFAULT_LAT
     effective_lng = lng if lng is not None else _DEFAULT_LNG
@@ -188,9 +189,38 @@ async def search(
     if not candidates:
         return [], 0
 
+    # Deals — bulk-fetched once for every candidate location (not just the
+    # eventual "nearest per brand" subset), because the `has_deals_today`
+    # filter below is brand-level: "ANY of this brand's candidate
+    # locations has an active deal matching today," not just its nearest
+    # one (docs/API_CONTRACTS.md "GET /search" "has_deals_today"). Public
+    # content is never exposed here — only the boolean is ever surfaced on
+    # a search card (see NearestLocationOut.has_deal_today); see
+    # app/services/deal_service.py for the content-gated path used by
+    # `GET /locations/{id}` instead.
+    deals_by_location = await deal_service.get_active_deals_map(
+        db, [row.location_id for row in candidates]
+    )
+    has_deal_today_by_location: dict[int, bool] = {
+        row.location_id: any(
+            deal_service.deal_matches_today(d, row.timezone)
+            for d in deals_by_location.get(row.location_id, [])
+        )
+        for row in candidates
+    }
+
     by_brand: dict[int, list[_CandidateRow]] = {}
     for row in candidates:
         by_brand.setdefault(row.brand_id, []).append(row)
+
+    if has_deals_today:
+        by_brand = {
+            brand_id: rows
+            for brand_id, rows in by_brand.items()
+            if any(has_deal_today_by_location[row.location_id] for row in rows)
+        }
+        if not by_brand:
+            return [], 0
 
     brand_ids = list(by_brand.keys())
     brands_result = await db.execute(select(RestaurantBrand).where(RestaurantBrand.id.in_(brand_ids)))
@@ -255,6 +285,7 @@ async def search(
                     open_time=today.open_time,
                     close_time=today.close_time,
                     is_closed=today.is_closed,
+                    has_deal_today=has_deal_today_by_location[nearest.location_id],
                 ),
                 location_count_nearby=card.location_count_nearby,
                 cover_photo_url=s3_service.resolve_media_url(cover.s3_key) if cover else None,

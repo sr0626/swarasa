@@ -1260,6 +1260,165 @@ restaurant_location, menu_item, deal, owner_account, location_manager logged wit
 actor_id, actor_role, before/after values.
 *Rejected: No audit log (cannot investigate disputes or data quality issues)*
 
+**Deals: Phase 2 scope explicitly authorized mid-Phase-1**
+2026-09-23 | Root CLAUDE.md "Current Phase" and both backend/CLAUDE.md and
+architect/CLAUDE.md list the deals engine under "Do NOT build yet /
+Phase 2." The human explicitly asked for it anyway ("Next start working
+on deals related functionality," 2026-09-23), which this task's own
+brief flagged up front as a deliberate override of that scope guardrail,
+not an agent decision to relax it unilaterally. Everything else in this
+Phase 2 feature — `deal` table/migration, CRUD endpoints, `GET /search`
+`has_deals_today` filter + `has_deal_today` badge, content-gated public
+read on `GET /locations/{id}`, the `deal_expiry` Lambda — was built under
+that explicit authorization. Payments/Stripe/billing remain untouched and
+still deferred (see "Payments deferred" — this override is scoped to
+deals only, not the rest of Phase 2).
+*Rejected: Waiting for a formal phase-boundary process change before
+starting (the human's instruction was direct and unambiguous, not a
+request to revisit the phase plan itself).*
+
+**deal schema: `applicable_days` (day-of-week recurrence) as a new axis alongside the pre-existing `deal_type`/`end_at` framing**
+2026-09-23 | This task's own instructions asked for a day-of-week
+recurrence design ("on Tuesdays" / every day) that the May 2026 "deal
+type ENUM (deal | special)" decision above didn't cover at all (that
+entry only distinguishes time-bounded vs. permanent via `end_at`, not
+which days of the week). Added `applicable_days` (JSON list of int,
+0=Monday..6=Sunday — reusing `restaurant_hours.day_of_week`'s exact
+convention rather than inventing a new one) as an independent column:
+`NULL` = every day, a non-empty list = restricted to those days. An
+empty list is rejected at the Pydantic schema layer rather than given
+stored meaning (ambiguous: "no day ever" has no clear product meaning).
+Full field-by-field rationale in `backend/app/models/deal.py`'s module
+docstring and `docs/DATA_MODEL.md` "deal".
+*Rejected: A separate `deal_schedule` table for day-of-week rows (this
+task's own field list already specified a single array-typed column,
+`restaurant_location.specialties` already established the
+"plain-JSON-array-on-the-row" precedent for a similarly small, bounded
+list, and a join table is unnecessary complexity for at most 7 values
+per deal).*
+
+**Deal content visibility: the FACT of a deal is public, the CONTENT is gated — deviates from the pre-existing "registered users only, not public" decision above**
+2026-09-23 | The pre-existing "Deals visible to registered users only
+(not public)" decision (May 2026, Features & Product section) reads as
+an all-or-nothing split: public sees nothing, registered_user sees
+everything. This task's own instructions (2026-09-23) specified a more
+granular design instead, explicitly: an anonymous/public/non-registered
+caller sees ONLY `has_deal_today: bool` (no title/description ever) —
+enough to show a "Deal(s) available today" badge and preserve the
+registration incentive that motivated the original decision — while the
+actual CONTENT (`deals_today: [{id, deal_type, title, description}]`)
+is gated to a signed-in `registered_user`, `admin`, or the location's
+own `owner`/assigned `manager` (the owner/manager carve-out is new too —
+the May 2026 decision predates the owner/manager portal existing at
+all). Implemented exactly as this task specified — see
+`app/services/deal_service.py::caller_may_view_deal_content_for_location`
+— NOT silently re-derived from the older decision. Flagged here for
+human confirmation: this is a genuine, documented deviation from a
+prior DECISIONS.md entry made on explicit newer instruction, not a
+judgment call resolving an open question.
+*Rejected: Keeping the strict all-or-nothing original split (would mean
+no public search badge at all, contradicting this task's explicit
+"has_deal_today" requirement); gating content on is_paid instead of
+caller role (see the separate, still-open flag below — NOT resolved by
+this decision).*
+
+**JUDGMENT CALL, UNRESOLVED — flagged for human confirmation: deal content visibility (caller-role-gated) vs. root CLAUDE.md's `is_paid` paid-content list**
+2026-09-23 | Root CLAUDE.md "Paid content behaviour" states plainly:
+"is_paid=false locations: ... deals ... are NOT returned by API" — and
+backend/CLAUDE.md's guardrails independently repeat "NEVER return
+paid-only content (dish photos beyond the free gallery limit, deals,
+custom landing page, full analytics, promoted placement) without
+checking is_paid." This task's own instructions, by contrast, explicitly
+said not to gate deal CREATION on is_paid and specified a caller-role-
+based content gate (see the decision immediately above) with no mention
+of `is_paid` at all — and this task's brief explicitly acknowledged root
+CLAUDE.md's billing/tier section while asserting deals are "a DIFFERENT,
+simpler concept: NOT tied to Stripe/billing." That framing addresses
+CREATION correctly (nothing in root CLAUDE.md blocks a free location
+from having deal rows) but does not actually reconcile with the
+explicit "deals ... NOT returned by API" content-gating line — which
+this task's brief did not surface or address. As implemented, a
+registered_user (or the owning owner/manager) sees a free-tier
+location's deal content exactly the same as a paid-tier location's —
+`is_paid` is never checked anywhere in `deal_service.py`. This is a
+real, unresolved tension between two CLAUDE.md-level statements, not a
+confidently-resolved design choice — surfaced here rather than picked
+silently. Human confirmation needed: should free-tier deal content be
+hidden the same way extra gallery photos are (`is_paid` gate layered on
+top of the caller-role gate), or was root CLAUDE.md's "deals" mention in
+that paid-content list simply stale/superseded once deals were
+re-scoped as billing-independent? Full context also in
+`docs/DATA_MODEL.md` "deal" section.
+*Not rejected — genuinely open, no default chosen either way beyond
+"ship the caller-role gate now, add is_paid on top later if the human
+confirms it's needed."*
+
+**deal_expiry Lambda: VPC + DB secret access already provisioned; dependency PACKAGING is not — flagged as an Infra/DevOps gap, not solved here**
+2026-09-23 | This task's brief asked explicitly to check whether
+`infra/modules/lambda/main.tf`'s `aws_lambda_function.deal_expiry`
+had DB access before assuming a gap either way. It does: `vpc_config`
+(same subnets/security group as the API Lambda) and `DB_SECRET_NAME` are
+already set — no infra change needed for network reachability or
+credentials. What it does NOT have: any way to ship Python dependencies
+into that Lambda. It's declared as a zip package
+(`runtime = "python3.12"`, `filename =
+data.archive_file.deal_expiry_placeholder.output_path"`), and
+`archive_file` only zips literal inline source text — there is no
+`pip install -r requirements.txt --target` step or container-image
+build the way the API Lambda (full container image) or the resize
+Lambda (`Dockerfile.resize` + `requirements-resize.txt`) both have. The
+real handler (`backend/app/lambda_handlers/deal_expiry.py`) necessarily
+imports `app.db.session`/`app.models`/`app.services.audit_service` to do
+real Postgres work — pulling in sqlalchemy[asyncio] + asyncpg +
+geoalchemy2 — so it cannot stay import-isolated the way
+`resize_photo.py`/`cognito_post_confirmation.py` deliberately are. As
+currently packaged, this handler will fail on import at deploy time.
+Recommendation (not actioned — out of Architect/Backend scope, root
+CLAUDE.md "NEVER modify files outside your designated directory"):
+convert `aws_lambda_function.deal_expiry` to a container image the same
+way the API Lambda already is, reusing `backend/Dockerfile`'s dependency
+layer with a different `CMD`, since it needs the identical dependency
+set — cheaper than a second zip-with-vendored-`site-packages/`
+convention for one function. Flagged to Infra/DevOps, not solved here.
+*Rejected: leaving it silently as-is and letting it fail at first real
+invocation; vendoring dependencies into the zip by hand in this task
+(infra ownership boundary, and no repeatable CI step would maintain
+it).*
+
+**`DELETE /locations/{id}/deals/{deal_id}` is a real, hard delete**
+2026-09-23 | Unlike `restaurant_location` (soft-hide via `status`, real
+delete is a separate, guarded `/permanent` endpoint) or `deal.is_active`
+itself (already a soft toggle, exposed via `PATCH`), a `deal` row has no
+downstream FK dependents — nothing references `deal.id` — so there is no
+correctness reason to keep a deleted row around. `is_active=false` via
+PATCH already covers "hide but keep for history / let the expiry cron
+manage it"; DELETE is for a genuinely unwanted/mistaken row. The
+`audit_log` entry (`action="delete"`, full `old_val` snapshot) is the
+historical record once the row itself is gone, same as every other hard
+delete in this schema relies on `audit_log` rather than a tombstone row.
+*Rejected: Soft-delete-only (no real DELETE) — would leave no way to
+actually remove a mistaken deal short of DB access, and nothing else in
+this table's design needs the row to persist.*
+
+**System-initiated `audit_log` writes: `actor_role="system"`, `actor_id="system:<lambda_name>"` — first of its kind in this codebase**
+2026-09-23 | Every prior `audit_log` write in this app is attributed to
+an authenticated human caller. The `deal_expiry` Lambda's writes
+(flipping `is_active` on an expired deal) have no human in the loop at
+all. `app/models/audit_log.py`'s comment documents `actor_role` as
+"owner" | "manager" | "admin" — informally, since the column is a plain
+`String(16)`, not a DB enum, so extending the set costs no migration.
+Chose `actor_role="system"` (not reusing `"admin"`, which would
+misattribute an automated action to a human who did nothing) and
+`actor_id="system:deal_expiry_lambda"` (a stable, self-describing
+string — no Cognito `sub` exists for a Lambda invocation). Intended as
+the convention for any future system-initiated write in this app
+(`"system:<lambda_or_job_name>"`), not a one-off — flagged for human
+confirmation since nothing established this pattern before now.
+*Rejected: Reusing `actor_role="admin"` (misattributes to a human);
+leaving `actor_id`/`actor_role` blank or a placeholder like `"N/A"`
+(loses the ability to distinguish an automated write from a data-quality
+bug in a future audit-log query).*
+
 ---
 
 ## Authentication & Permissions
