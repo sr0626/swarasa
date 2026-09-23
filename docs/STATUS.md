@@ -28,7 +28,16 @@ fully satisfied and asked to stop iterating for now, with an explicit intent
 to revisit later, not a final sign-off.
 
 ## Open PRs
-- None open as of 2026-09-23 (other than this batched docs PR itself).
+- None open as of 2026-09-23 (other than the batched docs PRs themselves).
+
+## Landed 2026-09-23, wave 7 (#197-#198)
+- CCPA export + approved erasure now cover `user_profile` (#198): export
+  gains `user_profile` (null when absent) and `data_scope.user_profile`
+  (0 or 1); approved erasure hard-deletes the row, which also releases the
+  #195 name lock; dev `delete_user_data` script mirrors it. No migration.
+- DECISIONS.md wave-6 entries recorded (#197): activity tracking, name
+  set-once, soft-delete gaps, S3 resize correction.
+- Wave-6 docs batch merged (#196).
 
 ## Landed 2026-09-23, wave 6 (#192-#195)
 - Admin Owners report: `GET /admin/owners` + `/admin/owners` page, linked
