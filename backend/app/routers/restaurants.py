@@ -28,6 +28,7 @@ from app.schemas.restaurant import (
     RestaurantCreate,
     RestaurantListResponse,
     RestaurantOut,
+    RestaurantSortValue,
     RestaurantUpdate,
 )
 from app.services import follow_service, location_service, restaurant_service
@@ -80,6 +81,13 @@ async def list_restaurants(
         default=None,
         description="Admin only. Matches restaurant_brand.is_claimed exactly.",
     ),
+    sort: RestaurantSortValue | None = Query(
+        default=None,
+        description="Optional. Omitted keeps the default id-ascending order. "
+        "`followers` sorts by follower_count descending (ties broken by id "
+        "ascending) — available to the same owner/admin caller as the rest "
+        "of this endpoint, not admin-only.",
+    ),
     pagination: Pagination = Depends(pagination_params),
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(require_owner_or_admin),
@@ -98,6 +106,10 @@ async def list_restaurants(
     independent filters AND together; there is no OR-within-a-filter case
     here since every new param here is single-valued, unlike `/search`'s
     `cuisine[]`/`dietary[]`/`type[]`).
+
+    `sort` (added for the admin listings "Most followed" sort control) is
+    NOT admin-only, unlike the filters above — see
+    `restaurant_service.list_restaurants`'s docstring.
     """
     return await restaurant_service.list_restaurants(
         db,
@@ -110,6 +122,7 @@ async def list_restaurants(
         is_paid=is_paid,
         city=city,
         is_claimed=is_claimed,
+        sort=sort,
     )
 
 

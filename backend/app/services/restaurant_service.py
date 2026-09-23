@@ -16,6 +16,7 @@ from app.models.claim_request import ClaimRequest
 from app.models.owner_account import OwnerAccount
 from app.models.restaurant_brand import RestaurantBrand
 from app.models.restaurant_location import RestaurantLocation
+from app.models.user_follow import UserFollow
 from app.schemas.cuisine import CuisineTagOut
 from app.schemas.restaurant import (
     RestaurantCreate,
@@ -152,6 +153,7 @@ async def list_restaurants(
     is_paid: bool | None = None,
     city: str | None = None,
     is_claimed: bool | None = None,
+    sort: str | None = None,
 ) -> RestaurantListResponse:
     """`GET /restaurants` — docs/API_CONTRACTS.md "Owner-scoped restaurant
     list". Auth is owner or admin (`require_owner_or_admin`).
@@ -171,6 +173,15 @@ async def list_restaurants(
     param meant for the admin moderation UI. All provided filters combine
     with AND, matching `search_service`'s "independent facets AND
     together" convention (docs/API_CONTRACTS.md "GET /search").
+
+    `sort` (added for the admin listings "Most followed" control,
+    docs/API_CONTRACTS.md "GET /restaurants"): omitted keeps the existing
+    default order (`restaurant_brand.id` ascending, unchanged).
+    `sort="followers"` orders by follower count descending, ties broken by
+    `id` ascending. No extra role gating beyond this endpoint's existing
+    `require_owner_or_admin` — an owner sorting their own (owner-filtered)
+    list by followers is no more sensitive than the `follower_count` field
+    itself, which they already see for their own brands.
     """
     if current_user.role == "admin":
         effective_owner_id = owner_id_param
@@ -231,11 +242,29 @@ async def list_restaurants(
         await db.execute(select(func.count()).select_from(RestaurantBrand).where(*filters))
     ).scalar_one()
 
+    # Default order stays `RestaurantBrand.id` ascending (unchanged).
+    # `sort="followers"` adds a correlated per-brand follower-count
+    # subquery, descending, with `id` as the stable tiebreak — same
+    # `count(user_follow) WHERE brand_id = ...` query
+    # `follow_service.count_followers_for_brand` runs per-brand, just
+    # inlined as a scalar subquery so it can drive ORDER BY directly
+    # instead of N+1 Python-side sorting after the fact.
+    order_by_clauses = [RestaurantBrand.id]
+    if sort == "followers":
+        follower_count_expr = (
+            select(func.count())
+            .select_from(UserFollow)
+            .where(UserFollow.brand_id == RestaurantBrand.id)
+            .correlate(RestaurantBrand)
+            .scalar_subquery()
+        )
+        order_by_clauses = [follower_count_expr.desc(), RestaurantBrand.id]
+
     rows = (
         await db.execute(
             select(RestaurantBrand)
             .where(*filters)
-            .order_by(RestaurantBrand.id)
+            .order_by(*order_by_clauses)
             .offset(pagination.offset)
             .limit(pagination.page_size)
         )

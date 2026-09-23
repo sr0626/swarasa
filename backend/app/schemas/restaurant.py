@@ -4,11 +4,20 @@ docs/API_CONTRACTS.md "Restaurants (restaurant_brand)".
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
 from app.schemas.cuisine import CuisineTagOut
 from app.schemas.location import LocationStatusValue
+
+# `GET /restaurants` sort option (added for the admin "Most followed"
+# sort control, docs/API_CONTRACTS.md "GET /restaurants"). Omitted/`None`
+# keeps the existing, unchanged default (`restaurant_brand.id` ascending).
+# `followers` orders by `follower_count` descending, ties broken by `id`
+# ascending for a stable order across pages — see
+# `restaurant_service.list_restaurants`.
+RestaurantSortValue = Literal["followers"]
 
 
 class RestaurantOut(BaseModel):
