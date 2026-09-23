@@ -163,7 +163,11 @@ export default async function AdminOverviewPage({ searchParams }: AdminOverviewP
                 <p className="mt-1 text-sm text-brand-closed">Unavailable right now</p>
               </div>
             ) : (
-              <StatTile label="Registered users" value={registeredUserCount ?? 0} />
+              <StatTile
+                label="Registered users"
+                value={registeredUserCount ?? 0}
+                href="/admin/registered-users"
+              />
             )}
           </div>
 

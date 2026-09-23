@@ -2134,6 +2134,68 @@ Errors:
 | 403 | `forbidden` | caller is not admin |
 | 502 | `upstream_error` | Cognito `ListUsersInGroup` call failed |
 
+### GET /admin/registered-users
+
+Auth: admin only. Diner (`registered_user`) directory for the admin
+console's "Registered users" report (`/admin/registered-users`, linked from
+the Platform Overview page's "Registered users" tile): email, Cognito
+status, signup date, and a best-effort last-visited timestamp. See
+docs/DECISIONS.md "Registered-user last-seen tracking" for the full design
+writeup (`user_profile.last_seen_at`, throttled write, why owner/manager
+click-history tracking is explicitly NOT part of this).
+
+Combines two sources, joined by `cognito_sub`:
+- Cognito (`cognito-idp:ListUsersInGroup` on the `registered_user` group —
+  the SAME grant `GET /admin/registered-user-count` already uses, no new
+  IAM) for `email`, `status`, `signup_at`.
+- The local `user_profile.last_seen_at` column for `last_seen_at`. `null`
+  when the user has never had a tracked authenticated request (either
+  never returned, or returned only before this tracking shipped) — the
+  frontend renders this as "Never", not a fabricated date.
+
+Query params:
+| Param | Type | Notes |
+|---|---|---|
+| page | int, optional, default 1 | |
+| page_size | int, optional, default 20, max 100 | |
+
+**JUDGMENT CALL:** `ListUsersInGroup` paginates via an opaque `NextToken`
+cursor, not offsets, so this endpoint fetches every group member from
+Cognito (same bounded, admin-only, low-traffic assumption
+`GET /admin/registered-user-count` already relies on) and paginates the
+combined list in application code — see
+`app/services/cognito_service.py::list_registered_users` and
+`app/services/admin_registered_users_service.py` for the full reasoning.
+Results are ordered newest-signup-first (`signup_at` descending), a stable
+sort key so pages don't reshuffle between requests the way sorting by a
+live `last_seen_at` would.
+
+Response: `200`
+```json
+{
+  "results": [
+    {
+      "cognito_sub": "3f2a1c9e-...",
+      "email": "diner@example.com",
+      "status": "CONFIRMED",
+      "signup_at": "2026-09-10T14:22:03Z",
+      "last_seen_at": "2026-09-23T08:05:11Z"
+    }
+  ],
+  "page": 1,
+  "page_size": 20,
+  "total": 143
+}
+```
+
+Live call, no caching (same posture as `GET /admin/registered-user-count`).
+
+Errors:
+| Status | Code | When |
+|---|---|---|
+| 403 | `forbidden` | caller is not admin |
+| 502 | `upstream_error` | Cognito `ListUsersInGroup` call failed |
+
 ### GET /admin/overview
 
 Auth: admin only. Platform-wide restaurant/tier/owner aggregate behind the

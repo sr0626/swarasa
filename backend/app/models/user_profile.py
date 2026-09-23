@@ -32,6 +32,22 @@ across those tables' integer PKs) — `cognito_sub` is a string, so it does
 not fit that column even if this table were added to the list. No
 audit_log entry is written for `user_profile` writes; see
 `auth_service.update_me`'s docstring for the same note.
+
+`last_seen_at` (added for the admin "Registered users" report,
+docs/PROJECT_PLAN.csv, docs/DECISIONS.md "Registered-user last-seen
+tracking") is a second, independent reason a row now gets created here:
+unlike `full_name` (only written on an explicit `PATCH /auth/me`),
+`last_seen_at` is touched by `app.dependencies.auth._resolve_current_user`
+on ordinary authenticated activity for `registered_user`/`manager`
+callers — see that module and `auth_service.touch_last_seen` for the
+throttled write and why `owner`/`admin` are deliberately excluded (owner
+already has its own record in `owner_account`; giving it a
+`last_seen_at`-only shadow row here would violate this table's
+one-record-per-role-per-place invariant documented above). Nullable:
+`NULL` reads as "never tracked yet" (e.g. a row that only exists because a
+display name was set before this column existed, or before the caller's
+first activity after this change shipped) — not the same as "signed up
+but never returned", which the admin report renders as "Never".
 """
 from __future__ import annotations
 
@@ -49,6 +65,9 @@ class UserProfile(Base):
     # Cognito `sub` directly as the primary key — see module docstring.
     cognito_sub: Mapped[str] = mapped_column(String(36), primary_key=True)
     full_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # See module docstring "last_seen_at" note above.
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

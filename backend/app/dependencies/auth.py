@@ -28,9 +28,16 @@ Permission checks below never trust JWT claims alone for manager location
 access (root/backend CLAUDE.md, "NEVER trust JWT claims for manager
 location access") — every manager check re-queries `location_manager` with
 `is_active=true`.
+
+`_resolve_current_user` also fires a best-effort `last_seen_at` touch
+(`auth_service.touch_last_seen`) for `registered_user`/`manager` callers —
+see that function's docstring for the throttle and why owner/admin are
+excluded, and `_touch_last_seen_best_effort` below for why a failure here
+can never surface as, or block, the caller's real response.
 """
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass, field
 
@@ -47,7 +54,40 @@ from app.models.restaurant_brand import RestaurantBrand
 from app.models.restaurant_location import RestaurantLocation
 from app.services import auth_service
 
+logger = logging.getLogger("app.dependencies.auth")
+
 _ROLE_GROUPS = {"owner", "manager", "admin", "registered_user"}
+
+# Roles `_resolve_current_user` touches `last_seen_at` for — mirrors
+# `auth_service._PROFILE_TABLE_ROLES` (the same two roles that already get
+# a `user_profile` row for `full_name`). Kept as its own local constant
+# rather than importing that private name across modules (same
+# cross-module convention `cognito_service.py`'s docstring documents for
+# its own env-var helpers): `owner` already has `owner_account` as its one
+# "last active" record if that's ever wanted, and `admin` has no local
+# profile record at all — adding a `last_seen_at`-only shadow row for
+# either would contradict `user_profile`'s documented one-record-per-role
+# invariant (see that model's docstring). Scoped this way per
+# docs/DECISIONS.md "Registered-user last-seen tracking".
+_LAST_SEEN_TRACKED_ROLES = {"registered_user", "manager"}
+
+
+async def _touch_last_seen_best_effort(db: AsyncSession, cognito_sub: str) -> None:
+    """Wraps `auth_service.touch_last_seen` so it can never fail — or even
+    slow down error-handling — the request it rides in on. This runs
+    inside `get_current_user`/`get_current_user_optional`, ahead of every
+    route body; an exception escaping here (or a failed rollback) must not
+    turn into a 500 for something as low-stakes as an admin "last seen"
+    display value.
+    """
+    try:
+        await auth_service.touch_last_seen(db, cognito_sub)
+    except Exception:  # noqa: BLE001 - deliberately broad, see docstring
+        logger.warning("last_seen touch failed for %s", cognito_sub, exc_info=True)
+        try:
+            await db.rollback()
+        except Exception:  # noqa: BLE001 - never let cleanup itself raise
+            pass
 
 
 def _region() -> str:
@@ -131,12 +171,22 @@ def _decode_token(token: str) -> dict:
     return claims
 
 
-async def _resolve_current_user(authorization: str | None) -> CurrentUser | None:
+async def _resolve_current_user(
+    authorization: str | None, db: AsyncSession | None = None
+) -> CurrentUser | None:
     """Shared verification logic behind both `get_current_user` (below) and
     `get_current_user_optional`. Returns `None` when no bearer token was
     presented at all; raises `AppError(401, ...)` when one WAS presented
     but is malformed/invalid/expired — presenting bad credentials should
     always surface a clear 401, never silently fall back to anonymous.
+
+    `db` is optional (not just for the two FastAPI-wired callers below):
+    `tests/unit/test_auth_jwt.py` calls `get_current_user` directly,
+    outside FastAPI's dependency resolution, where a `Depends(get_db)`
+    default argument is a plain marker object, not a real session. When
+    `db` isn't a usable session, `_touch_last_seen_best_effort`'s own
+    broad try/except absorbs that instead of leaking an AttributeError —
+    see that function's docstring.
     """
     if not authorization or not authorization.strip().lower().startswith("bearer "):
         return None
@@ -155,23 +205,32 @@ async def _resolve_current_user(authorization: str | None) -> CurrentUser | None
     if isinstance(groups, str):
         groups = [groups]
 
-    return CurrentUser(
+    user = CurrentUser(
         cognito_sub=sub,
         email=claims.get("email"),
         role=_extract_role(list(groups)),
         groups=list(groups),
     )
 
+    if db is not None and user.role in _LAST_SEEN_TRACKED_ROLES:
+        await _touch_last_seen_best_effort(db, user.cognito_sub)
+
+    return user
+
 
 async def get_current_user(
     authorization: str | None = Header(default=None),
+    db: AsyncSession = Depends(get_db),
 ) -> CurrentUser:
     """Verify the bearer JWT and return the caller's identity/role.
 
     Public routes (backend/CLAUDE.md "Public Routes") do not depend on
-    this at all. Every other route does.
+    this at all. Every other route does. `db` was added alongside the
+    `last_seen_at` touch (see module docstring) — every existing caller
+    keeps working unchanged, since FastAPI resolves and caches `get_db`
+    once per request regardless of how many dependencies ask for it.
     """
-    user = await _resolve_current_user(authorization)
+    user = await _resolve_current_user(authorization, db)
     if user is None:
         raise AppError(401, "Missing bearer token", "unauthorized")
     return user
@@ -179,6 +238,7 @@ async def get_current_user(
 
 async def get_current_user_optional(
     authorization: str | None = Header(default=None),
+    db: AsyncSession = Depends(get_db),
 ) -> CurrentUser | None:
     """Same verification as `get_current_user`, but returns `None` instead
     of raising when no bearer token is present — for a route that is
@@ -199,7 +259,7 @@ async def get_current_user_optional(
     dependency callables so each can still be overridden independently in
     tests (`app.dependency_overrides` keys on the exact callable).
     """
-    return await _resolve_current_user(authorization)
+    return await _resolve_current_user(authorization, db)
 
 
 async def require_owner(

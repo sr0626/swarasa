@@ -1321,6 +1321,91 @@ group (would work but is a broader read than the task needs and no
 cheaper — `ListUsersInGroup` is the purpose-built action for "how many
 members does this group have").*
 
+**Registered-user last-seen tracking: throttled write to `user_profile.last_seen_at`, scoped to `registered_user`/`manager` only, click-history explicitly deferred**
+2026-09-23 | Judgment call (root CLAUDE.md "Decision-Making Autonomy"), made
+while building the admin "Registered users" report (email, status, signup
+date, last-visited — docs/PROJECT_PLAN.csv, docs/API_CONTRACTS.md "GET
+/admin/registered-users"). There was previously NOTHING recording when any
+user was last active on the platform.
+
+**Where the timestamp lives:** a new nullable `last_seen_at` column on the
+existing `user_profile` table (PR #162), not a new table. `user_profile`
+already exists for exactly this "generic per-role record with no richer
+business table of its own" purpose (see its own model docstring) and is
+already keyed by `cognito_sub` — the natural join key back to Cognito's
+`registered_user` group membership this report also needs.
+
+**Who gets tracked — `registered_user` and `manager` only, NOT `owner` or
+`admin`:** `user_profile` currently only ever gets a row for those same two
+roles (`auth_service._PROFILE_TABLE_ROLES`, unchanged by this work) — an
+`owner` writes its own name/activity story to `owner_account` instead, and
+giving `owner` a `last_seen_at`-only row in `user_profile` would create a
+second, parallel "where does this owner's info live" record for a table
+whose docstring explicitly promises "exactly one place an owner's name
+lives, not two." `admin` has no local profile record at all (still 404s on
+`PATCH /auth/me`) and this task's literal scope is "registered users"
+specifically — not a platform-wide "who was last active" feature. Extending
+last-seen to owners (their own `owner_account.last_seen_at` column) is a
+reasonable future ask but is a *different* column on a *different* table,
+deliberately left out of this change rather than guessed at.
+
+**Where the write is hooked in:** `app/dependencies/auth.py::_resolve_current_user`
+— shared by both `get_current_user` and `get_current_user_optional`, so it
+runs on every real authenticated request (JWT verified, not the
+`app.dependency_overrides` fake-`CurrentUser` path the integration test
+suite uses — see that module's own docstring). This is the dependency
+`docs/PROJECT_PLAN.csv`'s task description itself pointed at, and it was
+already the single chokepoint every authenticated request passes through.
+
+**Throttle mechanism — read-then-conditionally-write, not an atomic SQL
+upsert:** `auth_service.touch_last_seen` does a plain `SELECT` by
+`cognito_sub`, then only writes (`INSERT` if no row yet, `UPDATE` if the
+existing `last_seen_at` is more than 5 minutes old) — never once per
+request unconditionally. Two requests from the same user inside that
+5-minute window cause exactly one DB write (verified in
+`tests/integration/test_last_seen_tracking.py`), not two.
+
+Considered and rejected a single atomic `INSERT ... ON CONFLICT DO UPDATE
+... WHERE <stale>` (Postgres `dialects.postgresql.insert`) instead — more
+"atomic" against a genuine race, but it only compiles against the
+Postgres dialect, and `tests/integration/conftest.py` deliberately runs
+this project's integration suite against SQLite (documented reasoning:
+every Phase 1 flow except PostGIS geo-search is faithfully testable on a
+real relational DB without needing actual Postgres). A dialect-specific
+upsert here would need its own SQLite-only test shim (same kind this
+project already carries for `Geography`/`JSONB`/partial indexes) for a
+field that doesn't need atomic correctness in the first place —
+`last_seen_at` is a best-effort display value for an admin report, not
+something anything else reads for a correctness decision, so an
+occasional lost update under true concurrent requests from the same user
+in the same instant is an acceptable, harmless tradeoff for staying
+dialect-portable and consistent with how the rest of this codebase's
+read-then-write flows are written (e.g. `get_or_create_owner_account`).
+
+**Never blocks or fails the request it rides on:** the touch is wrapped in
+`app/dependencies/auth.py::_touch_last_seen_best_effort` — a broad
+try/except (including around the rollback itself) that logs and swallows
+any failure. A "last seen" display field breaking real traffic would be a
+strictly worse outcome than an occasionally-stale one.
+
+**Explicitly OUT OF SCOPE — click-history / clickstream tracking:** the
+user separately asked (same message that requested this report) whether
+it's "possible to keep their click history on tiles or search criteria."
+That is NOT built here. It is a materially bigger, different feature — a
+real event-tracking system, not a single throttled timestamp — and it
+opens real privacy/compliance surface this project already treats
+seriously elsewhere (CCPA export/deletion, `docs/DECISIONS.md` "CCPA data
+export/deletion"): new tracked personal data means a new export/delete
+surface, a retention-period decision, and a re-review of what "browsing
+history" implies platform-wide. Flagged as a follow-up needing its own
+scoping/design conversation, not guessed at inside this task. See the PR
+description for the same note.
+
+*Rejected: a single atomic Postgres upsert (see above — dialect-portability
+tradeoff); tracking `owner`/`admin` too (see above — scope + table-identity
+reasons); building click-history tracking now (see above — separate,
+bigger, privacy-sensitive ask).*
+
 **Frontend used the wrong Cognito token type for the session cookie — blocked every real owner from ever getting provisioned**
 2026-09-18 | Real, severe production bug, found live while testing the
 first real bulk-import against the deployed dev environment: `owner1` and
