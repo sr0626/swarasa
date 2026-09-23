@@ -18,6 +18,7 @@ export async function searchRestaurants(
     "dietary[]": params.dietary,
     "type[]": params.type,
     q: params.q,
+    has_deals_today: params.has_deals_today,
     page: params.page,
     page_size: params.page_size,
   });

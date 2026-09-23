@@ -14,6 +14,12 @@ export interface SearchParams {
   type?: string[];
   /** Free-text: restaurant name or cuisine tag (backend `q`). */
   q?: string;
+  /** Matches a brand if ANY of its locations has an active deal today —
+   * docs/API_CONTRACTS.md "GET /search" `has_deals_today`. Omitted (not
+   * `false`) means no filtering by deals at all; every result still
+   * carries its own `nearest_location.has_deal_today` badge signal
+   * regardless of whether this filter was used. */
+  has_deals_today?: boolean;
   page?: number;
   page_size?: number;
 }
@@ -39,6 +45,16 @@ export interface SearchNearestLocation {
   open_time?: string | null;
   close_time?: string | null;
   is_closed?: boolean | null;
+  /**
+   * Public "does THIS nearest location have an active deal today" badge
+   * signal — content-free by design (docs/DECISIONS.md "Deals: public
+   * boolean signal, gated content"; backend/app/schemas/search.py
+   * `NearestLocationOut.has_deal_today`). Every caller sees this, including
+   * anonymous. There is no matching deal-content field on a search result
+   * (only `GET /locations/{id}` carries content, content-gated) — see
+   * `@/components/ui/DealBadge.tsx`.
+   */
+  has_deal_today: boolean;
 }
 
 /** One brand-level card in the search results (docs/DECISIONS.md "Brand-level search results"). */

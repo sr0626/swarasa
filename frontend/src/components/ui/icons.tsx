@@ -345,3 +345,15 @@ export function BarChartIcon(props: IconProps) {
     </svg>
   );
 }
+
+/** Added for deals/specials — the location editor's deals section, the
+ * public "Deal(s) available today" badge, and the detail page's deals
+ * cards (docs/API_CONTRACTS.md "Deals (`deal`)"). A price/sale tag. */
+export function TagIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} {...props}>
+      <path d="M11.5 3.5H6A2.5 2.5 0 0 0 3.5 6v5.5a2 2 0 0 0 .59 1.41l8 8a2 2 0 0 0 2.82 0l5.5-5.5a2 2 0 0 0 0-2.82l-8-8a2 2 0 0 0-1.41-.59z" />
+      <circle cx="8" cy="8" r="1.25" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}

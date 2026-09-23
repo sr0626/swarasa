@@ -11,6 +11,7 @@
 import Link from "next/link";
 import type { SearchResultItem } from "@/types/search";
 import { formatPhone } from "@/lib/formatPhone";
+import DealBadge from "@/components/ui/DealBadge";
 import DefaultRestaurantImage from "@/components/ui/DefaultRestaurantImage";
 import FollowButton from "@/components/ui/FollowButton";
 import {
@@ -149,15 +150,14 @@ export default function RestaurantCard({
           </a>
         )}
 
-        <div className="mt-auto flex items-center justify-between pt-2">
-          {/* TODO(Phase 2): a "Deals Today" label goes here once deals
-              data exists — there is no deals data in Phase 1. */}
+        <div className="mt-auto flex flex-wrap items-center gap-2 pt-2">
           <OpenStatusBadge
             isOpenNow={nearest_location.is_open_now}
             isClosedToday={nearest_location.is_closed}
             openTime={nearest_location.open_time}
             closeTime={nearest_location.close_time}
           />
+          {nearest_location.has_deal_today && <DealBadge />}
           {!item.is_claimed && (
             <span className="ml-auto text-xs font-medium text-brand-ink-subtle">
               Unclaimed
