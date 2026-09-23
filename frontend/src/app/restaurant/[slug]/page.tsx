@@ -251,7 +251,12 @@ export default async function RestaurantPage({ params }: RestaurantPageProps) {
                   happened server-side in `loadRestaurantPageData` (which
                   location.deals_today is) — see RestaurantDeals.tsx. */}
               {location && (
-                <RestaurantDeals hasDealToday={location.has_deal_today} dealsToday={location.deals_today} />
+                <RestaurantDeals
+                  hasDealToday={location.has_deal_today}
+                  dealsToday={location.deals_today}
+                  // Signed-out visitors only (no session) get the sign-in link.
+                  signInReturnPath={session ? undefined : `/restaurant/${restaurant.slug}`}
+                />
               )}
 
               {restaurant.description && (
