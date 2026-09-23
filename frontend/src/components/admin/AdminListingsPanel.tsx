@@ -405,6 +405,14 @@ function BrandRow({
           <p className="mt-1 text-sm text-brand-ink-subtle">
             /{brand.slug} &middot; owner {brand.owner_id ?? "none"} &middot; {brand.location_count}{" "}
             location{brand.location_count === 1 ? "" : "s"}
+            {/* Admin-only field (see restaurant_service._caller_may_view_follower_count,
+                PR #174) — null only if the backend response somehow predates that PR. */}
+            {brand.follower_count !== null && brand.follower_count !== undefined && (
+              <>
+                {" "}
+                &middot; {brand.follower_count} follower{brand.follower_count === 1 ? "" : "s"}
+              </>
+            )}
           </p>
           {brand.cuisine_tags.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1.5">
