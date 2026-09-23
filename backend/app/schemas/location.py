@@ -9,6 +9,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.schemas.deal import DealPublicOut
+
 ABOUT_MAX_LENGTH = 1000
 SPECIALTIES_MAX_ITEMS = 8
 SPECIALTY_MAX_LENGTH = 40
@@ -129,6 +131,20 @@ class LocationOut(BaseModel):
     # field's comment) — None exactly when cover_photo_url is None.
     cover_photo_thumbnail_url: str | None
     gallery_photos: list[GalleryPhotoOut]
+    # Public "does this location have an active deal today" signal — always
+    # populated for every caller, including anonymous (docs/DECISIONS.md
+    # "Deals: public boolean signal, gated content"). See `deals_today`
+    # below for the content-gated array; a caller who can't see content
+    # still sees this boolean, so the search/detail page can show a
+    # "Deal(s) available today" badge without revealing what the deal is.
+    has_deal_today: bool
+    # Content-gated: `None` when the caller may not view deal content
+    # (anonymous, public, a non-owning/non-assigned caller) regardless of
+    # whether deals exist; an array (possibly empty, when has_deal_today is
+    # False) when they may — signed-in registered_user, admin, or this
+    # location's own owner/assigned manager. See
+    # app/services/deal_service.caller_may_view_deal_content_for_location.
+    deals_today: list[DealPublicOut] | None
 
 
 class LocationCreate(BaseModel):

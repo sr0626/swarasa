@@ -26,7 +26,7 @@ from app.schemas.location import (
 )
 from app.schemas.photo import PhotoCreate, PhotoOut, PhotoUpdate, UploadUrlResponse
 from app.schemas.restaurant import LocationListResponse, LocationSummaryOut
-from app.services import audit_service, auth_service, hours_service, photo_service, s3_service
+from app.services import audit_service, auth_service, deal_service, hours_service, photo_service, s3_service
 
 
 def _to_decimal(value: float | None) -> Decimal | None:
@@ -46,7 +46,9 @@ async def _sync_geom(db: AsyncSession, location_id: int, lat: float, lng: float)
     )
 
 
-async def _location_to_out(db: AsyncSession, location: RestaurantLocation) -> LocationOut:
+async def _location_to_out(
+    db: AsyncSession, location: RestaurantLocation, current_user=None
+) -> LocationOut:
     # brand_name: the FK is ON DELETE RESTRICT while any location exists
     # (docs/API_CONTRACTS.md "Restaurants CRUD"), so the parent brand row
     # is always present here -- no None-guard needed.
@@ -59,6 +61,18 @@ async def _location_to_out(db: AsyncSession, location: RestaurantLocation) -> Lo
 
     cover = await photo_service.get_cover_photo(db, location.id)
     gallery = await photo_service.get_gallery_photos(db, location.id, location.is_paid)
+
+    # Deals — public "fact" (has_deal_today) vs content-gated "detail"
+    # (deals_today). See app/services/deal_service.py module docstring and
+    # `caller_may_view_deal_content_for_location`'s own docstring for the
+    # full reasoning, including the flagged deviation from
+    # docs/DECISIONS.md's older "registered users only, not public" entry.
+    todays_deals = await deal_service.deals_today_for_location(db, location.id, location.timezone)
+    has_deal_today = len(todays_deals) > 0
+    may_view_deal_content = await deal_service.caller_may_view_deal_content_for_location(
+        db, location, current_user
+    )
+    deals_today = deal_service.deals_to_public_out(todays_deals) if may_view_deal_content else None
 
     return LocationOut(
         id=location.id,
@@ -105,6 +119,8 @@ async def _location_to_out(db: AsyncSession, location: RestaurantLocation) -> Lo
             )
             for photo in gallery
         ],
+        has_deal_today=has_deal_today,
+        deals_today=deals_today,
     )
 
 
@@ -166,7 +182,7 @@ async def get_location(
         db, location, current_user
     ):
         raise AppError(404, "Location not found", "not_found")
-    return await _location_to_out(db, location)
+    return await _location_to_out(db, location, current_user)
 
 
 async def get_location_or_404(db: AsyncSession, location_id: int) -> RestaurantLocation:
@@ -230,7 +246,7 @@ async def create_location(db: AsyncSession, body: LocationCreate, current_user) 
         },
     )
     await db.commit()
-    return await get_location(db, location.id)
+    return await get_location(db, location.id, current_user)
 
 
 _UPDATABLE_FIELDS = (

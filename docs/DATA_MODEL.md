@@ -571,6 +571,99 @@ writes to `restaurant_location` at all, only to this table.
 
 ---
 
+## deal
+
+*(Added by migration `0009_deal` — Phase 2 "deals engine", explicitly
+authorized mid-Phase-1 by the human 2026-09-23; see
+`docs/DECISIONS.md` "Deals: Phase 2 scope explicitly authorized
+mid-Phase-1" and "deal type ENUM (deal | special)" (pre-existing, May
+2026). Backs `docs/API_CONTRACTS.md` "Deals (deal)".)*
+
+| Column | Type | Notes |
+|---|---|---|
+| id | bigint PK | |
+| location_id | bigint FK -> restaurant_location, not null | `ON DELETE CASCADE` — see judgment-call note below |
+| deal_type | varchar(16) default 'deal', not null | `deal` \| `special` — pre-existing DECISIONS.md decision; display/framing only, no query branches on it |
+| title | varchar(255), not null | |
+| description | text, nullable | |
+| applicable_days | JSON, nullable | list of int, **0=Monday..6=Sunday** (matches `restaurant_hours.day_of_week` exactly); **NULL = every day**; empty list rejected at the schema layer (ambiguous, never stored) |
+| start_at | timestamptz, nullable | NULL = active immediately |
+| end_at | timestamptz, nullable | NULL = runs indefinitely until deactivated; the expiry cron's `end_at <= NOW()` predicate only ever matches a non-null value |
+| is_active | boolean default true, not null | owner/manager toggle; also the field the expiry cron flips to `false` |
+| created_at | timestamptz, not null | |
+| updated_at | timestamptz, not null | |
+
+Indexes: `ix_deal_location_id` on `location_id`; `ix_deal_active_end_at`
+on (`is_active`, `end_at`) — backs the expiry cron's exact WHERE
+predicate (see below).
+
+No `created_by`/`updated_by` columns — `audit_log` (required on every
+deal write, root CLAUDE.md "ALWAYS — Quality", which already
+anticipated `deal` in its table list before this table existed) is the
+system of record for who/when, matching the established pattern for
+every other write-heavy Architect-owned table in this schema.
+
+**"Is this deal live today" logic** (`app/services/deal_service.py::
+deal_matches_today`, used by both `GET /search` and `GET
+/locations/{id}`): `is_active` AND (`start_at` is null or already
+passed) AND (`end_at` is null or not yet passed) AND (`applicable_days`
+is null or today's weekday, computed in the location's own timezone
+via `hours_service.today_weekday`, is in the list). Re-checks
+`start_at`/`end_at` against the current instant on every read, not just
+the stored `is_active` flag — the expiry cron only runs every 5 minutes
+(see "deal_expiry Lambda" below), so a just-expired deal must stop
+matching "today" immediately, not up to 5 minutes late.
+
+**deal_expiry Lambda** (`backend/app/lambda_handlers/deal_expiry.py`,
+`infra/modules/lambda/main.tf`'s `aws_lambda_function.deal_expiry` on a
+5-minute EventBridge cron): flips `is_active=false` on every deal where
+`is_active=true AND end_at IS NOT NULL AND end_at <= NOW()`
+(DECISIONS.md "Single EventBridge cron rule for deal expiry"),
+row-by-row (not a bulk `UPDATE`) so each flip gets its own `audit_log`
+entry with `actor_role="system"` / `actor_id="system:deal_expiry_lambda"`
+— the first system-initiated (no human caller) audit write in this
+codebase; see that file's own docstring for the full reasoning, flagged
+for human confirmation as a new convention.
+
+**JUDGMENT CALL (flagged for review) — `ON DELETE CASCADE`, not
+`RESTRICT`:** unlike `restaurant_location.brand_id` (`RESTRICT`, so a
+brand can't be deleted while it still has locations), a deal has no
+downstream FK dependents of its own — nothing references `deal.id` —
+and there's no product reason to block a location's own deletion just
+because it still has deal rows. `location_service.remove_location`'s
+own guardrails (must already be non-`active`, no active manager, no
+pending claim/reopen request) are unaffected by this choice.
+
+**JUDGMENT CALL (flagged for review) — deal creation NOT gated on
+`is_paid`:** root CLAUDE.md's billing/tier model lists "deals" among
+the paid-tier-only content categories returned by the API
+("is_paid=false locations: ... deals ... are NOT returned by API").
+That line governs *whether deal content is served back*, not whether a
+free-tier location may *have* deal rows at all — and this task's own
+instructions explicitly directed "do NOT gate deal CREATION on
+`is_paid` unless you find an explicit reason to... default to allowing
+ANY location — free or paid — to have deals." Implemented exactly that
+way: `deal_service.create_deal` has no `is_paid` check. **This appears
+to conflict with root CLAUDE.md's stated `is_paid` gate on deal
+content-in-search** in one narrow way worth flagging: this task's
+public-visibility design (see docs/DECISIONS.md "Deals: public boolean
+signal, gated content") gates deal CONTENT on the CALLER's role
+(registered_user/admin/owning-owner/assigned-manager), not on the
+LOCATION's `is_paid` status — so a free-tier location's deal content is
+currently just as visible to a registered_user as a paid-tier
+location's. Root CLAUDE.md's "NEVER return paid-only content ... deals
+... without checking is_paid" guardrail was **not** applied to deal
+content visibility here, on the theory that this task's explicit,
+detailed re-specification of deal visibility (caller-role-based, not
+tier-based) supersedes the older one-line "deals" mention in that
+paid-content list — but this is a real, flagged tension between two
+CLAUDE.md-level statements, not a confidently-resolved non-issue.
+Surfaced here explicitly for human confirmation: should free-tier
+locations' deal content be hidden the same way their extra gallery
+photos are, independent of caller role?
+
+---
+
 ## Open items not covered by this schema (flagged, not silently assumed)
 
 - **Gallery photo storage — CLOSED (follow-up migration `0002`).**

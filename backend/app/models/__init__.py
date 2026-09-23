@@ -31,6 +31,7 @@ from app.models.platform_config import PlatformConfig
 from app.models.admin_free_offer import AdminFreeOffer
 from app.models.restaurant_hours import RestaurantHours
 from app.models.user_profile import UserProfile
+from app.models.deal import Deal
 
 __all__ = [
     "OwnerAccount",
@@ -51,4 +52,5 @@ __all__ = [
     "AdminFreeOffer",
     "RestaurantHours",
     "UserProfile",
+    "Deal",
 ]
