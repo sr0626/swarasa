@@ -19,6 +19,17 @@ class OwnerAccountExportOut(BaseModel):
     personal_data_deleted_at: datetime | None
 
 
+class UserProfileExportOut(BaseModel):
+    """The `user_profile` row (display name + last-seen) a `registered_user`
+    or `manager` caller has — the counterpart of `owner_account` for those
+    roles. `null` on `DataExportOut` when no row exists.
+    """
+
+    full_name: str | None
+    last_seen_at: datetime | None
+    updated_at: datetime
+
+
 class LocationManagerExportOut(BaseModel):
     location_id: int
     is_active: bool
@@ -92,6 +103,7 @@ class DataExportOut(BaseModel):
     email: str | None
     generated_at: datetime
     owner_account: OwnerAccountExportOut | None
+    user_profile: UserProfileExportOut | None
     location_manager_assignments: list[LocationManagerExportOut]
     follows: list[FollowExportOut]
     claim_requests: list[ClaimRequestExportOut]

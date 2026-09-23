@@ -2205,6 +2205,7 @@ Response: `200`
     "created_at": "2026-09-01T10:00:00Z",
     "personal_data_deleted_at": null
   },
+  "user_profile": null,
   "location_manager_assignments": [
     { "location_id": 42, "is_active": true, "assigned_at": "2026-09-01T10:00:00Z", "revoked_at": null }
   ],
@@ -2228,7 +2229,13 @@ Response: `200`
 }
 ```
 `owner_account` is `null` if the caller has no local business record
-(same condition as `GET /auth/me`). `listing_reports` covers "report a
+(same condition as `GET /auth/me`). `user_profile` (added 2026-09-23) is the
+display name + last-seen record a `registered_user`/`manager` has (the
+counterpart of `owner_account` for those roles):
+`{ "full_name": "Asha Menon", "last_seen_at": "2026-09-20T12:00:00Z", "updated_at": "..." }`
+(`full_name`/`last_seen_at` may each be `null`); `null` when the caller has no
+`user_profile` row (e.g. an owner, or a diner who never set a name and has not
+been seen since tracking shipped). `listing_reports` covers "report a
 problem" submissions matched by `reporter_user_id` (the caller's Cognito
 `sub`, set only when they were signed in when they submitted it) —
 **not** by `reporter_email`, since that field is free text any submitter
@@ -2261,7 +2268,7 @@ Response: `201`
   "status": "pending_review",
   "requester_role": "registered_user",
   "reason": "no longer using the app",
-  "data_scope": { "owner_account": 0, "location_manager_assignments": 0, "follows": 3, "claim_requests": 0, "claim_requests_pending": 0, "listing_reports": 0, "activity_events": 0, "audit_log_entries": 0 },
+  "data_scope": { "owner_account": 0, "user_profile": 1, "location_manager_assignments": 0, "follows": 3, "claim_requests": 0, "claim_requests_pending": 0, "listing_reports": 0, "activity_events": 0, "audit_log_entries": 0 },
   "submitted_at": "2026-09-16T10:00:00Z",
   "reviewed_at": null,
   "reviewer_notes": null,
@@ -2313,7 +2320,14 @@ reasoning `audit_log.actor_id` gets), none of which is on that list.
 `user_activity_event` rows (recorded searches/tile clicks) are
 **hard-deleted** — every row for the sub, including any past-retention rows
 not yet physically purged — with no `audit_log` entry (pure behavioural data,
-same treatment as `user_follow`).
+same treatment as `user_follow`). The requester's `user_profile` row (display
+name + `last_seen_at`, for `registered_user`/`manager`) is likewise
+**hard-deleted** with no `audit_log` entry (not on the audit-required list;
+every column is personal data, so no tombstone is kept). Deleting it also
+releases the "display name is set once" lock (`name_locked`) for that identity.
+The Cognito identity still exists after erasure (out of scope), so a later
+authenticated request may lazily recreate a row via last-seen tracking — with
+a fresh `last_seen_at` only, never the erased name.
 
 Response: `200`, updated request shape (`status: "completed"`).
 
