@@ -387,6 +387,27 @@ async def test_admin_overview_excludes_deleted_brands(client, db_session, as_use
 
 
 @pytest.mark.asyncio
+async def test_admin_owners_report_excludes_deleted_brands(client, db_session, as_user):
+    owner, dead, *_ = await _brand_with_locations(db_session)
+    live = await create_brand(db_session, owner_id=owner.id, is_claimed=True, name="Live Diner")
+    await create_location(db_session, brand_id=live.id, status="active")
+    await db_session.commit()
+
+    as_user("admin")
+    before = (await client.get("/admin/owners")).json()["results"][0]
+    assert before["brand_count"] == 2
+    assert before["location_count"] == 5
+
+    assert (await client.delete(f"/restaurants/{dead.id}")).status_code == 204
+
+    after = (await client.get("/admin/owners")).json()["results"][0]
+    assert after["brand_count"] == 1
+    assert after["location_count"] == 1
+    assert after["by_status"]["active"] == 1
+    assert after["by_status"]["owner_deactivated"] == 0
+
+
+@pytest.mark.asyncio
 async def test_active_location_filter_used_by_search_is_empty_after_delete(client, db_session, as_user):
     """`/search` needs PostGIS (see test_search_api.py), so assert the exact
     ORM predicate it uses (`RestaurantLocation.is_active == True`) matches
