@@ -17,6 +17,7 @@ from app.models.restaurant_brand import RestaurantBrand
 from app.scripts.delete_user_data import DeleteUserDataError, delete_user_data
 from factories import (
     create_activity_event,
+    create_user_profile,
     create_brand,
     create_claim,
     create_deletion_request,
@@ -38,6 +39,7 @@ async def test_delete_user_data_removes_every_table_and_unclaims_brands(db_sessi
     await create_follow(db_session, brand_id=brand.id, user_id=target.cognito_sub)
     await create_deletion_request(db_session, requester_user_id=target.cognito_sub)
     await create_activity_event(db_session, user_sub=target.cognito_sub)
+    await create_user_profile(db_session, cognito_sub=target.cognito_sub)
     db_session.add(
         AuditLog(
             table_name="restaurant_brand",
@@ -68,6 +70,7 @@ async def test_delete_user_data_removes_every_table_and_unclaims_brands(db_sessi
         "claim_request": 1,
         "user_follow": 1,
         "user_activity_event": 1,
+        "user_profile": 1,
         "data_deletion_request": 1,
         "audit_log": 1,
     }

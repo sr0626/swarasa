@@ -74,6 +74,17 @@ export interface AuditLogExport {
   created_at: string;
 }
 
+/**
+ * The display name + last-seen record a registered user / manager has (the
+ * counterpart of `owner_account` for those roles). `null` on `DataExport`
+ * when no row exists. Hard-deleted by an approved deletion request.
+ */
+export interface UserProfileExport {
+  full_name: string | null;
+  last_seen_at: string | null;
+  updated_at: string;
+}
+
 /** Full response for `GET /auth/me/data-export` — synchronous, JSON. */
 export interface DataExport {
   cognito_sub: string;
@@ -81,6 +92,7 @@ export interface DataExport {
   email: string | null;
   generated_at: string;
   owner_account: OwnerAccountExport | null;
+  user_profile: UserProfileExport | null;
   location_manager_assignments: LocationManagerExport[];
   follows: FollowExport[];
   claim_requests: ClaimRequestExport[];

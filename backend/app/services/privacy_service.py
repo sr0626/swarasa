@@ -10,7 +10,7 @@ behind every judgment call referenced inline below. Short version:
   table that stores it (`owner_account.cognito_sub`,
   `location_manager.user_id`, `user_follow.user_id`,
   `claim_request.claimant_user_id`, `listing_report.reporter_user_id`,
-  `audit_log.actor_id`) — not gated by their *current* role claim, since
+  `audit_log.actor_id`, `user_profile.cognito_sub`) — not gated by their *current* role claim, since
   the same identity can appear in more than one of these regardless of
   which pool group they're in right now (e.g. a `registered_user` can
   have historic `claim_request` rows — `POST /claim` allows any
@@ -28,6 +28,14 @@ behind every judgment call referenced inline below. Short version:
 - `audit_log` rows are retained, never touched by deletion (legitimate
   business/legal record-keeping — see DECISIONS.md); `user_follow` rows
   are hard-deleted (pure preference data, no retention reason);
+  `user_profile` (the display name + last-seen timestamp of a
+  `registered_user`/`manager` — the counterpart of `owner_account` for
+  those roles) is hard-deleted too: it has no FK dependents, no
+  retention need, is not on the audit-required list, and every column
+  on it is personal data, so there is nothing worth keeping a
+  tombstone for. Deleting it also unlocks the display name (the
+  "set once" rule keys off a stored name — a later re-sign-up starts
+  fresh);
   `location_manager`/`claim_request` rows are kept but have their
   identifying column redacted to `_REDACTED_MARKER` (preserves
   access-control/business history shape without the identifier);
@@ -57,6 +65,7 @@ from app.models.location_manager import LocationManager
 from app.models.owner_account import OwnerAccount
 from app.models.user_activity_event import UserActivityEvent
 from app.models.user_follow import UserFollow
+from app.models.user_profile import UserProfile
 from app.schemas.privacy import (
     ActivityEventExportOut,
     AuditLogExportOut,
@@ -69,9 +78,10 @@ from app.schemas.privacy import (
     ListingReportExportOut,
     LocationManagerExportOut,
     OwnerAccountExportOut,
+    UserProfileExportOut,
 )
 from app.services import activity_service, audit_service
-from app.services.auth_service import get_owner_account_by_sub
+from app.services.auth_service import get_owner_account_by_sub, get_user_profile_by_sub
 
 # Shared tombstone value for a redacted identity column — not per-row
 # unique, deliberately: this marks "a now-deleted identity used to be
@@ -82,7 +92,8 @@ _REDACTED_MARKER = "deleted-user"
 _EXPORT_NOTICE = (
     "This export covers personal data held directly by this app "
     "(location manager assignments, restaurant follows, claim requests, "
-    "listing reports you submitted while signed in, the searches and "
+    "listing reports you submitted while signed in, your display name and "
+    "last-seen time if you are a registered user or manager, the searches and "
     "restaurant tiles you clicked while signed in as a registered user "
     "(kept for 12 months), and your owner "
     "account record if you have one). Cognito account "
@@ -100,6 +111,10 @@ async def _gather(db: AsyncSession, cognito_sub: str) -> dict[str, Any]:
     other about what "this identity's data" actually means.
     """
     owner = await get_owner_account_by_sub(db, cognito_sub)
+
+    # Display name + last-seen for registered_user/manager (owner's name
+    # lives on owner_account instead). Read-only lookup — never creates.
+    profile = await get_user_profile_by_sub(db, cognito_sub)
 
     manager_rows = (
         await db.execute(
@@ -136,6 +151,7 @@ async def _gather(db: AsyncSession, cognito_sub: str) -> dict[str, Any]:
 
     return {
         "owner": owner,
+        "user_profile": profile,
         "managers": manager_rows,
         "follows": follow_rows,
         "claims": claim_rows,
@@ -149,6 +165,7 @@ def _data_scope(gathered: dict[str, Any]) -> dict[str, int]:
     pending_claims = sum(1 for c in gathered["claims"] if c.status == "pending_review")
     return {
         "owner_account": 1 if gathered["owner"] is not None else 0,
+        "user_profile": 1 if gathered["user_profile"] is not None else 0,
         "location_manager_assignments": len(gathered["managers"]),
         "follows": len(gathered["follows"]),
         "claim_requests": len(gathered["claims"]),
@@ -182,12 +199,22 @@ async def export_my_data(db: AsyncSession, current_user) -> DataExportOut:
             personal_data_deleted_at=o.personal_data_deleted_at,
         )
 
+    profile_out = None
+    if gathered["user_profile"] is not None:
+        p = gathered["user_profile"]
+        profile_out = UserProfileExportOut(
+            full_name=p.full_name,
+            last_seen_at=p.last_seen_at,
+            updated_at=p.updated_at,
+        )
+
     return DataExportOut(
         cognito_sub=current_user.cognito_sub,
         role=current_user.role,
         email=current_user.email,
         generated_at=datetime.now(timezone.utc),
         owner_account=owner_out,
+        user_profile=profile_out,
         location_manager_assignments=[
             LocationManagerExportOut(
                 location_id=m.location_id,
@@ -391,6 +418,15 @@ async def approve_deletion_request(
     await db.execute(
         delete(UserActivityEvent).where(UserActivityEvent.user_sub == cognito_sub)
     )
+
+    # user_profile: hard delete (registered_user/manager display name +
+    # last_seen_at — see module docstring). Not audit-required. A later
+    # authenticated request by the same still-existing Cognito identity
+    # may lazily recreate a row via `auth_service.touch_last_seen`, but
+    # only with a fresh last_seen_at (no name) — new post-erasure
+    # activity, not stale data, and the name is unlocked again.
+    if gathered["user_profile"] is not None:
+        await db.delete(gathered["user_profile"])
 
     # location_manager: redact the identifying column, deactivate if
     # still active. On root CLAUDE.md's audit-required table list, so

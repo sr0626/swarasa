@@ -11,6 +11,7 @@ tests/integration/test_claim_flow.py and test_follow_api.py.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 
 import pytest
 from sqlalchemy import select
@@ -21,6 +22,7 @@ from app.models.listing_report import ListingReport
 from app.models.location_manager import LocationManager
 from app.models.owner_account import OwnerAccount
 from app.models.user_follow import UserFollow
+from app.models.user_profile import UserProfile
 from factories import (
     create_brand,
     create_claim,
@@ -30,6 +32,7 @@ from factories import (
     create_location,
     create_location_manager,
     create_owner,
+    create_user_profile,
     submitted_recently,
 )
 
@@ -583,3 +586,130 @@ async def test_reject_requires_reviewer_notes(client, db_session, as_user):
     as_user("admin")
     response = await client.post(f"/data-deletion/{request.id}/reject", json={})
     assert response.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# user_profile (registered_user / manager display name + last_seen_at)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_export_includes_user_profile_for_registered_user(client, db_session, as_user):
+    sub = str(uuid.uuid4())
+    seen = datetime(2026, 9, 20, 12, 0, tzinfo=timezone.utc)
+    await create_user_profile(db_session, cognito_sub=sub, full_name="Asha Menon", last_seen_at=seen)
+    # Someone else's profile must never leak in.
+    await create_user_profile(db_session, full_name="Someone Else")
+    await db_session.commit()
+
+    as_user("registered_user", sub=sub)
+    response = await client.get("/auth/me/data-export")
+
+    assert response.status_code == 200, response.text
+    profile = response.json()["user_profile"]
+    assert profile["full_name"] == "Asha Menon"
+    assert profile["last_seen_at"] is not None
+    assert profile["updated_at"] is not None
+    assert "Someone Else" not in response.text
+
+
+@pytest.mark.asyncio
+async def test_export_user_profile_is_null_when_no_row(client, db_session, as_user):
+    as_user("registered_user", sub=str(uuid.uuid4()))
+
+    response = await client.get("/auth/me/data-export")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["user_profile"] is None
+
+
+@pytest.mark.asyncio
+async def test_deletion_request_scope_counts_user_profile(client, db_session, as_user):
+    sub = str(uuid.uuid4())
+    await create_user_profile(db_session, cognito_sub=sub, full_name="Asha Menon")
+    await db_session.commit()
+
+    as_user("registered_user", sub=sub)
+    response = await client.post("/auth/me/data-deletion", json={})
+
+    assert response.status_code == 201, response.text
+    assert response.json()["data_scope"]["user_profile"] == 1
+
+
+@pytest.mark.asyncio
+async def test_approve_deletes_user_profile_but_not_another_users(client, db_session, as_user):
+    sub = str(uuid.uuid4())
+    await create_user_profile(
+        db_session,
+        cognito_sub=sub,
+        full_name="Asha Menon",
+        last_seen_at=datetime(2026, 9, 20, tzinfo=timezone.utc),
+    )
+    other = await create_user_profile(db_session, full_name="Other Person")
+    other_sub = other.cognito_sub
+    request = await create_deletion_request(
+        db_session, requester_user_id=sub, requester_role="registered_user"
+    )
+    await db_session.commit()
+
+    as_user("admin")
+    response = await client.post(f"/data-deletion/{request.id}/approve", json={})
+    assert response.status_code == 200, response.text
+
+    db_session.expire_all()
+    assert await db_session.get(UserProfile, sub) is None
+    survivor = await db_session.get(UserProfile, other_sub)
+    assert survivor is not None and survivor.full_name == "Other Person"
+
+
+@pytest.mark.asyncio
+async def test_approve_works_for_a_user_without_a_profile_row(client, db_session, as_user):
+    sub = str(uuid.uuid4())
+    request = await create_deletion_request(
+        db_session, requester_user_id=sub, requester_role="registered_user"
+    )
+    await db_session.commit()
+
+    as_user("admin")
+    response = await client.post(f"/data-deletion/{request.id}/approve", json={})
+
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "completed"
+
+
+@pytest.mark.asyncio
+async def test_approved_erasure_unlocks_the_display_name_for_a_resignup(client, db_session, as_user):
+    """The "name is set once" rule keys off a stored name: erasing the
+    profile must let the same identity set a (new) name again."""
+    sub = str(uuid.uuid4())
+    await create_user_profile(db_session, cognito_sub=sub, full_name="Asha Menon")
+    request = await create_deletion_request(
+        db_session, requester_user_id=sub, requester_role="registered_user"
+    )
+    await db_session.commit()
+
+    as_user("admin")
+    assert (await client.post(f"/data-deletion/{request.id}/approve", json={})).status_code == 200
+
+    as_user("registered_user", sub=sub)
+    response = await client.patch("/auth/me", json={"full_name": "Asha M"})
+    assert response.status_code == 200, response.text
+    assert response.json()["full_name"] == "Asha M"
+
+
+@pytest.mark.asyncio
+async def test_approve_owner_path_unaffected_by_user_profile_handling(client, db_session, as_user):
+    owner = await create_owner(db_session, full_name="Priya Rao")
+    request = await create_deletion_request(
+        db_session, requester_user_id=owner.cognito_sub, requester_role="owner"
+    )
+    await db_session.commit()
+
+    as_user("admin")
+    response = await client.post(f"/data-deletion/{request.id}/approve", json={})
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "completed"
+
+    await db_session.refresh(owner)
+    assert owner.full_name is None
+    assert owner.personal_data_deleted_at is not None
