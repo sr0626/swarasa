@@ -3,6 +3,15 @@
 `schemas/auth.py`) since it's a distinct sub-resource with its own list
 envelope, same reasoning `schemas/location_manager.py`'s docstring gives
 for `ManagedLocationOut` living apart from `schemas/location.py`.
+
+Names kept as `OwnerActivity*` even though the endpoint was broadened to
+also serve `manager` callers (2026-09-22, see `app/routers/auth.py` and
+`app/services/audit_query_service.py`) — the response shape is identical
+for both roles (same envelope, same per-row fields; only which rows are
+included differs), and renaming would touch every consumer (backend
+router/service, frontend types/API client/components) for no behavior
+change. Treat `OwnerActivityOut`/`OwnerActivityListResponse` as "one
+activity-feed row / page", not "owner-only" despite the name.
 """
 from __future__ import annotations
 

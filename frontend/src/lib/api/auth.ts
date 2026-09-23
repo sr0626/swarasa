@@ -109,9 +109,12 @@ export async function getMyManagedLocations(
 }
 
 /**
- * GET /auth/me/activity — auth: owner only (docs/API_CONTRACTS.md
- * "GET /auth/me/activity"). Owner-scoped read of `audit_log`, including
- * manager edits made on the owner's behalf.
+ * GET /auth/me/activity — auth: owner or manager (docs/API_CONTRACTS.md
+ * "GET /auth/me/activity"). Owner-scoped read of `audit_log` (including
+ * manager edits made on the owner's behalf) for an owner caller, or a
+ * manager's own narrower customer-facing-changes-only view of their
+ * assigned locations for a manager caller — scoping is entirely
+ * server-side per role, this client function is the same call either way.
  */
 export async function getMyActivity(
   params: PaginationParams,

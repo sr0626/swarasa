@@ -1,6 +1,6 @@
 "use client";
 
-// Owner-facing activity feed -- GET /auth/me/activity
+// Activity feed section -- GET /auth/me/activity
 // (docs/API_CONTRACTS.md "GET /auth/me/activity"). The app already writes
 // an audit_log row for every write on
 // restaurant_brand/restaurant_location/location_manager, including
@@ -9,6 +9,17 @@
 // OwnerAccountView.tsx / app/account/page.tsx), client-side "Load more"
 // from here on, same "keep the token server-side" shape as
 // DataPrivacySection's export/delete actions.
+//
+// Shared with the manager console (2026-09-22, see ManagerAccountView.tsx)
+// now that GET /auth/me/activity also serves manager callers with their
+// own narrower row set (backend/app/services/audit_query_service.py) --
+// the frontend side of that feed is identical (same fetch shape, same
+// per-row rendering), only the heading/description copy differs, so
+// `heading`/`description` are parameterized rather than forking a second
+// component. Kept the `Owner*` name (like the backend's `OwnerActivity*`
+// schema types it renders) to avoid a mechanical rename touching every
+// consumer for no behavior change -- read it as "the activity feed
+// section", not "owner-only".
 import { useState } from "react";
 import { getMyActivityAction } from "@/app/account/actions";
 import { cardClass } from "@/components/account/accountShared";
@@ -35,9 +46,15 @@ const ACTION_BADGE: Record<string, string> = {
 export default function OwnerActivitySection({
   initialPage,
   loadError,
+  heading = "Recent activity",
+  description = "Changes to your restaurants and locations, including edits made by your managers.",
 }: {
   initialPage: PaginatedResponse<OwnerActivity> | null;
   loadError: string | null;
+  /** Section heading -- defaults to the owner copy; manager console passes its own. */
+  heading?: string;
+  /** Subhead under the heading -- defaults to the owner copy; manager console passes its own. */
+  description?: string;
 }) {
   const [rows, setRows] = useState<OwnerActivity[]>(initialPage?.results ?? []);
   const [page, setPage] = useState(initialPage?.page ?? 1);
@@ -69,12 +86,10 @@ export default function OwnerActivitySection({
       <div className="flex items-center gap-2">
         <ClockIcon className="h-5 w-5 text-brand-ink-muted" />
         <h2 id="activity-heading" className="font-display text-xl font-bold text-brand-ink">
-          Recent activity
+          {heading}
         </h2>
       </div>
-      <p className="mt-1 text-sm text-brand-ink-muted">
-        Changes to your restaurants and locations, including edits made by your managers.
-      </p>
+      <p className="mt-1 text-sm text-brand-ink-muted">{description}</p>
 
       {error && (
         <p role="alert" className="mt-3 rounded-brand-control bg-brand-closed-bg px-3 py-2.5 text-sm text-brand-closed">

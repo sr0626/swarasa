@@ -229,6 +229,32 @@ async def require_admin(
     return current_user
 
 
+async def require_owner_or_manager(
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> CurrentUser:
+    """Auth: owner or manager — `GET /auth/me/activity` (extended 2026-09-22
+    to give managers their own, narrower view of the same endpoint; see
+    `app/services/audit_query_service.py` module docstring for the two
+    roles' different scoping). For an owner caller this lazily provisions/
+    looks up the local `owner_account` row (same as `require_owner`) so
+    `current_user.owner_account_id` is populated. A manager caller needs no
+    such lookup — manager scoping is keyed off `current_user.cognito_sub`
+    directly against `location_manager.user_id`, there is no local
+    "manager_account" table the way there is `owner_account`.
+    """
+    if current_user.role == "manager":
+        return current_user
+    if current_user.role != "owner":
+        raise AppError(403, "Owner or manager access required", "forbidden")
+    owner = await auth_service.get_or_create_owner_account(
+        db, current_user.cognito_sub, current_user.email
+    )
+    await db.commit()
+    current_user.owner_account_id = owner.id
+    return current_user
+
+
 async def require_registered_user(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> CurrentUser:
