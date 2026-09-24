@@ -26,11 +26,11 @@
 // breakpoint-specific rearrangement). Everything is bounded (name, cuisines and
 // address each 1 line with ellipsis; full text in `title`) so long text can
 // never grow a tile past the shared height.
-//   - Cover (h-40): Featured ribbon top-left, follow heart top-right, the
-//     "Deal(s) available today" badge bottom-left as an OVERLAY (no body
-//     height; signed-out it is a real sign-in <Link>, a SIBLING of the tile
-//     link so no <a> nests in an <a>), and an "Unclaimed" / "N locations"
-//     note chip bottom-right.
+//   - Cover (h-40): the "Deal(s) available today" badge top-left (solid green,
+//     a plain non-link overlay for every viewer — the whole tile is the link;
+//     signed-out visitors meet the sign-in prompt on the restaurant page),
+//     follow heart top-right, Featured ribbon bottom-left, and an
+//     "Unclaimed" / "N locations" note chip bottom-right.
 //   - Body: name (1 line, ellipsis, full name in `title`), cuisines as one
 //     muted line (rendered only when present, so its absence leaves no hole),
 //     address + distance (1 line), then the hours pill row right under it.
@@ -39,7 +39,6 @@ import type { RestaurantCardItem } from "@/types/search";
 import type { ActivitySource } from "@/types/userActivity";
 import TrackedTileLink from "@/components/listing/TrackedTileLink";
 import DealBadge from "@/components/ui/DealBadge";
-import DealSignInLink from "@/components/ui/DealSignInLink";
 import DefaultRestaurantImage from "@/components/ui/DefaultRestaurantImage";
 import FollowButton from "@/components/ui/FollowButton";
 import { LocationPinIcon, StarIcon } from "@/components/ui/icons";
@@ -82,10 +81,6 @@ export default function RestaurantCard({
   clickSource,
 }: RestaurantCardProps) {
   const { nearest_location } = item;
-  // Signed out = the follow icon is shown (so the viewer isn't an owner/
-  // manager/admin) but the viewer isn't a registered user. Fails closed:
-  // with the default `showFollowButton=false` no sign-in CTA ever renders.
-  const isSignedOut = showFollowButton && !isRegisteredUser;
   const cuisineLine = item.cuisine_tags
     .slice(0, 3)
     .map((tag) => tag.display_name)
@@ -134,10 +129,16 @@ export default function RestaurantCard({
             <DefaultRestaurantImage />
           )}
           {nearest_location?.is_paid && (
-            <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-brand-pill bg-brand-ink/85 px-2.5 py-1 text-xs font-semibold text-brand-bg">
+            <span className="absolute bottom-3 left-3 inline-flex items-center gap-1 rounded-brand-pill bg-brand-ink/85 px-2.5 py-1 text-xs font-semibold text-brand-bg">
               <StarIcon className="h-3 w-3" />
               Featured
             </span>
+          )}
+          {nearest_location?.has_deal_today && (
+            // Top-left, a plain non-link badge for EVERY viewer: the whole tile
+            // is already the link (signed-out visitors get the sign-in prompt
+            // on the restaurant page's deals banner).
+            <DealBadge variant="overlay" className="absolute left-3 top-3" />
           )}
           {sideNote && (
             <span className="absolute bottom-3 right-3 max-w-[40%] truncate rounded-brand-pill bg-brand-ink/85 px-2.5 py-1 text-xs font-semibold text-brand-bg">
@@ -171,22 +172,6 @@ export default function RestaurantCard({
           wrapperClassName="absolute right-3 top-3 z-10"
         />
       )}
-
-      {/* Deal badge: overlay on the cover's bottom-left (see file header).
-          A sibling of the tile link, never a child, so the signed-out
-          sign-in <Link> stays valid HTML. The wrapper is 44px tall so the
-          link keeps a 44px touch target; the non-link badge variant is
-          pointer-events-none so clicks fall through to the tile link. */}
-      {nearest_location?.has_deal_today &&
-        (isSignedOut ? (
-          <div className="absolute left-1 top-40 z-10 max-w-[calc(100%-0.5rem)] -translate-y-full">
-            <DealSignInLink currentPath={currentPath} variant="badge" overlay />
-          </div>
-        ) : (
-          <div className="pointer-events-none absolute left-1 top-40 z-10 flex min-h-11 max-w-[calc(100%-0.5rem)] -translate-y-full items-center px-2">
-            <DealBadge variant="overlay" />
-          </div>
-        ))}
 
       {nearest_location && fullAddress && (
         <div className="px-4 pt-2">
