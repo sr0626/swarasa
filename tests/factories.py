@@ -391,3 +391,27 @@ def submitted_recently() -> datetime:
     """A `submitted_at`-like timestamp a few minutes in the past — never a
     hardcoded literal timestamp (tests/CLAUDE.md guardrail)."""
     return datetime.now(timezone.utc) - timedelta(minutes=5)
+
+
+async def add_full_week_hours(
+    db: AsyncSession, location_id: int, *, closed_days: tuple[int, ...] = (0,)
+) -> None:
+    """Complete weekly hours (all 7 days answered): `closed_days` closed all
+    day, every other day open 11:00-22:00. This is what a listing needs before
+    it can leave `coming_soon` (app/services/listing_readiness.py)."""
+    from datetime import time
+
+    from app.models.restaurant_hours import RestaurantHours
+
+    for day in range(7):
+        closed = day in closed_days
+        db.add(
+            RestaurantHours(
+                location_id=location_id,
+                day_of_week=day,
+                open_time=None if closed else time(11, 0),
+                close_time=None if closed else time(22, 0),
+                is_closed=closed,
+            )
+        )
+    await db.flush()

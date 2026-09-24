@@ -2,56 +2,13 @@
 // /locations/{id}/hours, and the photo sub-resource body shapes
 // (docs/API_CONTRACTS.md "Locations").
 import { z } from "zod";
-import { normalizePhone } from "@/lib/phone";
+import { requiredPhoneSchema } from "./phone";
+
+// Re-exported so existing importers keep working; the phone schemas live in
+// ./phone.ts (one shared US rule for every phone field).
+export { optionalPhoneSchema, requiredPhoneSchema } from "./phone";
 
 const TIME_PATTERN = /^\d{2}:\d{2}:\d{2}$/;
-
-/**
- * Optional phone: blank -> null, otherwise normalised to E.164
- * (`lib/phone.ts` — "(972) 555-0142" -> "+19725550142"). Kept for callers
- * that genuinely have an optional phone (none left as of 2026-09-22 --
- * both "Add restaurant" and the location editor now require phone, see
- * `requiredPhoneSchema` below -- but this stays exported rather than
- * deleted in case a future optional-phone contact field needs it).
- */
-export const optionalPhoneSchema = z
-  .string()
-  .trim()
-  .nullish()
-  .transform((value, ctx): string | null => {
-    if (!value) return null;
-    const normalised = normalizePhone(value);
-    if (!normalised) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Enter a valid phone number, e.g. (972) 555-0142",
-      });
-      return z.NEVER;
-    }
-    return normalised;
-  });
-
-/**
- * Required phone: rejects blank (mirrors
- * backend/app/schemas/location.py LocationCreate.phone), otherwise
- * normalised to E.164 same as `optionalPhoneSchema` above. Added
- * 2026-09-22 (docs/PROJECT_PLAN.csv "Make location phone required").
- */
-export const requiredPhoneSchema = z
-  .string()
-  .trim()
-  .min(1, "Phone number is required")
-  .transform((value, ctx): string => {
-    const normalised = normalizePhone(value);
-    if (!normalised) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Enter a valid phone number, e.g. (972) 555-0142",
-      });
-      return z.NEVER;
-    }
-    return normalised;
-  });
 
 /**
  * Address fields shared by POST /locations, PATCH /locations/{id} and the

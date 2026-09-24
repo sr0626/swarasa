@@ -3,12 +3,12 @@ docs/API_CONTRACTS.md "Locations (restaurant_location)".
 """
 from __future__ import annotations
 
-import re
 from datetime import datetime, time
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.core.phone import US_PHONE_ERROR, normalize_us_phone
 from app.schemas.deal import DealPublicOut, DealUpcomingOut
 
 ABOUT_MAX_LENGTH = 1000
@@ -25,43 +25,11 @@ LocationStatusValue = Literal[
     "active", "owner_deactivated", "coming_soon", "closed_pending_reopen"
 ]
 
-# Phone made required on LocationCreate 2026-09-22 (docs/PROJECT_PLAN.csv
-# "Make location phone required"). Normalisation mirrors
-# frontend/src/lib/phone.ts normalizePhone exactly, so a number accepted by
-# one layer is accepted (and formatted identically) by the other. The DB
-# column (restaurant_location.phone) stays a nullable varchar(20) — see
-# that JUDGMENT CALL note below on LocationCreate.phone for why no Alembic
-# migration was added here.
-_NANP_PATTERN = re.compile(r"^[2-9]\d{2}[2-9]\d{6}$")
-_INTL_PATTERN = re.compile(r"^[1-9]\d{7,14}$")
-
-
-def _is_nanp(ten_digits: str) -> bool:
-    """North American Numbering Plan: area code and exchange both start with 2-9."""
-    return bool(_NANP_PATTERN.match(ten_digits))
-
-
-def normalize_phone(value: str) -> str | None:
-    """Returns the E.164 form of `value`, or `None` when it isn't a
-    plausible number. Port of frontend/src/lib/phone.ts normalizePhone —
-    keep the two in sync.
-    """
-    trimmed = value.strip()
-    if not trimmed:
-        return None
-
-    has_plus = trimmed.startswith("+")
-    digits = re.sub(r"\D", "", trimmed)
-
-    if has_plus:
-        # Explicit country code. NANP (+1) numbers must be exactly 11 digits.
-        if digits.startswith("1"):
-            return f"+{digits}" if _is_nanp(digits[1:]) else None
-        return f"+{digits}" if _INTL_PATTERN.match(digits) else None
-
-    # No "+": treat as a US number, with or without a leading 1.
-    national = digits[1:] if len(digits) == 11 and digits.startswith("1") else digits
-    return f"+1{national}" if _is_nanp(national) else None
+# Phone: one shared US rule (app/core/phone.py, mirrored by
+# frontend/src/lib/phone.ts) — required on create, normalised to E.164
+# `+1XXXXXXXXXX`. `normalize_phone` stays importable from here for callers
+# that already used it.
+normalize_phone = normalize_us_phone
 
 
 class HoursOut(BaseModel):
@@ -129,6 +97,12 @@ class LocationOut(BaseModel):
     # frontend call sites already read this boolean; see the hybrid
     # property of the same name on the model.
     is_active: bool
+    # What is still missing before this listing can be activated (moved out of
+    # `coming_soon`): any of "name", "address", "phone", "hours" (see
+    # app/services/listing_readiness.py). Empty when the listing is ready.
+    # Computed on every read from data already loaded there (no extra query);
+    # the SERVER re-checks on the transition itself, so this is display-only.
+    setup_missing: list[str]
     is_open_now: bool | None
     hours: list[HoursOut]
     cover_photo_url: str | None
@@ -180,7 +154,7 @@ class LocationCreate(BaseModel):
     # against real data, consistent with how other "required going
     # forward" fields work in this codebase (about/specialties normalise
     # instead of NOT NULL, too).
-    phone: str = Field(min_length=1, max_length=20)
+    phone: str = Field(min_length=1, max_length=40)
     timezone: str = "America/Chicago"
     latitude: float | None = None
     longitude: float | None = None
@@ -190,7 +164,7 @@ class LocationCreate(BaseModel):
     def _validate_phone_create(cls, value: str) -> str:
         normalized = normalize_phone(value)
         if normalized is None:
-            raise ValueError("Enter a valid phone number, e.g. (972) 555-0142")
+            raise ValueError(US_PHONE_ERROR)
         return normalized
 
 
@@ -233,7 +207,7 @@ class LocationUpdate(BaseModel):
             raise ValueError("phone cannot be cleared; provide a value or omit the field")
         normalized = normalize_phone(value)
         if normalized is None:
-            raise ValueError("Enter a valid phone number, e.g. (972) 555-0142")
+            raise ValueError(US_PHONE_ERROR)
         return normalized
 
     @field_validator("about")

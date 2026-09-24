@@ -12,8 +12,8 @@ the fix (an admin short-circuit added directly to that dependency in
 admin can now act on a location it does NOT own, on every route above,
 and every write still attributes correctly to the admin actor in
 `audit_log` (never mislabeled as the owner). It also locks in the two
-endpoints deliberately left owner-only (`POST /locations`,
-`POST /locations/{id}/managers`) — see docs/DECISIONS.md "Platform admin
+endpoint deliberately left owner-only (`POST /locations/{id}/managers`;
+`POST /locations` was opened to admin 2026-09-24 — see below) — see docs/DECISIONS.md "Platform admin
 full-access parity..." for the reasoning.
 
 Run against the real HTTP router + a real (SQLite) DB, same pattern as
@@ -128,10 +128,12 @@ async def test_admin_can_create_update_and_delete_a_photo_for_a_location_it_does
 
 
 @pytest.mark.asyncio
-async def test_admin_cannot_create_a_new_location_directly(client, db_session, as_user):
-    """POST /locations stays owner-only, same as POST /restaurants —
-    deliberate, see docs/DECISIONS.md "Platform admin full-access parity
-    on /locations write routes — manager assignment stays owner-only".
+async def test_admin_can_create_a_new_location_in_setup_state(client, db_session, as_user):
+    """`POST /locations` was owner-only (2026-09-17); the "Add location" flow
+    opened it to an admin too (2026-09-24, docs/DECISIONS.md "New manual
+    listings start in setup") — the new location starts `coming_soon` and the
+    create is audit-logged to the admin actor. Manager assignment stays
+    owner-only (next test). Full coverage: test_listing_setup_flow.py.
     """
     owner = await create_owner(db_session)
     brand = await create_brand(db_session, owner_id=owner.id, is_claimed=True)
@@ -151,7 +153,8 @@ async def test_admin_cannot_create_a_new_location_directly(client, db_session, a
             "timezone": "America/Chicago",
         },
     )
-    assert response.status_code == 403
+    assert response.status_code == 201, response.text
+    assert response.json()["status"] == "coming_soon"
 
 
 @pytest.mark.asyncio

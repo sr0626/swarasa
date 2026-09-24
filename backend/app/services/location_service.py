@@ -31,6 +31,7 @@ from app.services import (
     auth_service,
     deal_service,
     hours_service,
+    listing_readiness,
     location_slug,
     photo_service,
     s3_service,
@@ -113,6 +114,7 @@ async def _location_to_out(
         paid_until=location.paid_until,
         status=location.status,
         is_active=location.is_active,
+        setup_missing=listing_readiness.missing_for_activation(location, brand.name, hours_rows),
         is_open_now=is_open_now,
         hours=[
             HoursOut(
@@ -247,13 +249,26 @@ async def get_location_or_404(db: AsyncSession, location_id: int) -> RestaurantL
 
 
 async def create_location(db: AsyncSession, body: LocationCreate, current_user) -> LocationOut:
+    """`POST /locations` — the Add-restaurant / Add-location UI flows.
+
+    Owner (of the brand) or admin. The new location is created in the hidden
+    `coming_soon` status (docs/DECISIONS.md "New manual listings start in
+    setup"): it isn't public until the owner enters the required info (hours,
+    phone, address) and explicitly activates it via `POST
+    /locations/{id}/status` — see `update_location_status` and
+    `listing_readiness`. Seeded / bulk-imported / claim-approved listings do
+    not come through here and keep their own defaults.
+    """
     brand = await db.get(RestaurantBrand, body.brand_id)
     if brand is None or brand.deleted_at is not None:
         raise AppError(404, "Restaurant not found", "not_found")
 
-    owner = await auth_service.get_owner_account_by_sub(db, current_user.cognito_sub)
-    if owner is None or brand.owner_id != owner.id:
-        raise AppError(403, "Not authorized to add a location to this restaurant", "forbidden")
+    if current_user.role != "admin":
+        owner = await auth_service.get_owner_account_by_sub(db, current_user.cognito_sub)
+        if owner is None or brand.owner_id != owner.id:
+            raise AppError(
+                403, "Not authorized to add a location to this restaurant", "forbidden"
+            )
 
     location = RestaurantLocation(
         brand_id=body.brand_id,
@@ -274,7 +289,7 @@ async def create_location(db: AsyncSession, body: LocationCreate, current_user) 
         longitude=_to_decimal(body.longitude),
         is_paid=False,
         is_verified=False,
-        is_active=True,
+        status=RestaurantLocation.STATUS_COMING_SOON,
     )
     db.add(location)
     await db.flush()
@@ -295,6 +310,7 @@ async def create_location(db: AsyncSession, body: LocationCreate, current_user) 
             "address_line1": location.address_line1,
             "city": location.city,
             "state": location.state,
+            "status": location.status,
         },
     )
     await db.commit()
@@ -435,6 +451,28 @@ async def update_location_status(
             "request instead of changing its status directly.",
             "reopen_requires_admin",
         )
+
+    # Setup gate (docs/DECISIONS.md "New manual listings start in setup"):
+    # leaving `coming_soon` for `active` — going live for the first time —
+    # requires the listing's required info. Only that transition is gated:
+    # un-hiding an `owner_deactivated` listing (or a reopen approval) was
+    # already live once, and seeded/imported listings must keep working.
+    if (
+        new_status == RestaurantLocation.STATUS_ACTIVE
+        and location.status == RestaurantLocation.STATUS_COMING_SOON
+    ):
+        brand = await db.get(RestaurantBrand, location.brand_id)
+        hours_rows = await hours_service.get_hours_for_location(db, location.id)
+        missing = listing_readiness.missing_for_activation(
+            location, brand.name if brand else None, hours_rows
+        )
+        if missing:
+            raise AppError(
+                422,
+                listing_readiness.incomplete_detail(missing),
+                "listing_incomplete",
+                extra={"missing": missing},
+            )
 
     old_val = {"status": location.status}
     location.status = new_status

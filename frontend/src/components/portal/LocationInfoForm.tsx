@@ -13,9 +13,12 @@
 // brand's name/description from a single-location page would conflate two
 // different resources (a brand can have multiple locations), so this form
 // only edits what `PATCH /locations/{id}` actually documents.
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { updateLocationInfoAction } from "@/app/portal/locations/[id]/actions";
 import { PencilIcon } from "@/components/ui/icons";
+import { formatPhone } from "@/lib/formatPhone";
+import { phoneFieldError } from "@/lib/phone";
 import type { LocationDetail } from "@/types/location";
 
 interface FormState {
@@ -39,7 +42,8 @@ function toFormState(location: LocationDetail): FormState {
     state: location.state,
     postal_code: location.postal_code,
     country: location.country,
-    phone: location.phone ?? "",
+    // Stored as +1XXXXXXXXXX; shown the way people write it.
+    phone: location.phone ? formatPhone(location.phone) : "",
     timezone: location.timezone,
     // Null until the address has been geocoded (see NewListingNotice).
     latitude: location.latitude === null ? "" : String(location.latitude),
@@ -62,6 +66,7 @@ const inputClass =
 const labelClass = "text-sm font-semibold text-brand-ink";
 
 export default function LocationInfoForm({ location }: { location: LocationDetail }) {
+  const router = useRouter();
   const [form, setForm] = useState<FormState>(toFormState(location));
   // Last-saved values: what "did the owner change the address / type new
   // coordinates" is measured against.
@@ -70,10 +75,12 @@ export default function LocationInfoForm({ location }: { location: LocationDetai
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
     setSaved(false);
+    if (key === "phone") setPhoneError(null);
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -81,6 +88,14 @@ export default function LocationInfoForm({ location }: { location: LocationDetai
     setError(null);
     setNotice(null);
     setSaved(false);
+
+    // Shared US phone rule (lib/phone.ts); the server re-validates.
+    const phoneProblem = phoneFieldError(form.phone);
+    setPhoneError(phoneProblem);
+    if (phoneProblem) {
+      document.getElementById("phone")?.focus();
+      return;
+    }
 
     const latText = form.latitude.trim();
     const lngText = form.longitude.trim();
@@ -131,6 +146,9 @@ export default function LocationInfoForm({ location }: { location: LocationDetai
         setBaseline(next);
         setSaved(true);
         setNotice(result.notice ?? null);
+        // Re-render the page around us so the setup checklist reflects the
+        // new phone/address.
+        router.refresh();
       } else {
         setError(result.error);
       }
@@ -228,11 +246,22 @@ export default function LocationInfoForm({ location }: { location: LocationDetai
           <input
             id="phone"
             type="tel"
+            inputMode="tel"
+            autoComplete="tel"
             required
+            maxLength={40}
+            aria-invalid={Boolean(phoneError)}
+            aria-describedby={phoneError ? "phone-error" : undefined}
             value={form.phone}
             onChange={(e) => set("phone", e.target.value)}
-            className={inputClass}
+            placeholder="(972) 555-0142"
+            className={phoneError ? `${inputClass} border-brand-closed` : inputClass}
           />
+          {phoneError && (
+            <p id="phone-error" role="alert" className="mt-1 text-xs font-medium text-brand-closed">
+              {phoneError}
+            </p>
+          )}
         </div>
 
         <div>

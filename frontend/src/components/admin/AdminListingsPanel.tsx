@@ -29,7 +29,7 @@ import {
 } from "@/app/admin/listings/actions";
 import { deleteListingWarning, type ListingStatusFilter } from "@/lib/adminListings";
 import OpenStatusBadge from "@/components/ui/OpenStatusBadge";
-import { PencilIcon, TrashIcon } from "@/components/ui/icons";
+import { PencilIcon, PlusIcon, TrashIcon } from "@/components/ui/icons";
 import type { LocationSummary } from "@/types/location";
 import type { RestaurantBrand } from "@/types/restaurant";
 import { brandHref } from "@/lib/restaurant/urls";
@@ -489,6 +489,14 @@ function BrandRow({
             </button>
           ) : (
             <>
+              <Link
+                href={`/portal/locations/new?brand=${brand.id}`}
+                aria-label={`Add a location to ${brand.name}`}
+                className="flex min-h-[40px] items-center gap-1.5 rounded-brand-control border border-brand-border px-3 text-xs font-semibold text-brand-ink-muted transition hover:bg-brand-chip"
+              >
+                <PlusIcon className="h-3.5 w-3.5" />
+                Add location
+              </Link>
               <a
                 href={brandHref(brand.slug)}
                 target="_blank"

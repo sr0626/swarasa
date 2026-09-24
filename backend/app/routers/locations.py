@@ -18,7 +18,7 @@ from app.dependencies.auth import (
     require_location_owner_or_admin,
     require_location_read_access,
     require_location_write_access,
-    require_owner,
+    require_owner_or_admin,
 )
 from app.dependencies.db import get_db
 from app.schemas.hours import HoursReplaceRequest, HoursResponse
@@ -61,7 +61,7 @@ async def get_location(
 async def create_location(
     body: LocationCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(require_owner),
+    current_user: CurrentUser = Depends(require_owner_or_admin),
 ) -> LocationOut:
     return await location_service.create_location(db, body, current_user)
 

@@ -663,6 +663,19 @@ Notes:
   `closed_pending_reopen`. `is_active` is now a derived `true` only when
   `status == "active"` (a `hybrid_property` on the model, not a second
   stored column — see `app/models/restaurant_location.py`).
+- `setup_missing` (added 2026-09-24 — "New manual listings start in setup"):
+  `string[]`, what is still missing before this listing can be moved from
+  `coming_soon` to `active` — any of `"name"` | `"address"` | `"phone"` |
+  `"hours"`, in that order; `[]` when it's ready. Always present, computed
+  from data already loaded (no extra query). Display-only: the same rules
+  are re-checked by `POST /locations/{id}/status` (below), which is the
+  enforcement. Rules (`backend/app/services/listing_readiness.py`): `name`
+  = the brand has a non-blank name; `address` = street, city, state and ZIP
+  non-blank; `phone` = the stored phone is a valid US number (a legacy
+  non-US / free-text value counts as missing); `hours` = all 7 days have an
+  explicit answer — closed, or open with both an open and a close time (a
+  day with no row or `is_closed: null` counts as missing). Photos, About
+  text and the menu are NOT required.
 
 **Status-aware visibility (added 2026-09-22, closing a gap from the
 2026-09-17 row above — this endpoint used to return a hidden location's
@@ -743,6 +756,12 @@ location (see `frontend/src/lib/api/locations.ts` `getLocationById`'s
 ### POST /locations
 
 Auth: owner (must own the parent brand — `restaurant_brand.owner_id == current_user.id`)
+**or admin** (any non-deleted brand — opened to admin 2026-09-24 for the
+"Add location" UI; this supersedes the 2026-09-17 "deliberately left
+owner-only" note under "Platform admin full-access parity" below for this
+route only — `POST /locations/{id}/managers` is still owner-only). A
+manager gets `403`; an owner of a different brand gets `403`; a missing or
+soft-deleted brand is `404`.
 
 Body:
 ```json
@@ -760,19 +779,34 @@ Body:
   "longitude": -96.6989
 }
 ```
-New locations start `is_paid=false`, `is_verified=false`, `is_active=true`.
+New locations start `is_paid=false`, `is_verified=false` and — changed
+2026-09-24, `docs/DECISIONS.md` "New manual listings start in setup" —
+**`status="coming_soon"`** (hidden from the public everywhere; only
+`active` is public), NOT `active`. This endpoint backs the Add-restaurant
+and Add-location UI flows only: bulk import (`POST
+/admin/restaurants/bulk-import`, the CSV command), the seed scripts and
+claim approval build `RestaurantLocation` rows directly and keep their own
+defaults (`active`). The owner/admin enters the required info (hours,
+phone, address) and then activates the listing with `POST
+/locations/{id}/status` — see below. The response carries
+`setup_missing` (see `GET /locations/{id}`). The `create` audit row's
+`new_val` includes `"status": "coming_soon"`.
 `latitude`/`longitude` are geocoded client- or service-side before this
 call; the service layer derives `geom` from them on write (see
 `docs/DATA_MODEL.md` judgment-call note on `restaurant_location.geom`).
 
 `phone` is **required** (added 2026-09-22, docs/PROJECT_PLAN.csv "Make
 location phone required") — same standing as `address_line1`/`city`:
-missing or blank -> `422`. Accepted in any of the formats
-`frontend/src/lib/phone.ts normalizePhone` handles (e.g.
-`"(972) 555-0142"`, `"9725550142"`, `"+14695551234"`) and normalised to
-E.164 server-side (`backend/app/schemas/location.py normalize_phone` — a
-line-for-line port of the frontend function, kept in sync); an
-unparseable value is also `422`. The DB column
+missing or blank -> `422`. It follows the ONE shared **US phone rule**
+(`backend/app/core/phone.py normalize_us_phone`, mirrored by
+`frontend/src/lib/phone.ts normalizePhone`; same case table in both test
+suites — tightened 2026-09-24, see "US phone rule" under `PATCH /auth/me`):
+formatting characters (spaces, dashes, dots, parentheses) and an optional
+leading `+1` / `1` country code are accepted (`"(972) 555-0142"`,
+`"9725550142"`, `"1 972 555 0142"`, `"+14695551234"`), exactly 10 digits
+must remain and the area code and exchange must start with 2-9; anything
+else — 11 digits without the `1`, another country code, letters,
+extensions — is `422`. Stored normalised as `+1XXXXXXXXXX`. The DB column
 (`restaurant_location.phone`) is **not** getting a `NOT NULL` migration —
 it stays nullable so existing/imported rows with `phone IS NULL` (e.g. the
 CSV bulk-import path, which builds `RestaurantLocation` directly and
@@ -1033,8 +1067,9 @@ the owner. `GET /locations/{id}/managers` and `DELETE
 /locations/{id}/managers/{manager_id}` already had admin parity before
 this change (unchanged here).
 
-**Deliberately left owner-only:** `POST /locations` and `POST
-/locations/{id}/managers` — see those endpoints' own Auth lines. Both are
+**Deliberately left owner-only:** `POST /locations/{id}/managers` (and,
+until 2026-09-24, `POST /locations` — now owner-or-admin, see that endpoint) —
+see those endpoints' own Auth lines. Both are
 an owner declaring/vouching for something new under their own brand
 (a new location; a specific named person as a location's manager), not
 administering an existing resource — the same reasoning `POST
@@ -1123,8 +1158,26 @@ below). Re-posting the location's current status is always a harmless
 no-op (`200`, not `409`), checked before the asymmetric-transition rule
 so retrying an already-applied change never fails.
 
+**Setup gate (added 2026-09-24, `docs/DECISIONS.md` "New manual listings
+start in setup"):** moving a location from `coming_soon` to `active` — going
+live for the first time — is refused with `422`
+```json
+{
+  "detail": "This listing isn't ready to go live yet. Still needed: opening hours for all 7 days.",
+  "code": "listing_incomplete",
+  "missing": ["hours"]
+}
+```
+until the required info exists (`missing` uses the same keys/rules as
+`setup_missing` on `GET /locations/{id}`: `name`, `address`, `phone`,
+`hours`). Nothing is changed and no audit row is written on a refusal. Applies
+to owner and admin alike. Only that transition is gated: un-hiding an
+`owner_deactivated` listing, moving to any hidden status, and approving a
+reopen request are unchanged, so seeded / imported listings (which may have
+`is_closed = null` days) keep working.
+
 Audit: `audit_log` row (`action="update"`, `old_val`/`new_val` each
-`{"status": "..."}`).
+`{"status": "..."}` — so the activation is `coming_soon` -> `active`).
 
 ---
 
@@ -2421,6 +2474,18 @@ the body, it's always the authenticated caller (root CLAUDE.md "Permission
 model" — never trust a client-supplied identity for a write that should be
 self-scoped).
 
+**US phone rule (added 2026-09-24 — user feedback: the owner-profile phone
+accepted an 11-digit number):** `phone`, when provided, must be a valid US
+phone number under the ONE shared rule used by every phone field
+(`backend/app/core/phone.py normalize_us_phone` / `frontend/src/lib/phone.ts
+normalizePhone`): spaces, dashes, dots, parentheses and an optional leading
+`+1` / `1` accepted; exactly 10 digits after that; area code and exchange
+start with 2-9; anything else -> `422`. Stored normalised as
+`+1XXXXXXXXXX`. Omitting `phone` (or sending `null`) leaves it untouched; a
+blank string is `422`. Existing stored values are not backfilled. Same rule
+on `POST/PATCH /locations` and the bulk import (per-row error, below).
+Inline UI message: "Enter a valid 10-digit US phone number".
+
 **Name lock (added 2026-09-23 — user decision "once the name is set, the
 only way to change it is contacting an admin"):** `full_name` is
 set-once. While no non-empty name is stored (`owner_account.full_name` /
@@ -3220,6 +3285,13 @@ Errors: `403 forbidden` for any non-admin caller.
 ### POST /admin/restaurants/bulk-import
 
 Auth: admin
+
+**Phone (2026-09-24):** each row's `phone` is optional; when present it must
+satisfy the shared US phone rule (see `PATCH /auth/me`) and is stored
+normalised (`+1XXXXXXXXXX`). An invalid number is reported as that row's
+`error` (`detail` names the number and "Enter a valid 10-digit US phone
+number") and the rest of the batch continues — same for the CSV import. Bulk
+import still creates `active` listings (unchanged).
 
 Body:
 ```json

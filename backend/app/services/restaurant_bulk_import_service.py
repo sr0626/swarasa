@@ -90,6 +90,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.phone import US_PHONE_ERROR, normalize_us_phone
 from app.models.cuisine_tag import CuisineTag
 from app.models.owner_account import OwnerAccount
 from app.models.restaurant_brand import RestaurantBrand
@@ -345,6 +346,21 @@ async def _import_one_row(
     )
 
 
+def _apply_us_phone_rule(row):
+    """Shared US phone rule (app/core/phone.py) for one import row. Returns
+    `(row, None)` with `phone` normalised to `+1XXXXXXXXXX` (or left `None`
+    when the row has no phone -- phone stays optional for imports), or
+    `(row, error_detail)` for a number that isn't a valid 10-digit US phone;
+    the caller reports that per-row instead of raising, so one bad number
+    never aborts the batch."""
+    if row.phone is None or not row.phone.strip():
+        return row.model_copy(update={"phone": None}), None
+    normalized = normalize_us_phone(row.phone)
+    if normalized is None:
+        return row, f"Invalid phone {row.phone!r}: {US_PHONE_ERROR}."
+    return row.model_copy(update={"phone": normalized}), None
+
+
 async def bulk_import_restaurants(
     db: AsyncSession,
     rows: list[RestaurantBasicDetailIn | dict],
@@ -388,6 +404,13 @@ async def bulk_import_restaurants(
                     RowResult(index=index, name=name, status=RowStatus.ERROR, detail=str(exc))
                 )
                 continue
+
+        row, phone_error = _apply_us_phone_rule(row)
+        if phone_error:
+            result.add(
+                RowResult(index=index, name=row.name, status=RowStatus.ERROR, detail=phone_error)
+            )
+            continue
 
         try:
             row_result = await _import_one_row(
@@ -665,6 +688,19 @@ async def bulk_import_restaurants_csv(
                     RowResult(index=index, name=name, status=RowStatus.ERROR, detail=str(exc))
                 )
                 continue
+
+        row, phone_error = _apply_us_phone_rule(row)
+        if phone_error:
+            result.add(
+                RowResult(
+                    index=index,
+                    name=row.name,
+                    status=RowStatus.ERROR,
+                    detail=phone_error,
+                    cuisine_type_input=row.cuisine_type,
+                )
+            )
+            continue
 
         try:
             row_result = await _import_one_csv_row(
