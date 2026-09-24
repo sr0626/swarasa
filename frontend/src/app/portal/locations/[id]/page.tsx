@@ -11,6 +11,7 @@
 // renders the *same* generic panel as a 404 does, so an unauthorized
 // caller can't distinguish "doesn't exist" from "exists but not yours."
 import type { Metadata } from "next";
+import { Fragment, type ReactNode } from "react";
 import Link from "next/link";
 import { requireSession } from "@/lib/auth/guards";
 import TopBar from "@/components/home/TopBar";
@@ -24,8 +25,10 @@ import LocationDealsManager from "@/components/portal/LocationDealsManager";
 import LocationMenuManager from "@/components/portal/LocationMenuManager";
 import LocationPhotoManager from "@/components/portal/LocationPhotoManager";
 import LocationManagerAssignment from "@/components/portal/LocationManagerAssignment";
-import LocationStatusControl from "@/components/portal/LocationStatusControl";
-import LocationStatusBadge from "@/components/portal/LocationStatusBadge";
+import LocationStatusMenu from "@/components/portal/LocationStatusMenu";
+import EditorSectionNav from "@/components/portal/EditorSectionNav";
+import { SECTION_ANCHOR_CLASS } from "@/components/portal/editorSectionAnchor";
+import { editorSectionsForRole, type EditorSection } from "@/lib/portal/editorSections";
 import NewListingNotice, { parseNewListingParam } from "@/components/portal/NewListingNotice";
 import InfoPanel from "@/components/ui/InfoPanel";
 import type { Deal } from "@/types/deal";
@@ -143,6 +146,66 @@ export default async function PortalLocationPage({ params, searchParams }: Locat
   // Only owners create listings; ignore the flag for anyone else.
   const newListing = isOwner ? parseNewListingParam(searchParams?.new) : null;
 
+  // Each panel, keyed by section id. Order and visibility come from
+  // editorSectionsForRole (Deals, Hours, Menu, Photos, About, Info, then the
+  // owner-only Managers), so the jump-link row and the page share one source.
+  // Panels are independent forms with their own state -- nothing depends on
+  // DOM order. `deals`/`menu` carry their own ids (also the /deals and /menu
+  // redirect fragments); the rest get a wrapper with a `sec-` id. Load-failure
+  // placeholders keep the id too, so the link still lands somewhere sensible.
+  const anchored = (section: EditorSection, node: ReactNode) => (
+    <div id={section.anchorId} className={SECTION_ANCHOR_CLASS}>
+      {node}
+    </div>
+  );
+  const sections = editorSectionsForRole(session.role);
+  const sectionById = (id: EditorSection["id"]) => sections.find((x) => x.id === id) as EditorSection;
+  const panels: Partial<Record<EditorSection["id"], ReactNode>> = {
+    deals: deals ? (
+      <LocationDealsManager locationId={location.id} initialDeals={deals} />
+    ) : (
+      anchored(
+        sectionById("deals"),
+        <InfoPanel
+          title="Deals couldn't be loaded"
+          body="We couldn't load this location's deals right now. Refresh the page to try again."
+        />
+      )
+    ),
+    hours: anchored(sectionById("hours"), <LocationHoursEditor locationId={location.id} hours={location.hours} />),
+    menu: menu ? (
+      <LocationMenuManager locationId={location.id} initialMenu={menu} />
+    ) : (
+      anchored(
+        sectionById("menu"),
+        <InfoPanel
+          title="Menu couldn't be loaded"
+          body="We couldn't load this location's menu right now. Refresh the page to try again."
+        />
+      )
+    ),
+    photos: anchored(
+      sectionById("photos"),
+      <LocationPhotoManager
+        locationId={location.id}
+        isPaid={location.is_paid}
+        initialCoverPhotoUrl={location.cover_photo_url}
+        initialGalleryPhotos={location.gallery_photos}
+      />
+    ),
+    about: anchored(
+      sectionById("about"),
+      <LocationAboutForm locationId={location.id} about={location.about} specialties={location.specialties} />
+    ),
+    info: anchored(sectionById("info"), <LocationInfoForm location={location} />),
+    managers: isOwner
+      ? anchored(
+          sectionById("managers"),
+          <LocationManagerAssignment locationId={location.id} isPaid={location.is_paid} initialManagers={managers} />
+        )
+      : null,
+  };
+
   return (
     <main className="min-h-screen bg-brand-bg">
       <TopBar />
@@ -150,62 +213,35 @@ export default async function PortalLocationPage({ params, searchParams }: Locat
         <Link href={back.href} className="text-sm font-medium text-brand-ink-subtle hover:text-brand-ink">
           {back.label}
         </Link>
-        <h1 className="mt-2 font-display text-2xl font-bold text-brand-ink sm:text-3xl">
-          {location.brand_name}
-          {location.location_name ? ` — ${location.location_name}` : ""}
-        </h1>
+        {/* Heading row: the name, with the listing-status label right next to
+            it. For owner/admin the label is a small menu holding the status
+            actions (change status, request reopen, permanently remove) that
+            used to live in a separate "Listing status" panel; a manager sees a
+            plain label. The chip is a sibling of the <h1>, not inside it, so
+            the heading text stays just the name. */}
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+          <h1 className="font-display text-2xl font-bold text-brand-ink sm:text-3xl">
+            {location.brand_name}
+            {location.location_name ? ` — ${location.location_name}` : ""}
+          </h1>
+          <LocationStatusMenu
+            locationId={location.id}
+            initialStatus={location.status}
+            role={session.role}
+            backHref={back.href}
+          />
+        </div>
         <p className="mt-1 text-sm text-brand-ink-muted">
           {location.address_line1}, {location.city}, {location.state} {location.postal_code}
         </p>
         {newListing && <NewListingNotice mapPosition={newListing} />}
 
+        <EditorSectionNav sections={sections} />
+
         <div className="mt-6 flex flex-col gap-6">
-          {isOwner || isAdmin ? (
-            <LocationStatusControl
-              locationId={location.id}
-              initialStatus={location.status}
-              backHref={back.href}
-            />
-          ) : (
-            // Manager: read-only — status control is owner/admin only
-            // (docs/PROJECT_PLAN.csv "Location status lifecycle").
-            <section className="flex items-center justify-between rounded-brand-card border border-brand-border bg-white p-5 shadow-brand-card sm:p-6">
-              <h2 className="font-display text-lg font-bold text-brand-ink">Listing status</h2>
-              <LocationStatusBadge status={location.status} />
-            </section>
-          )}
-          <LocationInfoForm location={location} />
-          <LocationAboutForm locationId={location.id} about={location.about} specialties={location.specialties} />
-          <LocationHoursEditor locationId={location.id} hours={location.hours} />
-          {menu ? (
-            <LocationMenuManager locationId={location.id} initialMenu={menu} />
-          ) : (
-            <InfoPanel
-              title="Menu couldn't be loaded"
-              body="We couldn't load this location's menu right now. Refresh the page to try again."
-            />
-          )}
-          {deals ? (
-            <LocationDealsManager locationId={location.id} initialDeals={deals} />
-          ) : (
-            <InfoPanel
-              title="Deals couldn't be loaded"
-              body="We couldn't load this location's deals right now. Refresh the page to try again."
-            />
-          )}
-          <LocationPhotoManager
-            locationId={location.id}
-            isPaid={location.is_paid}
-            initialCoverPhotoUrl={location.cover_photo_url}
-            initialGalleryPhotos={location.gallery_photos}
-          />
-          {isOwner && (
-            <LocationManagerAssignment
-              locationId={location.id}
-              isPaid={location.is_paid}
-              initialManagers={managers}
-            />
-          )}
+          {sections.map((section) => (
+            <Fragment key={section.id}>{panels[section.id]}</Fragment>
+          ))}
         </div>
       </section>
     </main>

@@ -16,7 +16,7 @@
 //
 // Delete is a real, irreversible hard delete on the backend, so it uses the
 // same two-step "click, then Confirm" pattern as LocationManagerAssignment /
-// LocationStatusControl. Deactivate is the reversible alternative and is
+// LocationStatusMenu. Deactivate is the reversible alternative and is
 // offered right next to it.
 import { useState } from "react";
 import {
@@ -38,6 +38,7 @@ import {
 } from "@/lib/validation/deal";
 import { fieldErrorsFromZod, type FieldErrors } from "@/lib/validation/fieldErrors";
 import type { Deal } from "@/types/deal";
+import { SECTION_ANCHOR_CLASS } from "@/components/portal/editorSectionAnchor";
 
 const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const DAY_ABBREVIATIONS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -265,7 +266,7 @@ export default function LocationDealsManager({
     <section
       id="deals"
       aria-labelledby="deals-heading"
-      className="rounded-brand-card border border-brand-border bg-white p-5 shadow-brand-card sm:p-6"
+      className={`${SECTION_ANCHOR_CLASS} rounded-brand-card border border-brand-border bg-white p-5 shadow-brand-card sm:p-6`}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2

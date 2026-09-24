@@ -1,7 +1,7 @@
 // Status pill for a location's product-state lifecycle (backend/app/models/
 // restaurant_location.py "Location status lifecycle") — shown on the owner
 // dashboard tiles (BrandCard.tsx) and the location editor
-// (LocationStatusControl.tsx). Four states now (was a plain active/inactive
+// (LocationStatusMenu.tsx). Four states now (was a plain active/inactive
 // boolean before docs/PROJECT_PLAN.csv "Location status lifecycle" — see
 // that migration's note on `restaurant_location.status` replacing
 // `is_active`); `LocationSummary.status`/`LocationDetail.status` are now
