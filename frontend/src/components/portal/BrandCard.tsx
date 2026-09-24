@@ -20,14 +20,15 @@ import {
   StoreIcon,
   TagIcon,
 } from "@/components/ui/icons";
-import { secondaryLinkClass } from "@/components/account/accountShared";
+import { primaryLinkClass, secondaryLinkClass } from "@/components/account/accountShared";
 import LocationStatusChip from "@/components/console/LocationStatusChip";
 import LocationTierBadge from "@/components/portal/LocationTierBadge";
 import LocationStatusBadge from "@/components/portal/LocationStatusBadge";
 import LocationManagersSummary from "@/components/portal/LocationManagersSummary";
 import type { LocationWithManagers } from "@/types/location";
 import type { RestaurantBrand } from "@/types/restaurant";
-import { brandHref } from "@/lib/restaurant/urls";
+import { finishSetupLabel, isInSetup } from "@/lib/portal/listingSetup";
+import { ownerBrandPageLink, ownerLocationPageLink } from "@/lib/restaurant/urls";
 
 export default function BrandCard({
   brand,
@@ -38,6 +39,8 @@ export default function BrandCard({
   locations: LocationWithManagers[];
   locationsError: string | null;
 }) {
+  const activeCount = locations.filter(({ location }) => location.status === "active").length;
+  const brandLink = ownerBrandPageLink(brand.slug, activeCount);
   return (
     <div className="rounded-brand-card border border-brand-border bg-white p-5 shadow-brand-card sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -89,14 +92,21 @@ export default function BrandCard({
             <PlusIcon className="h-4 w-4" />
             Add location
           </Link>
-          <Link
-            href={brandHref(brand.slug)}
-            aria-label={`View public page for ${brand.name}`}
-            className={secondaryLinkClass}
-          >
-            <EyeIcon className="h-4 w-4" />
-            View public page
-          </Link>
+          {/* Brand-level link only when it adds something: with 2+ ACTIVE
+              locations the brand URL is a landing page listing them. With a
+              single location each row's own "View public page"/"Preview page"
+              button replaces it (the brand URL would 404 while that lone
+              location is hidden). */}
+          {brandLink && (
+            <Link
+              href={brandLink.href}
+              aria-label={`${brandLink.label} of ${brand.name}`}
+              className={secondaryLinkClass}
+            >
+              <EyeIcon className="h-4 w-4" />
+              {brandLink.label}
+            </Link>
+          )}
         </div>
       </div>
 
@@ -113,46 +123,82 @@ export default function BrandCard({
 
         {!locationsError && locations.length > 0 && (
           <ul className="flex flex-col gap-2">
-            {locations.map(({ location, managers, managersError, todayStatus }) => (
-              <li
-                key={location.id}
-                className="rounded-brand-control border border-brand-border bg-white"
-              >
-                <Link
-                  href={`/portal/locations/${location.id}`}
-                  className="flex min-h-[44px] items-center justify-between gap-3 px-4 py-2.5 transition hover:bg-brand-bg"
+            {locations.map(({ location, managers, managersError, todayStatus, setupMissing }) => {
+              const label = location.location_name ?? location.address_line1;
+              const pageLink = ownerLocationPageLink(brand.slug, location);
+              const inSetup = isInSetup(location.status);
+              return (
+                <li
+                  key={location.id}
+                  data-testid={`location-row-${location.id}`}
+                  className="rounded-brand-control border border-brand-border bg-white"
                 >
-                  <span className="flex min-w-0 items-center gap-2 text-sm text-brand-ink">
-                    <LocationPinIcon className="h-4 w-4 shrink-0 text-brand-ink-subtle" />
-                    <span className="truncate">
-                      {location.location_name ? `${location.location_name} — ` : ""}
-                      {location.address_line1}, {location.city}, {location.state}
-                    </span>
-                  </span>
-                  <span className="flex shrink-0 items-center gap-3">
-                    <LocationStatusChip status={todayStatus} />
-                    <PencilIcon className="h-4 w-4 text-brand-ink-subtle" />
-                  </span>
-                </Link>
-
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-brand-border px-4 py-2.5">
-                  <LocationTierBadge isPaid={location.is_paid} paidUntil={location.paid_until} />
-                  <LocationStatusBadge status={location.status} />
-                  <LocationManagersSummary managers={managers} error={managersError} />
-                  {/* Deals are the thing owners/managers update most often — a
-                      one-tap shortcut to the editor's "Deals & specials"
-                      section (/deals redirects to it). */}
+                  {/* Header line: the address, then the status + tier tags and
+                      today's hours chip right beside it (they wrap under the
+                      address on a narrow screen) so they're noticed first. */}
                   <Link
-                    href={`/portal/locations/${location.id}/deals`}
-                    aria-label={`Deals for ${location.location_name ?? location.address_line1}`}
-                    className={`ml-auto ${secondaryLinkClass}`}
+                    href={`/portal/locations/${location.id}`}
+                    className="flex min-h-[44px] items-start justify-between gap-3 px-4 py-2.5 transition hover:bg-brand-bg"
                   >
-                    <TagIcon className="h-4 w-4" />
-                    Deals
+                    <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1.5">
+                      <span className="flex min-w-0 items-center gap-2 text-sm text-brand-ink">
+                        <LocationPinIcon className="h-4 w-4 shrink-0 text-brand-ink-subtle" />
+                        <span className="break-words">
+                          {location.location_name ? `${location.location_name} — ` : ""}
+                          {location.address_line1}, {location.city}, {location.state}
+                        </span>
+                      </span>
+                      <span className="flex flex-wrap items-center gap-1.5">
+                        <LocationStatusBadge status={location.status} />
+                        <LocationTierBadge
+                          isPaid={location.is_paid}
+                          paidUntil={location.paid_until}
+                        />
+                        <LocationStatusChip status={todayStatus} />
+                      </span>
+                    </span>
+                    <PencilIcon className="mt-0.5 h-4 w-4 shrink-0 text-brand-ink-subtle" />
                   </Link>
-                </div>
-              </li>
-            ))}
+
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-brand-border px-4 py-2.5">
+                    <LocationManagersSummary managers={managers} error={managersError} />
+                    <div className="ml-auto flex flex-wrap items-center gap-2">
+                      {/* A listing still in setup is hidden from the public until
+                          the owner activates it: a real button straight to its
+                          editor (checklist + Go live bar). */}
+                      {inSetup && (
+                        <Link
+                          href={`/portal/locations/${location.id}`}
+                          aria-label={`Finish setup for ${label}`}
+                          className={primaryLinkClass}
+                        >
+                          {finishSetupLabel(setupMissing)}
+                        </Link>
+                      )}
+                      {/* Deals are the thing owners/managers update most often — a
+                          one-tap shortcut to the editor's "Deals & specials"
+                          section (/deals redirects to it). */}
+                      <Link
+                        href={`/portal/locations/${location.id}/deals`}
+                        aria-label={`Deals for ${label}`}
+                        className={secondaryLinkClass}
+                      >
+                        <TagIcon className="h-4 w-4" />
+                        Deals
+                      </Link>
+                      <Link
+                        href={pageLink.href}
+                        aria-label={`${pageLink.label} for ${label}`}
+                        className={secondaryLinkClass}
+                      >
+                        <EyeIcon className="h-4 w-4" />
+                        {pageLink.label}
+                      </Link>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

@@ -24,8 +24,11 @@ export default function LocationStatusBadge({ status }: { status: LocationStatus
     );
   }
   if (status === "coming_soon") {
+    // Deliberately louder than "Active": a listing in setup is not public yet
+    // and needs the owner to finish it, so it gets a gold fill + ring and a dot.
     return (
-      <span className="inline-flex items-center rounded-brand-pill bg-brand-success-bg px-2.5 py-1 text-xs font-semibold text-brand-success">
+      <span className="inline-flex items-center gap-1.5 rounded-brand-pill bg-brand-accent-gold/40 px-2.5 py-1 text-xs font-bold text-brand-ink ring-1 ring-inset ring-brand-accent-gold">
+        <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-brand-accent-warm" />
         {LABELS.coming_soon}
       </span>
     );

@@ -3,10 +3,12 @@
 // restaurant" action, then one BrandCard per brand (locations with Edit / View
 // public page links, tier/status badges and assigned managers), or the error /
 // empty states. Data fetching lives in lib/owner/loadOwnerRestaurants.ts.
-// Server Component.
+// Every location shows inline in its brand's card whatever its status (Active,
+// Coming soon, Hidden, Closed) with the status tag in the row header; a listing
+// still in setup carries a "Finish setup" button (there is no separate
+// "Coming soon" panel or filter). Server Component.
 import Link from "next/link";
 import BrandCard from "@/components/portal/BrandCard";
-import ComingSoonLocationsPanel from "@/components/portal/ComingSoonLocationsPanel";
 import { primaryLinkClass } from "@/components/account/accountShared";
 import InfoPanel from "@/components/ui/InfoPanel";
 import { PlusIcon } from "@/components/ui/icons";
@@ -43,8 +45,6 @@ export default function OwnerRestaurantsSection({
           Add a restaurant
         </Link>
       </header>
-
-      {!loadError && <ComingSoonLocationsPanel brands={brands} />}
 
       {loadError && <InfoPanel title="Couldn't load your restaurants" body={loadError} />}
 

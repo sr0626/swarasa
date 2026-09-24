@@ -10,8 +10,10 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { updateLocationHoursAction } from "@/app/portal/locations/[id]/actions";
+import SetupReadyPrompt from "@/components/portal/SetupReadyPrompt";
 import { ClockIcon } from "@/components/ui/icons";
-import type { DayOfWeek, LocationHour } from "@/types/location";
+import { canActivate } from "@/lib/portal/listingSetup";
+import type { DayOfWeek, LocationHour, LocationStatus } from "@/types/location";
 
 const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
@@ -53,11 +55,20 @@ function buildInitialState(hours: LocationHour[]): DayFormState[] {
 export default function LocationHoursEditor({
   locationId,
   hours,
+  status,
+  setupMissing,
+  role,
 }: {
   locationId: number;
   hours: LocationHour[];
+  /** Setup state, for the inline "Everything's ready — Activate listing" prompt. */
+  status: LocationStatus;
+  setupMissing: string[];
+  /** Session role: only an owner/admin sees that prompt. */
+  role: string;
 }) {
   const router = useRouter();
+  const readyPromptShown = (role === "owner" || role === "admin") && canActivate(status, setupMissing);
   const [days, setDays] = useState<DayFormState[]>(buildInitialState(hours));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -166,19 +177,32 @@ export default function LocationHoursEditor({
             {error}
           </p>
         )}
-        {saved && !error && (
+        {saved && !error && !readyPromptShown && (
           <p className="mt-4 rounded-brand-control bg-brand-success-bg px-3 py-2.5 text-sm text-brand-success">
             Hours saved.
           </p>
         )}
 
-        <button
-          type="submit"
-          disabled={saving}
-          className="mt-4 flex min-h-[44px] items-center justify-center rounded-brand-control bg-brand-accent px-6 text-sm font-semibold text-white transition hover:bg-brand-accent-hover disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-        >
-          {saving ? "Saving..." : "Save hours"}
-        </button>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button
+            type="submit"
+            disabled={saving}
+            className="flex min-h-[44px] items-center justify-center rounded-brand-control bg-brand-accent px-6 text-sm font-semibold text-white transition hover:bg-brand-accent-hover disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+          >
+            {saving ? "Saving..." : "Save hours"}
+          </button>
+          {/* This save just completed the setup checklist: offer Activate here. */}
+          {!error && (
+            <SetupReadyPrompt
+              locationId={locationId}
+              status={status}
+              setupMissing={setupMissing}
+              role={role}
+              saved={saved}
+              savedLabel="Hours saved."
+            />
+          )}
+        </div>
       </form>
     </section>
   );

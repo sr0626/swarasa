@@ -91,8 +91,13 @@ async function loadManagersForLocation(
 async function loadTodayStatusForLocation(
   location: LocationSummary,
   accessToken: string
-): Promise<ConsoleTodayStatus> {
-  if (location.is_open_now === true) return { kind: "open_now" };
+): Promise<{ todayStatus: ConsoleTodayStatus; setupMissing: string[] | null }> {
+  const inSetup = location.status === "coming_soon";
+  // A listing in setup also needs its checklist (`setup_missing`, only on the
+  // detail read) for the "Finish setup" call to action, so it always reads it.
+  if (location.is_open_now === true && !inSetup) {
+    return { todayStatus: { kind: "open_now" }, setupMissing: null };
+  }
   try {
     // Pass accessToken: `GET /locations/{id}` now 404s a non-active
     // location for a caller without access (docs/PROJECT_PLAN.csv
@@ -101,12 +106,15 @@ async function loadTodayStatusForLocation(
     // `GET /restaurants/{id}/locations` to the owning owner), so it needs
     // the same caller-aware read the editor page uses, not an anonymous one.
     const detail = await getLocationById(location.id, accessToken);
-    return describeConsoleTodayStatus(location.is_open_now, detail.hours, detail.timezone);
+    return {
+      todayStatus: describeConsoleTodayStatus(location.is_open_now, detail.hours, detail.timezone),
+      setupMissing: inSetup ? detail.setup_missing : null,
+    };
   } catch {
     // Best-effort — the tile still renders correctly via the other bucket
     // (LocationStatusChip renders nothing for "unknown") rather than
     // failing the whole location row over a decorative status label.
-    return { kind: "unknown" };
+    return { todayStatus: { kind: "unknown" }, setupMissing: null };
   }
 }
 
@@ -114,32 +122,38 @@ async function loadLocationExtras(
   location: LocationSummary,
   accessToken: string
 ): Promise<LocationWithManagers> {
-  const [{ managers, managersError }, todayStatus] = await Promise.all([
+  const [{ managers, managersError }, { todayStatus, setupMissing }] = await Promise.all([
     loadManagersForLocation(location, accessToken),
     loadTodayStatusForLocation(location, accessToken),
   ]);
-  return { location, managers, managersError, todayStatus };
+  return { location, managers, managersError, todayStatus, setupMissing };
 }
 
 /**
  * `GET /restaurants` only returns a `location_count` per brand, not the
  * location rows — this fetches each brand's locations via the existing
- * public `GET /restaurants/{id}/locations` so each one can link to its
- * editor. Brands with `location_count === 0` skip the extra call. Each
+ * `GET /restaurants/{id}/locations` so each one can link to its editor. Each
  * location's managers and console status are then loaded alongside it (see
- * `loadLocationExtras` above) so the card can show tier, active status,
- * assigned managers, and today's hours status together without extra
- * page-level round trips.
+ * `loadLocationExtras` above) so the card can show tier, status, assigned
+ * managers, and today's hours status together without extra page-level round
+ * trips.
+ *
+ * Two things here are load-bearing (a listing left in setup vanished from the
+ * owner's card without them):
+ *  - the caller's `accessToken` MUST be passed: the endpoint is public and
+ *    returns ACTIVE locations only to an anonymous caller; only the owning
+ *    owner (or an admin) gets the brand's `coming_soon` / hidden / closed
+ *    ones. (It also bypasses the Next data cache when a token is present.)
+ *  - never skip the call on `brand.location_count === 0`: that count is
+ *    ACTIVE locations only, so a brand whose only location is still in setup
+ *    reads 0 while having a listing to show.
  */
 async function loadLocationsForBrand(
   brand: RestaurantBrand,
   accessToken: string
 ): Promise<BrandWithLocations> {
-  if (brand.location_count === 0) {
-    return { brand, locations: [], locationsError: null };
-  }
   try {
-    const page = await getRestaurantLocations(brand.id, { page: 1, page_size: 100 });
+    const page = await getRestaurantLocations(brand.id, { page: 1, page_size: 100 }, accessToken);
     const locations = await Promise.all(
       page.results.map((location) => loadLocationExtras(location, accessToken))
     );

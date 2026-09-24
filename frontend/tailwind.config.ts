@@ -65,6 +65,18 @@ const config: Config = {
         "brand-card": "20px",
         "brand-control": "12px",
       },
+      // A few soft rings radiating from the "Activate listing" button the moment
+      // a listing's checklist is complete (ActivateListingButton `emphasize`).
+      // Finite (4 pulses), and only under `motion-safe:`.
+      keyframes: {
+        "go-live-glow": {
+          "0%": { boxShadow: "0 0 0 0 rgba(192, 57, 43, 0.5)" },
+          "100%": { boxShadow: "0 0 0 12px rgba(192, 57, 43, 0)" },
+        },
+      },
+      animation: {
+        "go-live-glow": "go-live-glow 1.4s ease-out 4",
+      },
       boxShadow: {
         "brand-card": "0 2px 8px 0 rgba(36, 24, 18, 0.08)",
         "brand-card-hover": "0 10px 24px 0 rgba(36, 24, 18, 0.14)",

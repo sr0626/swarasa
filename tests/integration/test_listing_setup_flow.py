@@ -189,6 +189,102 @@ async def test_owner_and_admin_can_still_open_the_setup_listing(client, db_sessi
 
 
 # ---------------------------------------------------------------------------
+# "What happened to the first one?" — a listing left in setup must stay
+# findable by its owner (the owner business page reads these two endpoints)
+# ---------------------------------------------------------------------------
+
+
+def _as_optional(role: str, sub: str) -> None:
+    """`GET /restaurants/{id}/locations` is public-by-default: it reads the
+    caller through `get_current_user_optional`, which `as_user` (it overrides
+    `get_current_user` only) does not cover."""
+    user = CurrentUser(cognito_sub=sub, email=f"{sub}@example.com", role=role)
+
+    async def _dep():
+        return user
+
+    app_main.app.dependency_overrides[get_current_user_optional] = _dep
+
+
+@pytest.mark.asyncio
+async def test_setup_listing_stays_in_the_owners_brand_location_list(client, db_session, as_user):
+    """An owner adds a second location (no location_name) to a brand that
+    already has a live one, and leaves it in `coming_soon`. It must appear in
+    that brand's location list for the owner and the admin — and ONLY them:
+    an anonymous caller (what the owner console used to send by mistake) gets
+    the live location only."""
+    owner, brand = await _owned_brand(db_session)
+    live = await create_location(db_session, brand_id=brand.id, status="active")
+    await db_session.commit()
+    created = await _create_via_api(
+        client, as_user, owner, brand, address_line1="112 Main St", city="Coppell"
+    )
+    assert created["status"] == "coming_soon"
+    assert created["location_name"] is None
+
+    _as_optional("owner", owner.cognito_sub)
+    rows = (await client.get(f"/restaurants/{brand.id}/locations")).json()["results"]
+    by_id = {row["id"]: row for row in rows}
+    assert set(by_id) == {live.id, created["id"]}
+    setup_row = by_id[created["id"]]
+    assert setup_row["status"] == "coming_soon"
+    assert setup_row["location_name"] is None
+    assert setup_row["slug"] == created["slug"]  # the row can link to its own page
+
+    _as_optional("admin", "admin-sub")
+    rows = (await client.get(f"/restaurants/{brand.id}/locations")).json()["results"]
+    assert {row["id"] for row in rows} == {live.id, created["id"]}
+
+    # Another owner and a signed-out caller only ever see the live location.
+    other = await create_owner(db_session)
+    await db_session.commit()
+    _as_optional("owner", other.cognito_sub)
+    rows = (await client.get(f"/restaurants/{brand.id}/locations")).json()["results"]
+    assert {row["id"] for row in rows} == {live.id}
+    _drop_auth_override()
+    rows = (await client.get(f"/restaurants/{brand.id}/locations")).json()["results"]
+    assert {row["id"] for row in rows} == {live.id}
+
+
+@pytest.mark.asyncio
+async def test_brand_with_only_a_setup_listing_is_listed_but_counts_zero_active(
+    client, db_session, as_user
+):
+    """The owner's `GET /restaurants` lists a brand whose only location is in
+    setup, but its `location_count` is the ACTIVE count (0 here) — so the
+    owner console must NOT use `location_count === 0` to skip loading the
+    brand's locations, or the brand's only (setup) listing vanishes from the
+    card. This test pins the API behaviour that rule depends on."""
+    owner, brand = await _owned_brand(db_session)
+    created = await _create_via_api(client, as_user, owner, brand)
+
+    body = (await client.get("/restaurants")).json()
+    entry = next(b for b in body["results"] if b["id"] == brand.id)
+    assert entry["location_count"] == 0  # active locations only
+
+    _as_optional("owner", owner.cognito_sub)
+    rows = (await client.get(f"/restaurants/{brand.id}/locations")).json()["results"]
+    assert [row["id"] for row in rows] == [created["id"]]
+    assert rows[0]["status"] == "coming_soon"
+
+
+@pytest.mark.asyncio
+async def test_activated_listing_reads_active_in_the_owner_list(client, db_session, as_user):
+    """After activation the same row reads `active` (the console's Coming soon
+    panel and Setup filter key off `status`)."""
+    owner, brand = await _owned_brand(db_session)
+    created = await _create_via_api(client, as_user, owner, brand)
+    put = await client.put(f"/locations/{created['id']}/hours", json=_hours_payload())
+    assert put.status_code == 200, put.text
+    response = await _activate(client, created["id"])
+    assert response.status_code == 200, response.text
+
+    _as_optional("owner", owner.cognito_sub)
+    rows = (await client.get(f"/restaurants/{brand.id}/locations")).json()["results"]
+    assert [(row["id"], row["status"]) for row in rows] == [(created["id"], "active")]
+
+
+# ---------------------------------------------------------------------------
 # setup_missing reflects the required info
 # ---------------------------------------------------------------------------
 

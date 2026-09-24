@@ -44,6 +44,36 @@ export function reportHref(brandSlug: string, locationId?: number | null): strin
 }
 
 /**
+ * The owner/admin console's "view the page" link for ONE location: always the
+ * location's own URL (never the brand URL, which for a single-location brand
+ * 404s while that location is hidden). Only an `active` location is public;
+ * any other status is a preview only its owner/admin/manager can open, so it
+ * reads "Preview page".
+ */
+export function ownerLocationPageLink(
+  brandSlug: string,
+  location: { slug: string; status: string }
+): { href: string; label: "View public page" | "Preview page" } {
+  return {
+    href: locationHref(brandSlug, location.slug),
+    label: location.status === "active" ? "View public page" : "Preview page",
+  };
+}
+
+/**
+ * The console's brand-level page link. It only adds value when the brand has
+ * two or more ACTIVE locations (the brand URL is then its landing page listing
+ * them); for a single location the per-location link replaces it, so `null`.
+ */
+export function ownerBrandPageLink(
+  brandSlug: string,
+  activeLocationCount: number
+): { href: string; label: "View all locations" } | null {
+  if (activeLocationCount < 2) return null;
+  return { href: brandHref(brandSlug), label: "View all locations" };
+}
+
+/**
  * Canonical path of a LOCATION page. A brand with exactly ONE active location
  * has its profile at the short brand URL, so the long location URL (which
  * must keep working) canonicalises to it — no duplicate content, no broken

@@ -7,8 +7,32 @@ import {
   canonicalPath,
   locationDealsHref,
   locationHref,
+  ownerBrandPageLink,
+  ownerLocationPageLink,
   reportHref,
 } from "./urls.ts";
+
+test("ownerLocationPageLink: per-location URL, 'Preview' unless the location is active", () => {
+  assert.deepEqual(ownerLocationPageLink("namaste-grill", { slug: "irving", status: "active" }), {
+    href: "/restaurant/namaste-grill/irving",
+    label: "View public page",
+  });
+  for (const status of ["coming_soon", "owner_deactivated", "closed_pending_reopen"]) {
+    assert.deepEqual(ownerLocationPageLink("namaste-grill", { slug: "coppell", status }), {
+      href: "/restaurant/namaste-grill/coppell",
+      label: "Preview page",
+    });
+  }
+});
+
+test("ownerBrandPageLink: only for a brand with 2+ active locations", () => {
+  assert.equal(ownerBrandPageLink("namaste-grill", 0), null);
+  assert.equal(ownerBrandPageLink("namaste-grill", 1), null);
+  assert.deepEqual(ownerBrandPageLink("namaste-grill", 2), {
+    href: "/restaurant/namaste-grill",
+    label: "View all locations",
+  });
+});
 
 test("brandHref and locationHref build the two public URL shapes", () => {
   assert.equal(brandHref("namaste-grill"), "/restaurant/namaste-grill");

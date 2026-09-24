@@ -5,6 +5,8 @@ import test from "node:test";
 import {
   activationBlockedReason,
   canActivate,
+  finishSetupLabel,
+  goLiveBarState,
   isInSetup,
   knownMissing,
   setupChecklist,
@@ -69,4 +71,53 @@ test("setupChecklist flags each row done or missing", () => {
     ]
   );
   assert.equal(rows.find((row) => row.key === "hours")?.sectionId, "hours");
+});
+
+test("finishSetupLabel: count when known, 'go live' when nothing is left", () => {
+  assert.equal(finishSetupLabel(null), "Finish setup");
+  assert.equal(finishSetupLabel(["hours", "phone"]), "Finish setup · 2 left");
+  assert.equal(finishSetupLabel([]), "Finish setup & go live");
+});
+
+test("goLiveBarState: no bar outside setup", () => {
+  for (const status of ["active", "owner_deactivated", "closed_pending_reopen"] as const) {
+    assert.equal(goLiveBarState(status, ["hours"]), null, status);
+    assert.equal(goLiveBarState(status, []), null, status);
+  }
+});
+
+test("goLiveBarState: counts what is left, in checklist order", () => {
+  const one = goLiveBarState("coming_soon", ["hours"]);
+  assert.equal(one?.kind, "missing");
+  assert.equal(one?.headline, "1 thing left: add hours");
+  assert.equal(one?.reason, "To go live: add your opening hours.");
+  assert.deepEqual(one?.items.map((item) => item.key), ["hours"]);
+  assert.equal(one?.hasUnknown, false);
+  assert.equal(one?.count, 1);
+  const two = goLiveBarState("coming_soon", ["hours", "phone"]);
+  assert.equal(two?.kind, "missing");
+  assert.equal(two?.headline, "2 things left: add phone, add hours");
+  assert.deepEqual(two?.items.map((item) => item.sectionId), ["info", "hours"]);
+});
+
+test("goLiveBarState: ready once nothing is missing", () => {
+  assert.deepEqual(goLiveBarState("coming_soon", []), {
+    kind: "ready",
+    headline: "All set — ready to go live",
+    reason: null,
+    count: 0,
+    items: [],
+    hasUnknown: false,
+  });
+});
+
+test("goLiveBarState: an unknown key from a newer server keeps the bar in 'missing'", () => {
+  const state = goLiveBarState("coming_soon", ["something_new"]);
+  assert.equal(state?.kind, "missing");
+  assert.equal(state?.headline, "1 thing left: finish the remaining details");
+  assert.equal(state?.reason, "Finish setting up this listing first.");
+  assert.equal(state?.hasUnknown, true);
+  assert.deepEqual(state?.items, []);
+  const mixed = goLiveBarState("coming_soon", ["hours", "something_new"]);
+  assert.equal(mixed?.headline, "2 things left: add hours, finish the remaining details");
 });

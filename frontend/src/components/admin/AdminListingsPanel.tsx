@@ -32,7 +32,7 @@ import OpenStatusBadge from "@/components/ui/OpenStatusBadge";
 import { PencilIcon, PlusIcon, TrashIcon } from "@/components/ui/icons";
 import type { LocationSummary } from "@/types/location";
 import type { RestaurantBrand } from "@/types/restaurant";
-import { brandHref } from "@/lib/restaurant/urls";
+import { ownerBrandPageLink, ownerLocationPageLink } from "@/lib/restaurant/urls";
 
 export interface BrandWithLocations {
   brand: RestaurantBrand;
@@ -398,6 +398,8 @@ function BrandRow({
 }) {
   const { brand, locations, locationsError } = entry;
   const isDeleted = Boolean(brand.deleted_at);
+  // `brand.location_count` is the ACTIVE location count.
+  const brandLink = ownerBrandPageLink(brand.slug, brand.location_count);
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [restoring, setRestoring] = useState(false);
@@ -477,7 +479,7 @@ function BrandRow({
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {isDeleted ? (
             <button
               type="button"
@@ -497,14 +499,18 @@ function BrandRow({
                 <PlusIcon className="h-3.5 w-3.5" />
                 Add location
               </Link>
-              <a
-                href={brandHref(brand.slug)}
-                target="_blank"
-                rel="noreferrer"
-                className="flex min-h-[40px] items-center justify-center rounded-brand-control border border-brand-border px-3 text-xs font-semibold text-brand-ink-muted transition hover:bg-brand-chip"
-              >
-                View live
-              </a>
+              {/* Only for 2+ active locations (the brand URL is then a landing
+                  page); a single location has its own per-row link below. */}
+              {brandLink && (
+                <a
+                  href={brandLink.href}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex min-h-[40px] items-center justify-center rounded-brand-control border border-brand-border px-3 text-xs font-semibold text-brand-ink-muted transition hover:bg-brand-chip"
+                >
+                  {brandLink.label}
+                </a>
+              )}
               {!confirming && (
                 <button
                   type="button"
@@ -586,6 +592,7 @@ function BrandRow({
             <LocationRow
               key={location.id}
               location={location}
+              brandSlug={brand.slug}
               onDeactivated={() => onLocationDeactivated(location.id)}
             />
           ))}
@@ -597,11 +604,14 @@ function BrandRow({
 
 function LocationRow({
   location,
+  brandSlug,
   onDeactivated,
 }: {
   location: LocationSummary;
+  brandSlug: string;
   onDeactivated: () => void;
 }) {
+  const pageLink = ownerLocationPageLink(brandSlug, location);
   const [confirming, setConfirming] = useState(false);
   const [deactivating, setDeactivating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -656,7 +666,7 @@ function LocationRow({
         {error && <p className="mt-1 text-xs text-brand-closed">{error}</p>}
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Link
           href={`/portal/locations/${location.id}`}
           className="flex min-h-[36px] items-center gap-1.5 rounded-brand-control border border-brand-border px-3 text-xs font-semibold text-brand-ink transition hover:bg-brand-chip"
@@ -664,6 +674,14 @@ function LocationRow({
           <PencilIcon className="h-3.5 w-3.5" />
           Edit
         </Link>
+        <a
+          href={pageLink.href}
+          target="_blank"
+          rel="noreferrer"
+          className="flex min-h-[36px] items-center justify-center rounded-brand-control border border-brand-border px-3 text-xs font-semibold text-brand-ink-muted transition hover:bg-brand-chip"
+        >
+          {pageLink.label}
+        </a>
         <button
           type="button"
           onClick={handleDeactivate}
