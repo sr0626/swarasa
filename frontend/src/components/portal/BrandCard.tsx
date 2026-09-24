@@ -120,6 +120,16 @@ export default function BrandCard({
                   <LocationTierBadge isPaid={location.is_paid} paidUntil={location.paid_until} />
                   <LocationStatusBadge status={location.status} />
                   <LocationManagersSummary managers={managers} error={managersError} />
+                  {/* Deals are the thing owners/managers update most often — a
+                      one-tap shortcut to the editor's "Deals & specials"
+                      section (/deals redirects to it). */}
+                  <Link
+                    href={`/portal/locations/${location.id}/deals`}
+                    aria-label={`Deals for ${location.location_name ?? location.address_line1}`}
+                    className="ml-auto inline-flex min-h-[44px] items-center rounded-brand-pill border border-brand-border bg-white px-4 text-sm font-semibold text-brand-ink transition hover:bg-brand-bg"
+                  >
+                    Deals
+                  </Link>
                 </div>
               </li>
             ))}
