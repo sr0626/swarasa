@@ -10,7 +10,15 @@
 // Assignment is owner-controlled, so the empty state and footnote say so.
 // Server Component — links only.
 import Link from "next/link";
-import { HeartIcon, LocationPinIcon, MenuBookIcon, PencilIcon, TagIcon } from "@/components/ui/icons";
+import {
+  HeartIcon,
+  LocationPinIcon,
+  MenuBookIcon,
+  PencilIcon,
+  PhoneIcon,
+  TagIcon,
+} from "@/components/ui/icons";
+import { formatPhone } from "@/lib/formatPhone";
 import LocationStatusChip from "@/components/console/LocationStatusChip";
 import {
   cardClass,
@@ -79,9 +87,16 @@ export default function ManagedLocationsPanel({
                     <LocationPinIcon className="mt-0.5 h-4 w-4 shrink-0 text-brand-ink-subtle" />
                     <span className="break-words">
                       {location.location_name ? `${location.location_name} — ` : ""}
-                      {location.address_line1}, {location.city}, {location.state}
+                      {location.address_line1}, {location.city}, {location.state}{" "}
+                      {location.postal_code}
                     </span>
                   </p>
+                  {location.phone && (
+                    <p className="mt-0.5 flex items-start gap-2 text-sm text-brand-ink-muted">
+                      <PhoneIcon className="mt-0.5 h-4 w-4 shrink-0 text-brand-ink-subtle" />
+                      <span>{formatPhone(location.phone)}</span>
+                    </p>
+                  )}
                   <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 pl-6">
                     <LocationStatusChip status={todayStatus} />
                     {/* Dashboard-only stat (backend ManagedLocationOut.

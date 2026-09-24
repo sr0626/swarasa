@@ -16,6 +16,7 @@ import {
   HeartIcon,
   LocationPinIcon,
   PencilIcon,
+  PhoneIcon,
   PlusIcon,
   StoreIcon,
   TagIcon,
@@ -28,6 +29,7 @@ import LocationManagersSummary from "@/components/portal/LocationManagersSummary
 import type { LocationWithManagers } from "@/types/location";
 import type { RestaurantBrand } from "@/types/restaurant";
 import { finishSetupLabel, isInSetup } from "@/lib/portal/listingSetup";
+import { formatPhone } from "@/lib/formatPhone";
 import { ownerBrandPageLink, ownerLocationPageLink } from "@/lib/restaurant/urls";
 
 export default function BrandCard({
@@ -145,9 +147,16 @@ export default function BrandCard({
                         <LocationPinIcon className="h-4 w-4 shrink-0 text-brand-ink-subtle" />
                         <span className="break-words">
                           {location.location_name ? `${location.location_name} — ` : ""}
-                          {location.address_line1}, {location.city}, {location.state}
+                          {location.address_line1}, {location.city}, {location.state}{" "}
+                          {location.postal_code}
                         </span>
                       </span>
+                      {location.phone && (
+                        <span className="flex items-center gap-1.5 text-sm text-brand-ink-muted">
+                          <PhoneIcon className="h-4 w-4 shrink-0 text-brand-ink-subtle" />
+                          {formatPhone(location.phone)}
+                        </span>
+                      )}
                       <span className="flex flex-wrap items-center gap-1.5">
                         <LocationStatusBadge status={location.status} />
                         <LocationTierBadge
