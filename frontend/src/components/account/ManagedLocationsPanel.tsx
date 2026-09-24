@@ -11,7 +11,7 @@
 // Assignment is owner-controlled, so the empty state and footnote say so.
 // Server Component — links only.
 import Link from "next/link";
-import { HeartIcon, LocationPinIcon, PencilIcon } from "@/components/ui/icons";
+import { HeartIcon, LocationPinIcon, MenuBookIcon, PencilIcon, TagIcon } from "@/components/ui/icons";
 import LocationStatusChip from "@/components/console/LocationStatusChip";
 import {
   cardClass,
@@ -92,6 +92,8 @@ export default function ManagedLocationsPanel({
                     </span>
                   </div>
                 </div>
+                {/* Edit / Deals / Menu are one size (same shared box classes);
+                    only fill vs outline differs. They wrap as a group. */}
                 <div className="flex flex-wrap gap-2">
                   <Link
                     href={`/portal/locations/${location.id}`}
@@ -108,6 +110,7 @@ export default function ManagedLocationsPanel({
                     aria-label={`Deals for ${label}`}
                     className={secondaryLinkClass}
                   >
+                    <TagIcon className="h-4 w-4" />
                     Deals
                   </Link>
                   <Link
@@ -115,6 +118,7 @@ export default function ManagedLocationsPanel({
                     aria-label={`Menu for ${label}`}
                     className={secondaryLinkClass}
                   >
+                    <MenuBookIcon className="h-4 w-4" />
                     Menu
                   </Link>
                 </div>

@@ -49,14 +49,14 @@ interface LocationPageProps {
  * /account -- /portal/dashboard is only a redirect there, for both roles,
  * since the manager console redesign), and an admin (who would be bounced
  * to /login from /account) goes back to the admin listings panel. */
-function backTarget(role: string): { href: string; label: string } {
+function backTarget(role: string): { href: string; label: string; short: string } {
   switch (role) {
     case "admin":
-      return { href: "/admin/listings", label: "Back to listings" };
+      return { href: "/admin/listings", label: "Back to listings", short: "Listings" };
     case "owner":
-      return { href: "/account", label: "Back to your business account" };
+      return { href: "/account", label: "Back to your business account", short: "Business account" };
     default:
-      return { href: "/account", label: "Back to your locations" };
+      return { href: "/account", label: "Back to your locations", short: "Locations" };
   }
 }
 
@@ -210,16 +210,21 @@ export default async function PortalLocationPage({ params, searchParams }: Locat
     <main className="min-h-screen bg-brand-bg">
       <TopBar />
       <section className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
-        <Link href={back.href} className="text-sm font-medium text-brand-ink-subtle hover:text-brand-ink">
-          {back.label}
-        </Link>
+        {/* The "Back to ..." link lives in the sticky bar (EditorSectionNav),
+            so it stays reachable while scrolling. */}
+        <EditorSectionNav
+          sections={sections}
+          backHref={back.href}
+          backLabel={back.label}
+          backShortLabel={back.short}
+        />
         {/* Heading row: the name, with the listing-status label right next to
             it. For owner/admin the label is a small menu holding the status
             actions (change status, request reopen, permanently remove) that
             used to live in a separate "Listing status" panel; a manager sees a
             plain label. The chip is a sibling of the <h1>, not inside it, so
             the heading text stays just the name. */}
-        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+        <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1">
           <h1 className="font-display text-2xl font-bold text-brand-ink sm:text-3xl">
             {location.brand_name}
             {location.location_name ? ` — ${location.location_name}` : ""}
@@ -235,8 +240,6 @@ export default async function PortalLocationPage({ params, searchParams }: Locat
           {location.address_line1}, {location.city}, {location.state} {location.postal_code}
         </p>
         {newListing && <NewListingNotice mapPosition={newListing} />}
-
-        <EditorSectionNav sections={sections} />
 
         <div className="mt-6 flex flex-col gap-6">
           {sections.map((section) => (

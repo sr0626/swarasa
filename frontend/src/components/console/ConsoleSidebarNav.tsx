@@ -19,6 +19,7 @@ import {
   UserIcon,
 } from "@/components/ui/icons";
 import type { IconProps } from "@/components/ui/icons";
+import { activeNavHref } from "@/components/console/navItems";
 import type { ConsoleNavIcon, ConsoleNavItem } from "@/components/console/navItems";
 
 const ICONS: Record<ConsoleNavIcon, (props: IconProps) => JSX.Element> = {
@@ -31,10 +32,6 @@ const ICONS: Record<ConsoleNavIcon, (props: IconProps) => JSX.Element> = {
   chart: BarChartIcon,
 };
 
-function isActive(pathname: string, href: string): boolean {
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
-
 export default function ConsoleSidebarNav({
   items,
   label,
@@ -44,6 +41,7 @@ export default function ConsoleSidebarNav({
   label: string;
 }) {
   const pathname = usePathname() ?? "";
+  const current = activeNavHref(pathname, items);
   return (
     <nav
       aria-label={label}
@@ -51,7 +49,7 @@ export default function ConsoleSidebarNav({
     >
       <ul className="flex gap-2 px-1 lg:flex-col lg:gap-1 lg:px-0">
         {items.map(({ href, label: itemLabel, icon, subItems }) => {
-          const active = isActive(pathname, href);
+          const active = href === current;
           const Icon = ICONS[icon];
           return (
             <li key={href} className="shrink-0 lg:shrink">

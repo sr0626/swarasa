@@ -39,12 +39,14 @@ export const OWNER_NAV_ITEMS: ReadonlyArray<ConsoleNavItem> = [
     icon: "store",
     subItems: [
       { href: "/account#restaurants", label: "My restaurants" },
-      { href: "/account#activity", label: "Activity" },
       { href: "/account#profile", label: "Profile" },
       { href: "/account#security", label: "Security" },
       { href: "/account#privacy", label: "Data & privacy" },
     ],
   },
+  // Its own page (not an in-page section): the activity feed is only fetched
+  // and rendered when this item is selected -- see app/account/activity.
+  { href: "/account/activity", label: "Activity", icon: "clock" },
   { href: "/portal/brands/new", label: "Add a restaurant", icon: "plus" },
 ];
 
@@ -54,12 +56,27 @@ export const OWNER_NAV_ITEMS: ReadonlyArray<ConsoleNavItem> = [
 // submenu under one umbrella label. "My locations" has no hash -- it's
 // simply the top of the page, the default view. The `#profile` anchor id
 // is the same convention OWNER_NAV_ITEMS already uses for its own
-// `/account#profile` link -- keep the ids on ManagerAccountView's
-// activity/profile sections in sync with these hrefs. "Activity" added
-// 2026-09-22 alongside the manager activity feed (GET /auth/me/activity
-// broadened to serve manager callers -- see ManagerAccountView.tsx).
+// `/account#profile` link -- keep the id on ManagerAccountView's profile
+// section in sync with that href. "Activity" (2026-09-22, its own page since
+// 2026-09-24) is the manager activity feed (GET /auth/me/activity broadened
+// to serve manager callers) at /account/activity, fetched only on that page.
 export const MANAGER_NAV_ITEMS: ReadonlyArray<ConsoleNavItem> = [
   { href: "/account", label: "My locations", icon: "store" },
-  { href: "/account#activity", label: "Activity", icon: "clock" },
+  { href: "/account/activity", label: "Activity", icon: "clock" },
   { href: "/account#profile", label: "Profile", icon: "user" },
 ];
+
+function isActive(pathname: string, href: string): boolean {
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+/** The single active item: the LONGEST matching href, so "/account" (Business
+ * account / My locations) is not also highlighted on "/account/activity".
+ * Hash-only hrefs ("/account#profile") never match a pathname. */
+export function activeNavHref(pathname: string, items: ReadonlyArray<{ href: string }>): string | null {
+  let best: string | null = null;
+  for (const { href } of items) {
+    if (isActive(pathname, href) && (best === null || href.length > best.length)) best = href;
+  }
+  return best;
+}

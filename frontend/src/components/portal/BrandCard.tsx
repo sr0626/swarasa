@@ -11,7 +11,7 @@
 // Server Component — no interactivity here, just links into the location
 // editor (`/portal/locations/{id}`) and the brand's public page.
 import Link from "next/link";
-import { EyeIcon, HeartIcon, LocationPinIcon, PencilIcon, StoreIcon } from "@/components/ui/icons";
+import { EyeIcon, HeartIcon, LocationPinIcon, PencilIcon, StoreIcon, TagIcon } from "@/components/ui/icons";
 import { secondaryLinkClass } from "@/components/account/accountShared";
 import LocationStatusChip from "@/components/console/LocationStatusChip";
 import LocationTierBadge from "@/components/portal/LocationTierBadge";
@@ -126,8 +126,9 @@ export default function BrandCard({
                   <Link
                     href={`/portal/locations/${location.id}/deals`}
                     aria-label={`Deals for ${location.location_name ?? location.address_line1}`}
-                    className="ml-auto inline-flex min-h-[44px] items-center rounded-brand-pill border border-brand-border bg-white px-4 text-sm font-semibold text-brand-ink transition hover:bg-brand-bg"
+                    className={`ml-auto ${secondaryLinkClass}`}
                   >
+                    <TagIcon className="h-4 w-4" />
                     Deals
                   </Link>
                 </div>

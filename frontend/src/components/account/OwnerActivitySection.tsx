@@ -48,6 +48,7 @@ export default function OwnerActivitySection({
   loadError,
   heading = "Recent activity",
   description = "Changes to your restaurants and locations, including edits made by your managers.",
+  headingAs: Heading = "h2",
 }: {
   initialPage: PaginatedResponse<OwnerActivity> | null;
   loadError: string | null;
@@ -55,6 +56,8 @@ export default function OwnerActivitySection({
   heading?: string;
   /** Subhead under the heading -- defaults to the owner copy; manager console passes its own. */
   description?: string;
+  /** Heading element: "h1" when the feed is the page's own main content (/account/activity). */
+  headingAs?: "h1" | "h2";
 }) {
   const [rows, setRows] = useState<OwnerActivity[]>(initialPage?.results ?? []);
   const [page, setPage] = useState(initialPage?.page ?? 1);
@@ -85,9 +88,9 @@ export default function OwnerActivitySection({
     <section aria-labelledby="activity-heading" className={cardClass}>
       <div className="flex items-center gap-2">
         <ClockIcon className="h-5 w-5 text-brand-ink-muted" />
-        <h2 id="activity-heading" className="font-display text-xl font-bold text-brand-ink">
+        <Heading id="activity-heading" className="font-display text-xl font-bold text-brand-ink">
           {heading}
-        </h2>
+        </Heading>
       </div>
       <p className="mt-1 text-sm text-brand-ink-muted">{description}</p>
 
