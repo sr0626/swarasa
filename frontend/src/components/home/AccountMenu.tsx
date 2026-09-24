@@ -10,10 +10,10 @@
 //
 // Rendered on every page (TopBar is shared across "/", "/login", "/search",
 // "/about", "/contact", "/terms", "/signup", "/forgot-password", "/account")
-// so it deliberately does NOT hide itself at the `sm:` breakpoint the way
-// the signed-out "For Owners"/"Sign In" links do — Logout in particular has
-// to stay reachable on a 375px viewport, since nothing else in this app
-// (no hamburger nav) exposes it.
+// so it deliberately does NOT hide itself at any breakpoint — Logout in
+// particular has to stay reachable on a 375px viewport. (The top bar's mobile
+// menu button, TopBarNav.tsx, only holds navigation links; account items and
+// Logout live here, always.)
 import { useEffect, useRef, useState, type FocusEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -187,9 +187,15 @@ export default function AccountMenu({
             setOpen(true);
           }
         }}
-        className="flex min-h-[44px] items-center gap-1.5 whitespace-nowrap rounded-brand-pill border border-brand-border bg-white px-3 text-sm font-semibold text-brand-ink transition hover:bg-brand-chip sm:px-4"
+        className="flex min-h-[44px] items-center gap-1.5 whitespace-nowrap rounded-brand-pill border border-brand-border bg-white px-2.5 text-sm font-semibold text-brand-ink transition hover:bg-brand-chip sm:px-4"
       >
-        <span className="max-w-[96px] truncate sm:max-w-[180px]">Hello, {greetingName}</span>
+        {/* "Hello, " is visual clutter on a phone (the 375px header is full once
+            the menu button sits beside this pill), so it is screen-reader-only
+            there; the name itself still shows, truncated. */}
+        <span className="max-w-[48px] truncate sm:max-w-[180px]">
+          <span className="max-sm:sr-only">Hello, </span>
+          {greetingName}
+        </span>
         <ChevronDownIcon
           className={`h-4 w-4 shrink-0 text-brand-ink-subtle transition-transform ${open ? "rotate-180" : ""}`}
         />
