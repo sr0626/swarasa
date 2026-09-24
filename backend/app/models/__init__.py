@@ -32,6 +32,8 @@ from app.models.admin_free_offer import AdminFreeOffer
 from app.models.restaurant_hours import RestaurantHours
 from app.models.user_profile import UserProfile
 from app.models.deal import Deal
+from app.models.menu_section import MenuSection
+from app.models.menu_item import MenuItem
 from app.models.user_activity_event import UserActivityEvent
 
 __all__ = [
@@ -54,5 +56,7 @@ __all__ = [
     "RestaurantHours",
     "UserProfile",
     "Deal",
+    "MenuSection",
+    "MenuItem",
     "UserActivityEvent",
 ]

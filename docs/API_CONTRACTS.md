@@ -18,10 +18,11 @@ per root CLAUDE.md "Permission model" — never trust the JWT claims
 alone for manager access (`location_manager` table check).
 
 **Full menu vs. photos (DECISIONS.md "Full menu with prices moved to
-free tier", "Photo gallery: 2 photos free, 10 photos paid"):** no menu
-endpoint exists in Phase 1 — menu CRUD is Phase 2 (`backend/CLAUDE.md`
-"Do NOT Build Yet"), so no response below returns menu/price data.
-Photo *response fields* are modeled below (`cover_photo_url`,
+free tier", "Photo gallery: 2 photos free, 10 photos paid"):** the menu
+(with prices) is a free-tier feature served by its own public endpoint,
+`GET /locations/{id}/menu` (see "Menu (`menu_section`, `menu_item`)"
+below, added 2026-09-24) — it is deliberately NOT embedded in `GET
+/locations/{id}`. Photo *response fields* are modeled below (`cover_photo_url`,
 `gallery_photos`) because the gating behavior is a Phase 1 concern for
 the owner portal (`backend/CLAUDE.md` "up to 2 gallery photos").
 
@@ -594,8 +595,8 @@ location (see `frontend/src/lib/api/locations.ts` `getLocationById`'s
   frontend should treat the same as `is_closed: null`).
 - `is_open_now` is the computed display status (see `/search` notes) —
   `null` when the current day's `is_closed` is `null` (hours unknown).
-- Full menu with prices is **not** in this response — no menu endpoint
-  exists in Phase 1 (see the note at the top of this doc).
+- The menu is **not** in this response — read it from the separate public
+  `GET /locations/{id}/menu` (see "Menu (`menu_section`, `menu_item`)").
 - `cover_photo_url` — the `restaurant_photo` row for this location with
   `is_cover=true` (at most one), resolved to a CloudFront URL from its
   `s3_key`. `null` if no cover photo has been uploaded yet. See
@@ -1185,6 +1186,217 @@ How the frontend consumes the endpoints above (typed client
   (`RestaurantUpcomingDeals`) lists `upcoming_deals` (title, Deal/Special
   badge, description, days, date range or "Ongoing", next date) and renders
   nothing when the field is `null`/empty.
+
+---
+
+## Menu (`menu_section`, `menu_item`)
+
+Added 2026-09-24 — the menu engine, same pull-forward posture as deals
+(root `CLAUDE.md` scope guardrail overridden by direct user instruction;
+Stripe/billing untouched). **Free-tier feature: no `is_paid` check gates
+the menu or its prices** (`docs/DECISIONS.md` "Full menu with prices moved
+to free tier") and the read is **public** (anonymous included), unlike deal
+content. Schema: `docs/DATA_MODEL.md` "menu_section" / "menu_item".
+
+Shape: an owner-named optional **group** ("Appetizers", "Main Course" —
+free text, each with its own optional description) holds **items**; an item
+may also be **ungrouped** (`section_id: null`) and ungrouped items render
+FIRST, under no heading. Everything is free text, trimmed server-side
+(never trust the client): group `name` required (<=100), group
+`description` optional (<=500); item `name` required (<=150), `description`
+optional (<=1000).
+
+**One price OR sizes.** An item has EITHER a single free-text `price`
+(required non-empty after trim, <=50 chars; `"$12"`, `"12 / 18"`, `"Market
+price"` — never parsed or coerced to a number) OR `sizes`: an ordered list
+of 1..6 `{ "label": "Personal", "price": "$10" }` entries (each `label` <=40
+and `price` <=50, both required non-empty after trim; array order = display
+order). Exactly one of the two is present on every item — "price is
+mandatory" holds either way. Enforced as: `422` on create with both or
+neither, on any request whose `sizes` is `[]`, has >6 entries, or has an
+entry missing/blank `label` or `price`, and on a PATCH sending both
+non-null; on PATCH, sending the new form's field clears the other
+(`{"sizes":[…]}` clears `price`; `{"price":"$12"}` clears `sizes`), and a
+PATCH whose merged result would have neither (e.g. `{"price": null}` on a
+single-price item) is a `400`.
+
+**Caps** (`409`): at most 30 groups (`menu_section_limit_reached`) and 300
+items (`menu_item_limit_reached`) per location.
+
+Auth for every WRITE: owner (owns parent brand), manager with an active
+`location_manager` row for this location, or admin — the same
+`require_location_write_access` dependency as deals/photos/hours
+(`401` anonymous; `403` unassigned manager / other owner / registered_user;
+`404` for a soft-deleted brand's location, admin excepted). A group/item id
+that belongs to a different location is `404`.
+
+Audit: every write on `menu_section` and `menu_item` writes an `audit_log`
+row (`table_name` = `menu_section` | `menu_item`, `action` = `create` |
+`update` | `delete`, full before/after field snapshots — for items
+including `price`, `sizes`, `section_id`, `display_order` and the photo
+keys). A reorder writes one `update` row per row whose `display_order`
+actually changed.
+
+### GET /locations/{id}/menu
+
+Auth: none (public) — optional bearer token only matters for the hidden-
+location rule below (and it's also the editor's read: there are no
+management-only fields). Applies the same visibility gate as `GET
+/locations/{id}`: `404` for a missing location, a soft-deleted brand's
+location (admin excepted), or a non-`active` location the caller can't
+manage (owner / admin / assigned manager can still read it).
+
+Response:
+```json
+{
+  "location_id": 456,
+  "menu_photos_enabled": false,
+  "ungrouped_items": [
+    { "id": 3, "location_id": 456, "section_id": null, "name": "Masala Chai",
+      "description": null, "price": "$3", "sizes": null, "display_order": 0,
+      "photo_url": null, "photo_thumbnail_url": null }
+  ],
+  "sections": [
+    {
+      "id": 10, "name": "Appetizers", "description": "Great to share.",
+      "display_order": 0,
+      "items": [
+        { "id": 4, "location_id": 456, "section_id": 10, "name": "Veg Biryani",
+          "description": "Fragrant basmati rice.", "price": null,
+          "sizes": [ { "label": "Personal", "price": "$10" },
+                     { "label": "Double", "price": "$15" },
+                     { "label": "Family Pack", "price": "$25" } ],
+          "display_order": 0, "photo_url": null, "photo_thumbnail_url": null }
+      ]
+    }
+  ]
+}
+```
+`sections` and each `items` list are ordered by `display_order` (ties by
+id); a group with no items is returned (the editor needs it) — the public
+page just doesn't render it. An empty menu is `200` with empty lists (the
+public page renders nothing). Not paginated (bounded by the caps above).
+`menu_photos_enabled` mirrors the platform flag below; `photo_url` /
+`photo_thumbnail_url` are ALWAYS `null` while it is `false`, and `null` for
+an item with no photo.
+
+### POST /locations/{id}/menu/sections
+
+Body: `{ "name": "Appetizers", "description"?: "…" }` — `name` required.
+Appended after the existing groups. Response `201`:
+`{ "id", "location_id", "name", "description", "display_order" }`.
+
+### PATCH /locations/{id}/menu/sections/{section_id}
+
+Body: `{ "name"?, "description"? }` — `exclude_unset` semantics: omitted =
+unchanged; `description: null` (or blank) clears it; `name: null` is `400`.
+Response `200`, same shape as create.
+
+### DELETE /locations/{id}/menu/sections/{section_id}
+
+Query: `delete_items` (bool, default `false`). **Default is
+non-destructive:** the group's items are kept and MOVED TO UNGROUPED
+(appended after the existing ungrouped items, relative order preserved).
+`?delete_items=true` deletes the group's items with it. Each affected item
+and the group get their own audit row, in one transaction. `204`.
+
+### PUT /locations/{id}/menu/sections/order
+
+Body: `{ "ids": [10, 12, 11] }` — the FULL set of this location's group
+ids in the new order. `409 menu_out_of_date` if the set doesn't match the
+current groups exactly (stale client — reload); duplicates `422`. Response
+`200`: the full menu (same shape as `GET /locations/{id}/menu`).
+
+### POST /locations/{id}/menu/items
+
+Body: `{ "name", "description"?, "price"?, "sizes"?, "section_id"? }` —
+exactly one of `price` / `sizes` (see "One price OR sizes"); `section_id`
+null/omitted = ungrouped, otherwise must be a group of this location
+(`404` if not). Appended at the end of its group. Response `201`, one
+item object (same shape as in `GET …/menu`).
+
+### PATCH /locations/{id}/menu/items/{item_id}
+
+Body: any of `name`, `description`, `price`, `sizes`, `section_id` —
+`exclude_unset` semantics; `description: null`/blank clears; `section_id:
+null` ungroups; a `section_id` change appends the item at the end of the
+destination group. Pricing-form rules as above. Response `200`, one item.
+
+### DELETE /locations/{id}/menu/items/{item_id}
+
+`204`. Real delete (audited with the full before-snapshot).
+
+### PUT /locations/{id}/menu/items/order
+
+Body: `{ "section_id": 10 | null, "ids": [4, 5] }` — the FULL set of item
+ids currently in that group (`null` = the ungrouped list), new order. Same
+`409 menu_out_of_date` / `422` / unknown-group `404` rules as the group
+reorder. Response `200`: the full menu.
+
+### Item photos — built, switched OFF
+
+A single platform-level flag, the `platform_config` row
+`menu_item_photos_enabled` (default **off**; a missing row, garbage value
+or `"false"` all read as off), gates the whole photo capability. **When
+off:** the three photo routes below reject with `403` `{"detail": "Menu
+item photos are not available.", "code": "menu_photos_disabled"}`; NO
+response (public or management) carries a photo URL; `menu_photos_enabled`
+is `false` so the editor hides the photo control entirely. Stored photo
+keys are kept, so turning the flag back on restores them. **When on:**
+everything below works. The human flips the flag with the `set_platform_flag`
+management command (`docs/SCRIPTS.md`). FUTURE INTENT (deliberately not
+implemented — no `is_paid` logic now): when paid tiers land, the gate
+becomes "flag on AND the location `is_paid`".
+
+Same presigned-POST + resize-Lambda pipeline as location photos (BRD 5.3),
+under a menu-scoped key: `raw/locations/{id}/menu/{uuid}.jpg|png` (the
+existing `raw/` prefix, so the S3 event notification / resize Lambda / IAM
+need no change) → `processed/…` (1200px) and `thumbnails/…` (400px).
+JPEG/PNG only; **2 MB** cap (`content-length-range`, tighter than the 5 MB
+gallery cap).
+
+- `POST /locations/{id}/menu/photo-upload-url` — body `{ "content_type":
+  "image/jpeg" }`; response `200` identical in shape to `POST
+  /locations/{id}/photos/upload-url` (`upload_url`, `fields`, `s3_key`,
+  `expires_in`); unsupported type `400 unsupported_content_type`.
+- `PUT /locations/{id}/menu/items/{item_id}/photo` — body `{ "s3_key":
+  "<raw key from the call above>" }`; attaches or replaces (stores the
+  predicted processed/thumbnail keys immediately, like `POST
+  /locations/{id}/photos`). The key must be exactly one this location's
+  upload-url call could have issued, else `400 invalid_s3_key`. Response
+  `200`: the item with `photo_url` / `photo_thumbnail_url` set. Audited.
+- `DELETE /locations/{id}/menu/items/{item_id}/photo` — clears the item's
+  photo; response `200`: the item. Audited. (The S3 objects are not
+  deleted, same as gallery photos today.)
+
+### Frontend surface (added 2026-09-24)
+
+Typed client `frontend/src/lib/api/menu.ts`, types `frontend/src/types/menu.ts`,
+validation `frontend/src/lib/validation/menu.ts` (mirrors the rules above).
+
+- **Management UI** — "Menu" section of the location editor
+  (`/portal/locations/{id}`, `#menu`; `/portal/locations/{id}/menu`
+  redirects there — that's where the "Menu" button on the manager/owner
+  cards lands). Same access rule as deals: owner, assigned manager, admin.
+  Add/edit/delete groups (name + optional description) and items (name,
+  optional description, price); each item has a "One price" / "Sizes"
+  switch (sizes: add/remove/reorder up to 6 rows of name + price); a group
+  dropdown (incl. "No group"); up/down reorder buttons for groups and for
+  items within a group; inline validation for name/price/size fields;
+  deletes are two-step (deleting a group offers "keep items" — the
+  default — or "delete items too"). The photo control renders ONLY when
+  `menu_photos_enabled` is true. The editor re-reads the whole menu after
+  every write so it can't drift from the server. No `is_paid` check
+  anywhere.
+- **Public restaurant page** — SSR `RestaurantMenu` between "About" and the
+  report box: ungrouped items first, then groups with their descriptions;
+  item name / description / price, or sizes as "Personal $10 · Double $15 ·
+  Family Pack $25"; a small photo only when the API returned one; renders
+  nothing for an empty menu; a load failure never breaks the page. The
+  JSON-LD gains `hasMenu` (`Menu` → `MenuSection` → `MenuItem`, name +
+  description only — free-text prices can't be a valid `Offer`), and all
+  page JSON-LD is now serialized with `<` escaped (`jsonLdString`) so
+  owner-authored text can't close the `<script>` tag.
 
 ---
 

@@ -9,14 +9,12 @@
 // website, weekly hours) plus the unclaimed-listing claim CTA on the right;
 // single column on mobile. See the components in `components/restaurant/`.
 //
-// No full-menu section here: `docs/API_CONTRACTS.md` has no menu endpoint
-// in Phase 1 ("Full menu with prices is not in this response — no menu
-// endpoint exists in Phase 1"), and root CLAUDE.md's DECISIONS.md-linked
-// "Full menu with prices moved to free tier" note describes a *future*
-// free-tier behavior, not a data model that exists yet. Building menu UI
-// with nothing behind it would mean fabricating content, which the task
-// brief explicitly rules out — this is deferred to whenever Phase 2's
-// menu data model lands, called out again in the PR description.
+// Menu: the public, free-tier menu (`GET /locations/{id}/menu`, grouped with
+// group descriptions, prices/sizes, optional photos) renders between "About"
+// and the report box via `RestaurantMenu`, and is described in the page's
+// JSON-LD as `hasMenu` (names/descriptions only — free-text prices can't be
+// expressed as a schema.org Offer). A menu that fails to load, or is empty,
+// simply doesn't render — it never breaks the listing page.
 //
 // FLAGGED JUDGMENT CALL (see final report): frontend/CLAUDE.md's example
 // schema builds address/telephone/openingHours straight off the fetched
@@ -33,6 +31,8 @@ import { notFound } from "next/navigation";
 import { ApiError } from "@/lib/api/client";
 import { getRestaurantBySlug, getRestaurantLocations } from "@/lib/api/restaurants";
 import { getLocationById, getLocationManagers } from "@/lib/api/locations";
+import { getLocationMenu } from "@/lib/api/menu";
+import { buildMenuSchema, jsonLdString } from "@/lib/menu/jsonld";
 import { getServerSession } from "@/lib/auth/session";
 import { getViewerFollowState } from "@/lib/follow/viewerFollowState";
 import RestaurantHero from "@/components/restaurant/RestaurantHero";
@@ -40,12 +40,14 @@ import RestaurantInfoCard from "@/components/restaurant/RestaurantInfoCard";
 import ClaimCTA from "@/components/restaurant/ClaimCTA";
 import RestaurantAbout from "@/components/restaurant/RestaurantAbout";
 import RestaurantDeals from "@/components/restaurant/RestaurantDeals";
+import RestaurantMenu from "@/components/restaurant/RestaurantMenu";
 import RestaurantUpcomingDeals from "@/components/restaurant/RestaurantUpcomingDeals";
 import EditListingBar from "@/components/restaurant/EditListingBar";
 import RestaurantBackLink from "@/components/restaurant/RestaurantBackLink";
 import TopBar from "@/components/home/TopBar";
 import type { Session } from "@/types/auth";
 import type { LocationDetail } from "@/types/location";
+import type { MenuResponse } from "@/types/menu";
 import type { RestaurantBrand } from "@/types/restaurant";
 
 interface RestaurantPageProps {
@@ -134,12 +136,34 @@ function buildOpeningHoursSchema(location: LocationDetail): string[] {
     .map((hour) => `${SCHEMA_DAY_ABBREVIATIONS[hour.day_of_week]} ${hour.open_time!.slice(0, 5)}-${hour.close_time!.slice(0, 5)}`);
 }
 
-function buildRestaurantSchema(restaurant: RestaurantBrand, location: LocationDetail | null) {
+/** The public menu, or null when it can't be loaded — a menu problem must
+ * never take the listing page down. The token (when signed in) only matters
+ * for the hidden-location owner-preview case, exactly like the location
+ * read; anonymous reads use the 60s-cached public GET. */
+async function loadMenuSafely(
+  location: LocationDetail | null,
+  accessToken?: string
+): Promise<MenuResponse | null> {
+  if (!location) return null;
+  try {
+    return await getLocationMenu(location.id, accessToken);
+  } catch {
+    return null;
+  }
+}
+
+function buildRestaurantSchema(
+  restaurant: RestaurantBrand,
+  location: LocationDetail | null,
+  menu: MenuResponse | null
+) {
+  const hasMenu = buildMenuSchema(menu);
   return {
     "@context": "https://schema.org",
     "@type": "Restaurant",
     name: restaurant.name,
     servesCuisine: restaurant.cuisine_tags.map((tag) => tag.display_name),
+    ...(hasMenu ? { hasMenu } : {}),
     ...(location
       ? {
           address: {
@@ -191,13 +215,17 @@ export default async function RestaurantPage({ params }: RestaurantPageProps) {
   const canEdit = await canEditListing(location, session);
   const isAdmin = session?.role === "admin";
   const followState = await getViewerFollowState(session);
+  const menu = await loadMenuSafely(location, session?.accessToken);
 
   return (
     <>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: JSON.stringify(buildRestaurantSchema(restaurant, location)),
+          // `jsonLdString` (not bare JSON.stringify): owner-authored menu
+          // text is in this payload, so `<` is \u-escaped and a stray
+          // `</script>` in a dish name can't break out of the tag.
+          __html: jsonLdString(buildRestaurantSchema(restaurant, location, menu)),
         }}
       />
       <main className="min-h-screen bg-brand-bg">
@@ -285,6 +313,9 @@ export default async function RestaurantPage({ params }: RestaurantPageProps) {
               {location && (
                 <RestaurantAbout about={location.about} specialties={location.specialties} />
               )}
+
+              {/* Public, free-tier menu (renders nothing when empty). */}
+              <RestaurantMenu menu={menu} />
 
               <div className="flex flex-col items-start gap-3 rounded-brand-card border border-brand-border bg-white p-5 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm text-brand-ink-muted">

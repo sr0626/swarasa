@@ -190,6 +190,21 @@ async def get_location(
     `frontend/src/app/portal/locations/[id]/page.tsx`. `current_user` is
     `None` for the (very common) anonymous/public caller.
     """
+    location = await get_readable_location_or_404(db, location_id, current_user)
+    return await _location_to_out(db, location, current_user)
+
+
+async def get_readable_location_or_404(
+    db: AsyncSession, location_id: int, current_user=None
+) -> RestaurantLocation:
+    """The visibility gate behind every PUBLIC read of a location's data
+    (`GET /locations/{id}`, `GET /locations/{id}/menu`): 404 — never 403 —
+    when the location doesn't exist, when its brand is soft-deleted (admin
+    excepted), or when it's hidden (any non-`active` status) from a caller
+    who is not its owner/admin/assigned manager. Extracted from
+    `get_location` unchanged so every public sub-resource applies exactly
+    the same rule.
+    """
     location = await db.get(RestaurantLocation, location_id)
     if location is None:
         raise AppError(404, "Location not found", "not_found")
@@ -204,7 +219,7 @@ async def get_location(
         db, location, current_user
     ):
         raise AppError(404, "Location not found", "not_found")
-    return await _location_to_out(db, location, current_user)
+    return location
 
 
 async def get_location_or_404(db: AsyncSession, location_id: int) -> RestaurantLocation:
@@ -463,8 +478,10 @@ async def remove_location(db: AsyncSession, location_id: int, current_user) -> N
     Rows this cascades away via the DB's own FK actions (never done here
     manually — `app/models/*.py` already declares each one, same pattern
     `delete_restaurant` above relies on for its own `ON DELETE RESTRICT`):
-    `restaurant_hours` (CASCADE), `restaurant_photo` (CASCADE),
-    `location_reopen_request` (CASCADE — safe, guardrail 4 above already
+    `restaurant_hours` (CASCADE), `restaurant_photo` (CASCADE), `deal`
+    (CASCADE), the whole menu — `menu_section` and `menu_item` (both
+    `location_id` CASCADE; tests/integration/test_menu.py covers a
+    location with menu rows), `location_reopen_request` (CASCADE — safe, guardrail 4 above already
     guarantees none are pending), and ALL `location_manager` rows for this
     location, active or historically-inactive (CASCADE). `claim_request.
     location_id` / `listing_report.location_id` are `SET NULL` — those

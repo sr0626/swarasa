@@ -18,6 +18,8 @@ anything else — keep it that way.
 """
 from __future__ import annotations
 
+import re
+
 RAW_PREFIX = "raw/"
 PROCESSED_PREFIX = "processed/"
 THUMBNAIL_PREFIX = "thumbnails/"
@@ -64,6 +66,24 @@ def raw_key_to_thumbnail_key(raw_key: str) -> str:
     one-prefix-in rules (see docs/DECISIONS.md).
     """
     return f"{THUMBNAIL_PREFIX}{_raw_tail(raw_key)}{THUMBNAIL_EXTENSION}"
+
+
+_MENU_RAW_KEY_TAIL = re.compile(r"[0-9a-f]{32}\.(?:jpg|png)")
+
+
+def raw_key_for_location_menu(raw_key: str, location_id: int) -> bool:
+    """True if `raw_key` is EXACTLY a key `generate_menu_photo_upload_url`
+    could have issued for this location's menu:
+    `raw/locations/{id}/menu/{32-hex}.jpg|png`. Stricter than the gallery
+    check above (a full-shape match, not just a prefix) because this value
+    is attacker-controlled input that gets turned into stored S3 keys —
+    nothing beyond a single hex filename under this location's own menu
+    prefix is accepted (no `..`, no extra path segments).
+    """
+    prefix = f"{RAW_PREFIX}locations/{location_id}/menu/"
+    if not raw_key.startswith(prefix):
+        return False
+    return _MENU_RAW_KEY_TAIL.fullmatch(raw_key[len(prefix) :]) is not None
 
 
 def raw_key_for_location(raw_key: str, location_id: int) -> bool:

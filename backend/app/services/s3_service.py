@@ -29,6 +29,7 @@ from app.core.errors import AppError
 from app.media.key_transform import (
     InvalidRawKeyError,
     raw_key_for_location,
+    raw_key_for_location_menu,
     raw_key_to_processed_key,
     raw_key_to_thumbnail_key,
 )
@@ -137,6 +138,62 @@ def generate_location_photo_upload_url(
         ExpiresIn=_UPLOAD_EXPIRES_IN,
     )
     return presigned["url"], presigned["fields"], key, _UPLOAD_EXPIRES_IN
+
+
+# Menu-item photos are meant to be small dish thumbnails, so their upload cap
+# is tighter than the 5MB location-photo cap (the resize Lambda still
+# re-encodes them to <=1200px / 400px JPEGs regardless).
+_MENU_PHOTO_MAX_UPLOAD_BYTES = 2 * 1024 * 1024
+
+
+def generate_menu_photo_upload_url(
+    location_id: int, content_type: str
+) -> tuple[str, dict[str, str], str, int]:
+    """`POST /locations/{id}/menu/photo-upload-url` — same presigned-POST
+    mechanism, content-type allowlist (JPEG/PNG) and resize pipeline as
+    `generate_location_photo_upload_url`, under a menu-specific key scope:
+    `raw/locations/{id}/menu/{uuid}.<ext>`.
+
+    Reuses the existing `raw/` prefix on purpose: the resize Lambda's S3
+    event notification, its IAM scoping and the raw/->processed/,
+    thumbnails/ key transforms (`app/media/key_transform.py`) are all
+    prefix-level rules that already cover this key shape, so no Terraform /
+    Lambda change is needed. The key is scoped to one location's menu
+    sub-prefix; the presigned POST policy pins the exact key, content type
+    and a 2MB `content-length-range`.
+    """
+    ext = _PHOTO_CONTENT_TYPE_EXTENSIONS.get(content_type.lower())
+    if ext is None:
+        raise AppError(400, "Photo uploads must be JPEG or PNG", "unsupported_content_type")
+
+    key = f"raw/locations/{location_id}/menu/{uuid.uuid4().hex}{ext}"
+    presigned = _get_s3_client().generate_presigned_post(
+        Bucket=_get_bucket(),
+        Key=key,
+        Fields={"Content-Type": content_type},
+        Conditions=[
+            {"Content-Type": content_type},
+            ["content-length-range", 1, _MENU_PHOTO_MAX_UPLOAD_BYTES],
+        ],
+        ExpiresIn=_UPLOAD_EXPIRES_IN,
+    )
+    return presigned["url"], presigned["fields"], key, _UPLOAD_EXPIRES_IN
+
+
+def menu_photo_keys_for_upload(raw_key: str, location_id: int) -> tuple[str, str]:
+    """Predicted (`processed/`, `thumbnails/`) keys for a menu photo the
+    client just uploaded — same predicted-key reasoning as
+    `processed_key_for_upload` (see docs/DECISIONS.md "S3 image resize
+    pipeline: predictable key, not read-after-write"). Rejects (400
+    `invalid_s3_key`) any key that is not exactly one this location's
+    `generate_menu_photo_upload_url` could have issued.
+    """
+    if not raw_key_for_location_menu(raw_key, location_id):
+        raise AppError(400, "s3_key does not belong to this location's menu upload", "invalid_s3_key")
+    try:
+        return raw_key_to_processed_key(raw_key), raw_key_to_thumbnail_key(raw_key)
+    except InvalidRawKeyError as exc:
+        raise AppError(400, str(exc), "invalid_s3_key") from exc
 
 
 def processed_key_for_upload(raw_key: str, location_id: int) -> str:

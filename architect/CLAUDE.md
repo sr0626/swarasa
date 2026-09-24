@@ -143,7 +143,10 @@ silently rev the doc.
 ## Phase 1 — Do NOT Build Yet
 - Menu, deal, or dish-photo schema (Phase 2 — note for then: full menu with
   prices is free, dish photos are the paid-gated piece, see
-  `docs/DECISIONS.md`)
+  `docs/DECISIONS.md`). Deals and the menu (`menu_section`, `menu_item`,
+  migration `0013_menu`; item photos built but OFF behind the
+  `menu_item_photos_enabled` platform flag) were pulled forward by direct
+  user instruction — see `docs/DATA_MODEL.md`.
 - Stripe-related schema beyond what's already fixed in root `CLAUDE.md`
   (`platform_pricing`, `is_paid`/`paid_until`) — Stripe webhook handling is
   Backend Dev's, Phase 2

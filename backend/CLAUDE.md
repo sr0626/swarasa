@@ -244,7 +244,11 @@ JWT_SECRET            Cognito JWT public key (fetched from Cognito endpoint)
 - Stripe checkout, webhooks, subscription management (Phase 2)
 - Menu CRUD, deal alerts (Phase 2) — full menu + prices is a FREE feature,
   only dish photos are paid-gated (see DECISIONS.md "Full menu with prices
-  moved to free tier"). **The deals engine itself was pulled forward and
+  moved to free tier"). **Menu CRUD (groups, items, size options, reorder,
+  public read) was pulled forward 2026-09-24 by direct user instruction**:
+  free-tier and public, never `is_paid`-gated; the optional item photo is
+  built but OFF behind the `menu_item_photos_enabled` platform flag
+  (docs/API_CONTRACTS.md "Menu"). **The deals engine itself was pulled forward and
   built 2026-09-23** by direct user instruction (deals stayed in scope while
   Stripe/billing/subscriptions/refunds remained deferred) — see
   DECISIONS.md "Deals engine: free-tier, public-signal + registered-user-content

@@ -200,7 +200,11 @@ NEXT_PUBLIC_MAPS_TILE_URL    OpenStreetMap tile URL (no key needed)
 - Map view (Phase 3)
 - Deals feed, deal cards (Phase 2)
 - Stripe checkout flow (Phase 2)
-- Full menu display (Phase 2)
+- Full menu display (Phase 2) — **pulled forward 2026-09-24** (direct user
+  instruction): the location editor's "Menu" section and the public
+  `RestaurantMenu` exist; free-tier, never `is_paid`-gated; the item photo
+  control shows only when the API's `menu_photos_enabled` is true
+  (docs/API_CONTRACTS.md "Menu")
 - Manager dashboard (Phase 2)
 - Analytics charts (Phase 2)
 - Natural language search UI (Phase 3)

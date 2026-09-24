@@ -28,6 +28,20 @@ import {
 } from "@/lib/api/locations";
 import { submitReopenRequest } from "@/lib/api/locationReopen";
 import { createLocationDeal, deleteLocationDeal, updateLocationDeal } from "@/lib/api/deals";
+import {
+  createMenuItem,
+  createMenuSection,
+  deleteMenuItem,
+  deleteMenuSection,
+  getLocationMenu,
+  getMenuPhotoUploadUrl,
+  removeMenuItemPhoto,
+  reorderMenuItems,
+  reorderMenuSections,
+  setMenuItemPhoto,
+  updateMenuItem,
+  updateMenuSection,
+} from "@/lib/api/menu";
 import { getServerSession } from "@/lib/auth/session";
 import { geocodeAddress } from "@/lib/geocode";
 import {
@@ -43,6 +57,20 @@ import {
   updateLocationStatusSchema,
 } from "@/lib/validation/locationReopen";
 import { dealFormSchema, updateDealFormSchema } from "@/lib/validation/deal";
+import {
+  createMenuItemSchema,
+  MENU_PHOTO_TYPES,
+  menuSectionSchema,
+  reorderIdsSchema,
+  updateMenuItemSchema,
+} from "@/lib/validation/menu";
+import type {
+  CreateMenuItemInput,
+  MenuItem,
+  MenuResponse,
+  MenuSection,
+  UpdateMenuItemInput,
+} from "@/types/menu";
 import type { CreateDealInput, Deal, UpdateDealInput } from "@/types/deal";
 import type {
   LocationDetail,
@@ -592,5 +620,254 @@ export async function deleteLocationDealAction(
     return { ok: true, data: null };
   } catch (error) {
     return { ok: false, error: messageFor(error, "Could not delete this deal.") };
+  }
+}
+
+// ---- Menu (docs/API_CONTRACTS.md "Menu (`menu_section`, `menu_item`)") ----
+// Free-tier feature: no `is_paid` check anywhere below. Owner, assigned
+// manager and admin all pass `requireLocationSession`; the backend's
+// `require_location_write_access` re-validates ownership/assignment on every
+// call. Item photos are additionally gated by the backend's platform flag
+// (a 403 `menu_photos_disabled` while off) — the UI never shows the control
+// then, this just passes any rejection through.
+
+/**
+ * Menu writes change what the public restaurant page shows, and that page
+ * reads the (public) menu through a 60s-cached GET — purge every restaurant
+ * page (the slug isn't known here) plus this location's editor.
+ */
+function revalidateMenuPaths(locationId: number): void {
+  revalidateLocationPaths(locationId);
+  revalidatePath("/restaurant/[slug]", "page");
+}
+
+/** GET /locations/{id}/menu with the caller's token — the editor re-reads the
+ * whole menu after each write so it can never drift from the server. */
+export async function getLocationMenuAction(
+  locationId: number
+): Promise<ActionResult<MenuResponse>> {
+  const auth = await requireLocationSession();
+  if (!auth.ok) return auth;
+
+  try {
+    const menu = await getLocationMenu(locationId, auth.accessToken);
+    return { ok: true, data: menu };
+  } catch (error) {
+    return { ok: false, error: messageFor(error, "Could not refresh the menu.") };
+  }
+}
+
+/** POST /locations/{id}/menu/sections. */
+export async function createMenuSectionAction(
+  locationId: number,
+  input: unknown
+): Promise<ActionResult<MenuSection>> {
+  const auth = await requireLocationSession();
+  if (!auth.ok) return auth;
+
+  const parsed = menuSectionSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Please check the group and try again." };
+  }
+  try {
+    const section = await createMenuSection(locationId, parsed.data, auth.accessToken);
+    revalidateMenuPaths(locationId);
+    return { ok: true, data: section };
+  } catch (error) {
+    return { ok: false, error: messageFor(error, "Could not save this group.") };
+  }
+}
+
+/** PATCH /locations/{id}/menu/sections/{section_id}. */
+export async function updateMenuSectionAction(
+  locationId: number,
+  sectionId: number,
+  input: unknown
+): Promise<ActionResult<MenuSection>> {
+  const auth = await requireLocationSession();
+  if (!auth.ok) return auth;
+
+  const parsed = menuSectionSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Please check the group and try again." };
+  }
+  try {
+    const section = await updateMenuSection(locationId, sectionId, parsed.data, auth.accessToken);
+    revalidateMenuPaths(locationId);
+    return { ok: true, data: section };
+  } catch (error) {
+    return { ok: false, error: messageFor(error, "Could not update this group.") };
+  }
+}
+
+/** DELETE /locations/{id}/menu/sections/{section_id}[?delete_items=true]. */
+export async function deleteMenuSectionAction(
+  locationId: number,
+  sectionId: number,
+  deleteItems: boolean
+): Promise<ActionResult<null>> {
+  const auth = await requireLocationSession();
+  if (!auth.ok) return auth;
+
+  try {
+    await deleteMenuSection(locationId, sectionId, deleteItems, auth.accessToken);
+    revalidateMenuPaths(locationId);
+    return { ok: true, data: null };
+  } catch (error) {
+    return { ok: false, error: messageFor(error, "Could not delete this group.") };
+  }
+}
+
+/** PUT /locations/{id}/menu/sections/order. */
+export async function reorderMenuSectionsAction(
+  locationId: number,
+  ids: unknown
+): Promise<ActionResult<MenuResponse>> {
+  const auth = await requireLocationSession();
+  if (!auth.ok) return auth;
+
+  const parsed = reorderIdsSchema.safeParse(ids);
+  if (!parsed.success) return { ok: false, error: "Could not reorder the groups." };
+  try {
+    const menu = await reorderMenuSections(locationId, parsed.data, auth.accessToken);
+    revalidateMenuPaths(locationId);
+    return { ok: true, data: menu };
+  } catch (error) {
+    return { ok: false, error: messageFor(error, "Could not reorder the groups.") };
+  }
+}
+
+/** POST /locations/{id}/menu/items. */
+export async function createMenuItemAction(
+  locationId: number,
+  input: unknown
+): Promise<ActionResult<MenuItem>> {
+  const auth = await requireLocationSession();
+  if (!auth.ok) return auth;
+
+  const parsed = createMenuItemSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Please check the item and try again." };
+  }
+  try {
+    const item = await createMenuItem(locationId, parsed.data as CreateMenuItemInput, auth.accessToken);
+    revalidateMenuPaths(locationId);
+    return { ok: true, data: item };
+  } catch (error) {
+    return { ok: false, error: messageFor(error, "Could not save this item.") };
+  }
+}
+
+/** PATCH /locations/{id}/menu/items/{item_id} — full edit or a partial move. */
+export async function updateMenuItemAction(
+  locationId: number,
+  itemId: number,
+  input: unknown
+): Promise<ActionResult<MenuItem>> {
+  const auth = await requireLocationSession();
+  if (!auth.ok) return auth;
+
+  const parsed = updateMenuItemSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Please check the item and try again." };
+  }
+  try {
+    const item = await updateMenuItem(locationId, itemId, parsed.data as UpdateMenuItemInput, auth.accessToken);
+    revalidateMenuPaths(locationId);
+    return { ok: true, data: item };
+  } catch (error) {
+    return { ok: false, error: messageFor(error, "Could not update this item.") };
+  }
+}
+
+/** DELETE /locations/{id}/menu/items/{item_id}. */
+export async function deleteMenuItemAction(
+  locationId: number,
+  itemId: number
+): Promise<ActionResult<null>> {
+  const auth = await requireLocationSession();
+  if (!auth.ok) return auth;
+
+  try {
+    await deleteMenuItem(locationId, itemId, auth.accessToken);
+    revalidateMenuPaths(locationId);
+    return { ok: true, data: null };
+  } catch (error) {
+    return { ok: false, error: messageFor(error, "Could not delete this item.") };
+  }
+}
+
+/** PUT /locations/{id}/menu/items/order — one group's full id list. */
+export async function reorderMenuItemsAction(
+  locationId: number,
+  sectionId: number | null,
+  ids: unknown
+): Promise<ActionResult<MenuResponse>> {
+  const auth = await requireLocationSession();
+  if (!auth.ok) return auth;
+
+  const parsed = reorderIdsSchema.safeParse(ids);
+  if (!parsed.success) return { ok: false, error: "Could not reorder the items." };
+  try {
+    const menu = await reorderMenuItems(locationId, sectionId, parsed.data, auth.accessToken);
+    revalidateMenuPaths(locationId);
+    return { ok: true, data: menu };
+  } catch (error) {
+    return { ok: false, error: messageFor(error, "Could not reorder the items.") };
+  }
+}
+
+/** POST /locations/{id}/menu/photo-upload-url — only reachable while the photo flag is on. */
+export async function getMenuPhotoUploadUrlAction(
+  locationId: number,
+  contentType: string
+): Promise<ActionResult<PhotoUploadUrlResponse>> {
+  const auth = await requireLocationSession();
+  if (!auth.ok) return auth;
+
+  if (!(MENU_PHOTO_TYPES as readonly string[]).includes(contentType)) {
+    return { ok: false, error: "Only JPEG or PNG images are supported." };
+  }
+  try {
+    const result = await getMenuPhotoUploadUrl(locationId, contentType, auth.accessToken);
+    return { ok: true, data: result };
+  } catch (error) {
+    return { ok: false, error: messageFor(error, "Could not start the photo upload.") };
+  }
+}
+
+/** PUT /locations/{id}/menu/items/{item_id}/photo — attach/replace after the S3 upload. */
+export async function setMenuItemPhotoAction(
+  locationId: number,
+  itemId: number,
+  s3Key: string
+): Promise<ActionResult<MenuItem>> {
+  const auth = await requireLocationSession();
+  if (!auth.ok) return auth;
+
+  if (!s3Key) return { ok: false, error: "Invalid photo upload." };
+  try {
+    const item = await setMenuItemPhoto(locationId, itemId, s3Key, auth.accessToken);
+    revalidateMenuPaths(locationId);
+    return { ok: true, data: item };
+  } catch (error) {
+    return { ok: false, error: messageFor(error, "Could not save the uploaded photo.") };
+  }
+}
+
+/** DELETE /locations/{id}/menu/items/{item_id}/photo. */
+export async function removeMenuItemPhotoAction(
+  locationId: number,
+  itemId: number
+): Promise<ActionResult<MenuItem>> {
+  const auth = await requireLocationSession();
+  if (!auth.ok) return auth;
+
+  try {
+    const item = await removeMenuItemPhoto(locationId, itemId, auth.accessToken);
+    revalidateMenuPaths(locationId);
+    return { ok: true, data: item };
+  } catch (error) {
+    return { ok: false, error: messageFor(error, "Could not remove this photo.") };
   }
 }
