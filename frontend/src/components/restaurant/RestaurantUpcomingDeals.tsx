@@ -9,7 +9,7 @@
 // null/undefined/empty list renders NOTHING (no heading, no count, no hint
 // for signed-out viewers; the sign-in CTA lives in RestaurantDeals).
 import { TagIcon } from "@/components/ui/icons";
-import { formatDealDateRange, formatDealDays, formatNextOccurrence } from "@/lib/deals/format";
+import { formatDealDays } from "@/lib/deals/format";
 import type { DealUpcoming } from "@/types/deal";
 
 const DEAL_TYPE_LABEL: Record<string, string> = {
@@ -19,14 +19,10 @@ const DEAL_TYPE_LABEL: Record<string, string> = {
 
 interface RestaurantUpcomingDealsProps {
   upcomingDeals: DealUpcoming[] | null | undefined;
-  /** The location's IANA timezone — dates are shown as the restaurant sees
-   * them, not the viewer's local zone. */
-  timeZone: string;
 }
 
 export default function RestaurantUpcomingDeals({
   upcomingDeals,
-  timeZone,
 }: RestaurantUpcomingDealsProps) {
   if (!upcomingDeals || upcomingDeals.length === 0) return null;
 
@@ -67,14 +63,6 @@ export default function RestaurantUpcomingDeals({
             <dl className="mt-2 grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_1fr]">
               <dt className="font-semibold text-brand-ink">Days</dt>
               <dd className="text-brand-ink-muted">{formatDealDays(deal.applicable_days)}</dd>
-              <dt className="font-semibold text-brand-ink">Runs</dt>
-              <dd className="text-brand-ink-muted">
-                {formatDealDateRange(deal.start_at, deal.end_at, timeZone)}
-              </dd>
-              <dt className="font-semibold text-brand-ink">Next</dt>
-              <dd className="text-brand-ink-muted">
-                {formatNextOccurrence(deal.next_occurrence, { timeZone })}
-              </dd>
             </dl>
           </li>
         ))}

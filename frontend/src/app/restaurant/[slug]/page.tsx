@@ -265,10 +265,7 @@ export default async function RestaurantPage({ params }: RestaurantPageProps) {
                   null for signed-out viewers, in which case this renders
                   nothing (no heading, no count). */}
               {location && (
-                <RestaurantUpcomingDeals
-                  upcomingDeals={location.upcoming_deals}
-                  timeZone={location.timezone}
-                />
+                <RestaurantUpcomingDeals upcomingDeals={location.upcoming_deals} />
               )}
 
               {restaurant.description && (
