@@ -10,6 +10,21 @@ Format: **Decision** | Date | Reasoning | Alternatives Rejected
 
 ## Process & Documentation
 
+**Repository hygiene: auto-delete merged head branches enabled; stale branches purged**
+2026-09-23 | GitHub's "Automatically delete head branches" repository setting
+is now enabled, so a PR's branch is removed the moment it merges instead of
+accumulating. The user also deleted the backlog by hand: about 200
+already-merged branches and 3 branches belonging to closed (unmerged) PRs.
+Nothing was lost — merged work lives on `main`, and the closed-PR branches
+were abandoned attempts. No code or docs change accompanies this; it is
+recorded so nobody wonders where the old feature branches went, or
+re-creates a cleanup task for it. Consistent with the feature-branch-per-task
+workflow in root CLAUDE.md: branches are disposable, `main` and the PR
+history are the record.
+*Rejected: leaving merged branches in place (hundreds of dead refs make the
+branch list useless for spotting live work); a scheduled cleanup script
+(the built-in setting does the same thing with no code to maintain)*
+
 **`docs/CMD_LOG.md` is written only by the orchestrator, in a batch, never as a commit on a feature/fix/docs branch — standing rule**
 2026-09-13 | User decision, given after CMD_LOG.md entries caused a merge
 conflict on nearly every PR in a row (#20, #21, #22, #23, #24, #26 all hit
@@ -1996,6 +2011,88 @@ Owner adds new location during free period — it gets the benefit too.
 
 ## Features & Product
 
+**Menu engine: free-tier, public, price-or-sizes; item photos built but flag-gated OFF**
+2026-09-24 | Built in PR #206. Menu was pulled forward by direct user
+instruction. The existing "Full menu with prices
+moved to free tier" decision stands unchanged: the menu and its prices are
+never gated on `is_paid`. The public read, `GET /locations/{id}/menu`, is
+ANONYMOUS — unlike deal content (see "Deals engine" entry) — because the menu
+is a core free-listing feature and the discovery value depends on it being
+crawlable; it reuses the same visibility gate as `GET /locations/{id}`, so a
+non-active location or soft-deleted brand's menu 404s for the public.
+Structure: groups (`menu_section`, optional description) contain items
+(`menu_item`); an item has a required name and a required FREE-TEXT price
+(never parsed to a number — "Market price", "₹250" and per-size pricing are
+normal on Indian menus). The price is EITHER a single price OR 1–6 size
+options (label + price, array order = display order), never both and never
+neither. Sizes are stored as inline JSON on the item row (portable `JSON`,
+same precedent as `deal.applicable_days`), because sizes have no identity or
+lifecycle of their own and inline JSON audits with the item for free. Items
+may be ungrouped and render first, under no heading. Deleting a group
+UNGROUPS its items by default (non-destructive); `?delete_items=true`
+deletes them with the group. Caps: 30 groups and 300 items per location.
+Bulk reorder (sections and items) returns `409 menu_out_of_date` if the
+submitted id set no longer matches the stored one (stale editor). Every write
+on `menu_section`/`menu_item` writes an `audit_log` row in the same
+transaction (snapshots include `price` and `sizes`).
+Item photos are built but switched OFF: gated by the `platform_config` flag
+`menu_item_photos_enabled` (default OFF; a missing row reads as off). While
+off, the photo endpoints return `403 menu_photos_disabled` and NO response —
+public or management — carries a photo URL; stored keys are kept, so turning
+the flag on restores them. Once billing lands the photos will additionally be
+gated by the location's `is_paid` (BRD 3.3 keeps dish photos as the paid
+feature) — that `is_paid` check is NOT implemented yet and is deferred with
+the rest of billing. The flag is flipped by the human via the
+`set_platform_flag` management command (`backend/app/scripts/set_platform_flag.py`,
+Lambda invoke; only known boolean flag keys accepted), not an API or admin UI.
+The frontend menu JSON-LD escapes `<` (as `\u003c`) so owner-entered text can
+never close the script tag.
+*Rejected: a separate `menu_item_size` child table (a join on every public
+read, a second table to cascade and audit, for data that is never queried
+independently); embedding the menu in `GET /locations/{id}` (bloats the
+hottest read and couples menu edits to the location response); a numeric
+price column (mangles "MP", ranges and per-piece pricing); deleting a group's
+items by default (one mis-click destroys the whole section); gating the menu
+read behind login (contradicts the free-tier decision and hides a core
+listing feature from search engines); a photo feature that returns URLs but
+hides them client-side (would leak paid content — the gate is server-side)*
+
+**Deals refinements: upcoming deals, required dates, days-only card, sign-in badge, follow tiles, shortcuts**
+2026-09-24 | Follow-ups to the "Deals engine" entry, built across PRs
+#201–#205; that entry's visibility model is unchanged.
+(1) `upcoming_deals` on `GET /locations/{id}` — the location's other active
+deals (not applicable today: other weekdays or a future start) — has the SAME
+visibility gate as `deals_today`: `null` (not `[]`) when the caller can't view
+deal content, so neither titles nor a count leak; it is sorted by next
+occurrence, then title, then id.
+(2) Deals now require a `start_at`, and an `end_at` unless the request says
+`ongoing: true`. `ongoing` is a request-only flag, NOT stored (an ongoing deal
+is simply `end_at IS NULL`), so no migration. PATCH validates only the date
+fields actually sent, so a legacy deal with null dates can still be toggled or
+retitled without being forced to supply dates; clearing `end_at` requires
+`ongoing: true`, and `start_at` can't be cleared. Legacy null-date deals keep
+working everywhere, and the editor pre-fills their start date at edit time
+(no backfill).
+(3) The diner-facing "More deals & specials" card shows only the Days line —
+no run dates or next date (user request 2026-09-24).
+(4) For signed-out visitors the "Deal(s) available today" badge is itself the
+sign-in link (a large banner on the detail page), replacing a badge plus a
+separate text link; it stays content-free.
+(5) Favourites/follow tiles show the badge plus up to 2 deal titles. Follows
+are brand-level, so a brand has a deal today when ANY of its active locations
+does. Titles are shown there because `GET /auth/me/follows` is
+registered-user-only, which is inside the content gate.
+(6) Deals is the action owners and managers use most, so it gets a shortcut
+(ahead of Menu) on the manager "Locations I manage" card and on owner location
+rows.
+*Rejected: showing run dates / next occurrence on the diner card (user found
+it noisy); hard-requiring `end_at` with no escape (some specials genuinely
+have no end — `ongoing: true` makes that an explicit choice instead of an
+accident); persisting `ongoing` as a column (redundant with `end_at IS NULL`);
+backfilling legacy deals' dates (no source of truth for the right values);
+showing deal titles on public-facing tiles (would break the registration
+gate)*
+
 **Working brand name is "Swarasa" (not yet applied to code); logo direction "Fork-E" parked, not final**
 2026-09-15 | Followed up on the "Swaad" trademark conflict (see decision
 below) by brainstorming and vetting replacement names. "Zestro" was the
@@ -2088,6 +2185,9 @@ location — it's core to a "genuinely useful free listing" (see Core Principles
 professional dish photography remains a paid-only feature.
 *Rejected: keeping menu pricing behind the paywall (contradicts the free-tier
 usefulness principle already in the BRD)*
+**Update 2026-09-24:** the free menu is now built (PR #206) — see "Menu engine:
+free-tier, public, price-or-sizes" above. Dish photos remain the paid feature,
+built but flag-gated OFF until billing exists.
 
 **Photo gallery: 2 photos free, 10 photos paid per location (was 0 free / 10 paid)**
 2026-09-12 | BRD 3.3's "Up to 10 photos per location" row gave free listings zero
