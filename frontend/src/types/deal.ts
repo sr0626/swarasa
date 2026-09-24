@@ -50,14 +50,39 @@ export interface DealPublic {
   description: string | null;
 }
 
+/** Content-gated shape of one entry in `LocationDetail.upcoming_deals` —
+ * backend/app/schemas/deal.py `DealUpcomingOut`. An ACTIVE, not-yet-expired
+ * deal that does NOT apply today (another weekday, or a future start date).
+ * Same visibility gate as `DealPublic`. */
+export interface DealUpcoming {
+  id: number;
+  deal_type: DealType;
+  title: string;
+  description: string | null;
+  /** null = every day; else 0=Monday..6=Sunday. */
+  applicable_days: DayOfWeek[] | null;
+  /** ISO instants. null end_at = ongoing. */
+  start_at: string | null;
+  end_at: string | null;
+  /** "YYYY-MM-DD" in the LOCATION's timezone — the next date the deal is
+   * offered; the list arrives sorted by it, soonest first. */
+  next_occurrence: string;
+}
+
 /** Body for POST /locations/{id}/deals. */
 export interface CreateDealInput {
   deal_type: DealType;
   title: string;
   description: string | null;
   applicable_days: DayOfWeek[] | null;
+  /** Required for a new deal (backend rejects null with 422). */
   start_at: string | null;
+  /** Required unless `ongoing` is true. */
   end_at: string | null;
+  /** Request-only flag (never returned): explicit "no end date". Required
+   * to send `end_at: null`; the server rejects `ongoing: true` together
+   * with an `end_at`. */
+  ongoing?: boolean;
   is_active: boolean;
 }
 

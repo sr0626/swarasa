@@ -40,6 +40,7 @@ import RestaurantInfoCard from "@/components/restaurant/RestaurantInfoCard";
 import ClaimCTA from "@/components/restaurant/ClaimCTA";
 import RestaurantAbout from "@/components/restaurant/RestaurantAbout";
 import RestaurantDeals from "@/components/restaurant/RestaurantDeals";
+import RestaurantUpcomingDeals from "@/components/restaurant/RestaurantUpcomingDeals";
 import EditListingBar from "@/components/restaurant/EditListingBar";
 import RestaurantBackLink from "@/components/restaurant/RestaurantBackLink";
 import TopBar from "@/components/home/TopBar";
@@ -256,6 +257,17 @@ export default async function RestaurantPage({ params }: RestaurantPageProps) {
                   dealsToday={location.deals_today}
                   // Signed-out visitors only (no session) get the sign-in link.
                   signInReturnPath={session ? undefined : `/restaurant/${restaurant.slug}`}
+                />
+              )}
+
+              {/* The location's OTHER active deals (other weekdays / future
+                  start). Same server-side content gate as deals_today —
+                  null for signed-out viewers, in which case this renders
+                  nothing (no heading, no count). */}
+              {location && (
+                <RestaurantUpcomingDeals
+                  upcomingDeals={location.upcoming_deals}
+                  timeZone={location.timezone}
                 />
               )}
 

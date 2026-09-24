@@ -1,7 +1,7 @@
 // Types for `restaurant_location` and its sub-resources (hours, photos),
 // matching docs/API_CONTRACTS.md "Locations (`restaurant_location`)".
 import type { ConsoleTodayStatus } from "@/lib/consoleLocationStatus";
-import type { DealPublic } from "@/types/deal";
+import type { DealPublic, DealUpcoming } from "@/types/deal";
 
 /** 0=Monday..6=Sunday, per docs/API_CONTRACTS.md GET /locations/{id} notes. */
 export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6;
@@ -147,6 +147,15 @@ export interface LocationDetail {
    * called WITH an access token (see that function's own doc comment).
    */
   deals_today: DealPublic[] | null;
+  /**
+   * The location's OTHER active deals — not applicable today (other
+   * weekdays / future-dated), not expired — sorted soonest-next-occurrence
+   * first. Same content gate as `deals_today`: `null` (never a count) when
+   * the viewer may not see deal content; an array (possibly empty)
+   * otherwise. Optional so a response from a backend that predates the field
+   * reads as `undefined` -> treated as null.
+   */
+  upcoming_deals?: DealUpcoming[] | null;
 }
 
 /** Body for POST /locations/{id}/status. */

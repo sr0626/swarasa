@@ -67,12 +67,19 @@ async def _location_to_out(
     # `caller_may_view_deal_content_for_location`'s own docstring for the
     # full reasoning, including the flagged deviation from
     # docs/DECISIONS.md's older "registered users only, not public" entry.
-    todays_deals = await deal_service.deals_today_for_location(db, location.id, location.timezone)
+    # One query feeds both lists (today's + the content-gated "other active
+    # deals") — no N+1, no second round trip for `upcoming_deals`.
+    todays_deals, upcoming = await deal_service.todays_and_upcoming_for_location(
+        db, location.id, location.timezone
+    )
     has_deal_today = len(todays_deals) > 0
     may_view_deal_content = await deal_service.caller_may_view_deal_content_for_location(
         db, location, current_user
     )
     deals_today = deal_service.deals_to_public_out(todays_deals) if may_view_deal_content else None
+    # Same gate as `deals_today`: null (not []) for anyone who can't see deal
+    # content, so neither titles nor a count leak to public/anonymous callers.
+    upcoming_deals = deal_service.upcoming_to_out(upcoming) if may_view_deal_content else None
 
     return LocationOut(
         id=location.id,
@@ -121,6 +128,7 @@ async def _location_to_out(
         ],
         has_deal_today=has_deal_today,
         deals_today=deals_today,
+        upcoming_deals=upcoming_deals,
     )
 
 

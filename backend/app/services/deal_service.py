@@ -25,7 +25,7 @@ docstring for the schema design. This module owns three separable things:
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,7 +35,7 @@ from app.models.deal import Deal
 from app.models.location_manager import LocationManager
 from app.models.restaurant_brand import RestaurantBrand
 from app.models.restaurant_location import RestaurantLocation
-from app.schemas.deal import DealCreate, DealOut, DealPublicOut, DealUpdate
+from app.schemas.deal import DealCreate, DealOut, DealPublicOut, DealUpcomingOut, DealUpdate
 from app.services import audit_service, auth_service, hours_service
 
 _AUDITED_FIELDS = (
@@ -52,6 +52,13 @@ _AUDITED_FIELDS = (
 # `null` for one of these is a 400, not a "clear this field" (same posture
 # as LocationUpdate.phone; see app/schemas/deal.py DealUpdate docstring).
 _NON_NULLABLE_FIELDS = ("deal_type", "title", "is_active")
+
+
+def _aware(value: datetime) -> datetime:
+    """Stored timestamps are timestamptz (aware) in Postgres; SQLite (the
+    test DB) hands back naive values. Treat naive as UTC so comparisons
+    never raise TypeError."""
+    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
 
 
 def _snapshot(deal: Deal) -> dict:
@@ -151,6 +158,10 @@ async def update_deal(
     old_val = _snapshot(deal)
 
     data = body.model_dump(exclude_unset=True)
+    # `ongoing` is a request-only flag (see DealUpdate) — never a column.
+    # `true` means "explicitly no end date", i.e. clear end_at.
+    if data.pop("ongoing", False):
+        data["end_at"] = None
     for field in data:
         if data[field] is None and field in _NON_NULLABLE_FIELDS:
             raise AppError(
@@ -161,7 +172,11 @@ async def update_deal(
         if field in data:
             setattr(deal, field, data[field])
 
-    if deal.start_at is not None and deal.end_at is not None and deal.start_at >= deal.end_at:
+    if (
+        deal.start_at is not None
+        and deal.end_at is not None
+        and _aware(deal.start_at) >= _aware(deal.end_at)
+    ):
         raise AppError(400, "start_at must be before end_at", "bad_request")
 
     await db.flush()
@@ -236,9 +251,9 @@ def deal_matches_today(deal: Deal, tz_name: str, *, now: datetime | None = None)
     if not deal.is_active:
         return False
     now = now or datetime.now(timezone.utc)
-    if deal.start_at is not None and now < deal.start_at:
+    if deal.start_at is not None and now < _aware(deal.start_at):
         return False
-    if deal.end_at is not None and now >= deal.end_at:
+    if deal.end_at is not None and now >= _aware(deal.end_at):
         return False
     if deal.applicable_days:
         today = now.astimezone(hours_service.safe_zone(tz_name)).weekday()
@@ -276,6 +291,79 @@ async def deals_today_for_location(
     `get_hours_map_for_locations`)."""
     by_location = await get_active_deals_map(db, [location_id])
     return [d for d in by_location.get(location_id, []) if deal_matches_today(d, tz_name)]
+
+
+def next_occurrence_date(
+    deal: Deal, tz_name: str, *, now: datetime | None = None
+) -> date | None:
+    """The next calendar date (in the LOCATION's timezone) on which this
+    deal is offered, counting today only if some part of today's offering is
+    still ahead of `now` — or None when it will never be offered again (e.g.
+    a Tuesday-only deal whose `end_at` falls before next Tuesday, or a deal
+    already past `end_at`).
+
+    Scans at most 7 candidate days starting at the later of "today" and the
+    deal's start date (a weekday list always recurs within 7 days, so the
+    scan is bounded regardless of how far in the future `start_at` is). A
+    candidate day counts when its weekday is applicable AND the day's
+    [00:00, 24:00) span overlaps the deal's [start_at, end_at) window in a
+    way that still ends after `now`.
+    """
+    now = now or datetime.now(timezone.utc)
+    zone = hours_service.safe_zone(tz_name)
+    start = _aware(deal.start_at) if deal.start_at is not None else None
+    end = _aware(deal.end_at) if deal.end_at is not None else None
+
+    first = now.astimezone(zone).date()
+    if start is not None:
+        first = max(first, start.astimezone(zone).date())
+
+    for offset in range(7):
+        day = first + timedelta(days=offset)
+        if deal.applicable_days and day.weekday() not in deal.applicable_days:
+            continue
+        day_start = datetime.combine(day, time.min, tzinfo=zone)
+        day_end = datetime.combine(day + timedelta(days=1), time.min, tzinfo=zone)
+        eff_start = max(day_start, start) if start is not None else day_start
+        eff_end = min(day_end, end) if end is not None else day_end
+        if eff_start < eff_end and eff_end > now:
+            return day
+    return None
+
+
+def split_today_and_upcoming(
+    deals: list[Deal], tz_name: str, *, now: datetime | None = None
+) -> tuple[list[Deal], list[tuple[Deal, date]]]:
+    """Partition a location's ACTIVE deals (the single `get_active_deals_map`
+    result — no extra query) into (deals that apply today, other deals that
+    still have a future occurrence with the date of that occurrence).
+
+    "Other" = not matching today, not expired (`end_at` still ahead), and
+    with at least one remaining offering day. Sorted soonest-first by next
+    occurrence date, then title (case-insensitive), then id, so the list a
+    diner reads is "what can I get next" rather than creation order.
+    """
+    now = now or datetime.now(timezone.utc)
+    todays: list[Deal] = []
+    upcoming: list[tuple[Deal, date]] = []
+    for deal in deals:
+        if deal_matches_today(deal, tz_name, now=now):
+            todays.append(deal)
+            continue
+        nxt = next_occurrence_date(deal, tz_name, now=now)
+        if nxt is not None:
+            upcoming.append((deal, nxt))
+    upcoming.sort(key=lambda pair: (pair[1], pair[0].title.casefold(), pair[0].id))
+    return todays, upcoming
+
+
+async def todays_and_upcoming_for_location(
+    db: AsyncSession, location_id: int, tz_name: str, *, now: datetime | None = None
+) -> tuple[list[Deal], list[tuple[Deal, date]]]:
+    """One query, both lists — used by `GET /locations/{id}` so the new
+    `upcoming_deals` field costs no extra round trip."""
+    by_location = await get_active_deals_map(db, [location_id])
+    return split_today_and_upcoming(by_location.get(location_id, []), tz_name, now=now)
 
 
 async def caller_may_view_deal_content_for_location(
@@ -331,3 +419,19 @@ async def caller_may_view_deal_content_for_location(
 
 def deals_to_public_out(deals: list[Deal]) -> list[DealPublicOut]:
     return [_deal_to_public_out(d) for d in deals]
+
+
+def upcoming_to_out(pairs: list[tuple[Deal, date]]) -> list[DealUpcomingOut]:
+    return [
+        DealUpcomingOut(
+            id=d.id,
+            deal_type=d.deal_type,
+            title=d.title,
+            description=d.description,
+            applicable_days=d.applicable_days,
+            start_at=d.start_at,
+            end_at=d.end_at,
+            next_occurrence=nxt,
+        )
+        for d, nxt in pairs
+    ]
