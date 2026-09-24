@@ -16,15 +16,35 @@
 // target's `scroll-margin-top` (editorSectionAnchor.ts) read -- no hard-coded
 // header height to drift. Before hydration the CSS fallback (73px) applies.
 //
+// The "Back to ..." link is folded into this same sticky bar (left of the
+// section links, outside the scrolling list) so it stays reachable however
+// far the page is scrolled. The bar is a single fixed-height row, so the
+// scroll-margin (editorSectionAnchor.ts) and the observer band below are
+// unchanged by it.
+//
 // Mobile (375px): the list scrolls horizontally inside its own container
 // (`overflow-x-auto`, page itself never scrolls sideways); each link is a
 // 44px-tall touch target; the row is a fixed height, so nothing shifts.
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { EditorSection } from "@/lib/portal/editorSections";
 
 const NAV_HEIGHT_PX = 56; // matches h-14 below; used for the observer's top margin
 
-export default function EditorSectionNav({ sections }: { sections: readonly EditorSection[] }) {
+export default function EditorSectionNav({
+  sections,
+  backHref,
+  backLabel,
+  backShortLabel,
+}: {
+  sections: readonly EditorSection[];
+  /** Where "back" goes (role-dependent). */
+  backHref: string;
+  /** Full accessible name, e.g. "Back to your locations". */
+  backLabel: string;
+  /** Compact visible text after the arrow, e.g. "Locations". */
+  backShortLabel: string;
+}) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
   // While a click-initiated smooth scroll runs, the observer would flicker the
@@ -107,9 +127,19 @@ export default function EditorSectionNav({ sections }: { sections: readonly Edit
   return (
     // -mx-4/-mx-6 + matching padding: the row spans the page's padded column
     // edge to edge so scrolled content doesn't peek out beside it.
+    <div className="sticky top-[var(--editor-topbar-h,73px)] z-30 -mx-4 flex h-14 items-center gap-1 border-b border-brand-border bg-brand-bg/95 px-4 backdrop-blur sm:-mx-6 sm:px-6">
+      <Link
+        href={backHref}
+        aria-label={backLabel}
+        className="flex min-h-[44px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-brand-pill pl-1 pr-3 text-sm font-semibold text-brand-ink transition-colors hover:bg-brand-chip focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent"
+      >
+        <span aria-hidden="true">&larr;</span>
+        {backShortLabel}
+      </Link>
+      <span aria-hidden="true" className="h-6 w-px shrink-0 bg-brand-border" />
     <nav
       aria-label="Jump to a section of this listing"
-      className="sticky top-[var(--editor-topbar-h,73px)] z-30 -mx-4 mt-5 border-b border-brand-border bg-brand-bg/95 px-4 backdrop-blur sm:-mx-6 sm:px-6"
+      className="min-w-0 flex-1"
     >
       <ul ref={listRef} className="flex h-14 items-center gap-1 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {sections.map((s) => {
@@ -135,5 +165,6 @@ export default function EditorSectionNav({ sections }: { sections: readonly Edit
         })}
       </ul>
     </nav>
+    </div>
   );
 }

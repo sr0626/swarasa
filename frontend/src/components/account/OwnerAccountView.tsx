@@ -10,15 +10,12 @@
 // (see OWNER_NAV_ITEMS in components/console/navItems.ts). Server Component.
 import AccountDetailsCard from "@/components/account/AccountDetailsCard";
 import DataPrivacySection from "@/components/account/DataPrivacySection";
-import OwnerActivitySection from "@/components/account/OwnerActivitySection";
 import OwnerStatTiles from "@/components/account/OwnerStatTiles";
 import ProfileEditForm from "@/components/account/ProfileEditForm";
 import SecurityCard from "@/components/account/SecurityCard";
 import OwnerRestaurantsSection from "@/components/portal/OwnerRestaurantsSection";
-import type { OwnerActivity } from "@/types/activity";
 import type { BrandWithLocations } from "@/lib/owner/loadOwnerRestaurants";
 import type { AuthMe } from "@/types/auth";
-import type { PaginatedResponse } from "@/types/common";
 import type { DataDeletionRequest } from "@/types/privacy";
 
 export default function OwnerAccountView({
@@ -26,15 +23,11 @@ export default function OwnerAccountView({
   brands,
   restaurantsError,
   latestDeletionRequest,
-  activityPage,
-  activityError,
 }: {
   me: AuthMe;
   brands: BrandWithLocations[];
   restaurantsError: string | null;
   latestDeletionRequest: DataDeletionRequest | null;
-  activityPage: PaginatedResponse<OwnerActivity> | null;
-  activityError: string | null;
 }) {
   return (
     <div className="flex flex-col gap-8">
@@ -47,10 +40,6 @@ export default function OwnerAccountView({
       />
 
       <OwnerRestaurantsSection brands={brands} loadError={restaurantsError} />
-
-      <div id="activity" className="scroll-mt-24">
-        <OwnerActivitySection initialPage={activityPage} loadError={activityError} />
-      </div>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-2 xl:items-start">
         <div id="profile" className="scroll-mt-24">

@@ -58,8 +58,12 @@ export const cardClass =
 export const outlinePillLinkClass =
   "flex min-h-[44px] shrink-0 items-center justify-center whitespace-nowrap rounded-brand-pill border border-brand-ink px-5 text-sm font-semibold text-brand-ink transition hover:bg-brand-chip focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent";
 
+// primaryLinkClass and secondaryLinkClass share the exact same box (44px
+// height, px-5, 1px border, radius, text-sm, gap-2 for a 16px icon) so a
+// filled primary and an outlined secondary sit side by side at identical
+// size (the primary's border is just the accent colour).
 export const primaryLinkClass =
-  "flex min-h-[44px] shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-brand-control bg-brand-accent px-5 text-sm font-semibold text-white transition hover:bg-brand-accent-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent focus-visible:ring-offset-2";
+  "flex min-h-[44px] shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-brand-control border border-brand-accent bg-brand-accent px-5 text-sm font-semibold text-white transition hover:bg-brand-accent-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent focus-visible:ring-offset-2";
 
 export const secondaryLinkClass =
-  "flex min-h-[44px] shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-brand-control border border-brand-border bg-white px-4 text-sm font-semibold text-brand-ink transition hover:border-brand-ink-subtle hover:bg-brand-chip focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent";
+  "flex min-h-[44px] shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-brand-control border border-brand-border bg-white px-5 text-sm font-semibold text-brand-ink transition hover:border-brand-ink-subtle hover:bg-brand-chip focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent";

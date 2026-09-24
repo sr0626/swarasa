@@ -43,7 +43,6 @@ import {
 } from "@/lib/manager/loadManagedLocationStatuses";
 import {
   getCurrentUser,
-  getMyActivity,
   getMyDataDeletionRequests,
   getMyFollows,
   getMyManagedLocations,
@@ -56,9 +55,7 @@ import DinerAccountView from "@/components/account/DinerAccountView";
 import ManagerAccountView from "@/components/account/ManagerAccountView";
 import OwnerAccountView from "@/components/account/OwnerAccountView";
 import InfoPanel from "@/components/ui/InfoPanel";
-import type { OwnerActivity } from "@/types/activity";
 import type { AuthMe } from "@/types/auth";
-import type { PaginatedResponse } from "@/types/common";
 import type { FollowedBrand } from "@/types/follow";
 import type { DataDeletionRequest } from "@/types/privacy";
 
@@ -115,25 +112,6 @@ export default async function AccountPage() {
     ownerRestaurants = await loadOwnerRestaurants(session.accessToken);
   }
 
-  // Owner and manager: first page of GET /auth/me/activity, rendered by
-  // OwnerActivitySection ("Load more" fetches subsequent pages via
-  // getMyActivityAction). Broadened to managers 2026-09-22 -- same
-  // endpoint, a narrower row set server-side (see
-  // backend/app/services/audit_query_service.py). Failure is scoped to
-  // this section only.
-  let activityPage: PaginatedResponse<OwnerActivity> | null = null;
-  let activityError: string | null = null;
-  if (me && (me.role === "owner" || me.role === "manager")) {
-    try {
-      activityPage = await getMyActivity({ page: 1, page_size: 20 }, session.accessToken);
-    } catch (error) {
-      activityError =
-        error instanceof ApiError
-          ? error.message
-          : "Could not load recent activity. Please try again.";
-    }
-  }
-
   // Best-effort — the privacy section still renders (just without a known
   // "already pending" state) if this call fails, since it isn't essential
   // to reading the page.
@@ -170,8 +148,6 @@ export default async function AccountPage() {
           brands={ownerRestaurants?.brands ?? []}
           restaurantsError={ownerRestaurants?.loadError ?? null}
           latestDeletionRequest={latestDeletionRequest}
-          activityPage={activityPage}
-          activityError={activityError}
         />
       </OwnerShell>
     );
@@ -188,8 +164,6 @@ export default async function AccountPage() {
           locations={managedLocations}
           locationsError={managedLocationsError}
           latestDeletionRequest={latestDeletionRequest}
-          activityPage={activityPage}
-          activityError={activityError}
         />
       </ManagerShell>
     );
