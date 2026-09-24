@@ -597,4 +597,24 @@ git push -u origin fix/deals-card-days-only   # claude
 git push -u origin feat/menu-engine   # claude
 git push -u origin docs/wave8-tracker-status-cmdlog   # claude
 aws lambda invoke --function-name swarasa-api-dev --payload '{"_management_command": "alembic_upgrade"}' --profile swarasa-dev --region us-east-1 ...   # user  (after the #206 deploy, applying 0013_menu)
+git push -u origin docs/decisions-wave8   # claude
+git push -u origin docs/brd-v39-menu-and-catchup   # claude
+git push -u origin fix/uniform-tile-height   # claude
+git push -u origin feat/report-problem-deal-and-email   # claude
+git push -u origin feat/topbar-role-links   # claude
+git push -u origin fix/topbar-remove-about   # claude
+git push -u origin fix/compact-tile-layout   # claude
+git push -u origin feat/search-empty-by-default   # claude
+git push -u origin feat/editor-section-nav-status-chip   # claude
+git push -u origin feat/deal-type-from-end-date   # claude
+git push -u origin fix/footer-alignment   # claude
+git push -u origin feat/favourites-address-map-link   # claude
+git push -u origin fix/tile-deal-badge-top-left   # claude
+git push -u origin fix/console-ui-polish   # claude
+git push -u origin feat/location-pages   # claude
+aws lambda invoke --function-name swarasa-api-dev --payload '{"_management_command": "alembic_upgrade"}' --profile swarasa-dev --region us-east-1 ...   # user  (after the #222 deploy, applying 0014_location_slug)
+git push -u origin feat/hide-menu-and-deals   # claude
+aws lambda invoke --function-name swarasa-api-dev --payload '{"_management_command": "alembic_upgrade"}' --profile swarasa-dev --region us-east-1 ...   # user  (after the #223 deploy, applying 0015_hide_menu_and_deals; order of the pushes/invokes above is approximate)
+git push -u origin feat/new-listing-setup-flow   # claude
+git push -u origin docs/wave9-tracker-status-cmdlog   # claude
 ```
