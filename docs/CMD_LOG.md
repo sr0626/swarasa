@@ -582,4 +582,19 @@ aws lambda invoke --function-name swarasa-api-dev --payload '{"_management_comma
 python3 scripts/create_test_users.py   # user
 python3 scripts/list_users.py   # user
 aws lambda invoke --function-name swarasa-api-dev --payload '{"_management_command": "alembic_upgrade"}' --profile swarasa-dev --region us-east-1 ...   # user  (x2 more: after the #193 deploy applying 0011_brand_deleted_at, after the #194 deploy applying 0012_user_activity_event)
+git fetch --prune && git branch -r --merged origin/main | grep -v 'origin/HEAD\|origin/main$' | sed 's#^ *origin/##' | xargs -n 40 git push origin --delete   # user  (cleanup of the 200+ merged remote branches)
+git push origin --delete docs/backlog-auth-owner-manager-admin-gaps docs/bump-password-toggle-status feat/follow-any-authenticated-role   # user  (3 leftover branches)
+gh api -X PATCH repos/sr0626/swarasa -F delete_branch_on_merge=true   # claude  (enable "Automatically delete head branches")
+```
+
+## 2026-09-24
+```bash
+git push -u origin feat/deal-badge-signup-link   # claude
+git push -u origin feat/manager-deals-button   # claude
+git push -u origin feat/deals-other-active-and-dates   # claude
+git push -u origin feat/favourites-deals-today   # claude
+git push -u origin fix/deals-card-days-only   # claude
+git push -u origin feat/menu-engine   # claude
+git push -u origin docs/wave8-tracker-status-cmdlog   # claude
+aws lambda invoke --function-name swarasa-api-dev --payload '{"_management_command": "alembic_upgrade"}' --profile swarasa-dev --region us-east-1 ...   # user  (after the #206 deploy, applying 0013_menu)
 ```

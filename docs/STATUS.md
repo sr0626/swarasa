@@ -28,7 +28,42 @@ fully satisfied and asked to stop iterating for now, with an explicit intent
 to revisit later, not a final sign-off.
 
 ## Open PRs
-- None open as of 2026-09-23 (other than the batched docs PRs themselves).
+- Only in-flight docs PRs as of 2026-09-24: this wave-8 tracker/status/
+  cmd-log batch and the BRD v3.9 (menu + catch-up) PR. No code PRs open.
+
+## Live state (2026-09-24)
+- Migration `0013_menu` applied to dev via `alembic_upgrade` (2026-09-24).
+- `menu_item_photos_enabled` platform flag is OFF (seeded false); flip with
+  the `set_platform_flag` management command when paid tiers exist.
+- Repo now has "Automatically delete head branches" enabled; the 200+
+  merged branches were cleaned up by the user on 2026-09-23.
+
+## Landed 2026-09-24, wave 8 (#199-#206)
+- **Menu engine** (#206, free tier, never `is_paid`-gated): groups + items
+  (one free-text price OR 1-6 size options), reorder, audit-logged, public
+  `GET /locations/{id}/menu`; Menu section in the location editor
+  (owner/assigned manager/admin) + public menu page with JSON-LD
+  `hasMenu`. Migration `0013_menu`. No soft activate/deactivate toggle
+  (items are deleted instead).
+- Dish photos built but OFF behind `menu_item_photos_enabled` (#206);
+  upload/attach/remove return 403 `menu_photos_disabled` while off. Gate
+  by `is_paid` when billing lands.
+- `set_platform_flag` management command (#206), documented in
+  `docs/SCRIPTS.md`.
+- "More deals & specials" for registered users: `upcoming_deals` on
+  `GET /locations/{id}` (null for public/unassigned callers) + restaurant-
+  page section (#203); diner cards show days only (#205).
+- Deal dates now required: `start_at` required, `end_at` required unless
+  `ongoing: true`; "Ongoing (no end date)" checkbox (#203). No migration.
+- Signed-out deal badge is the sign-in link: "Sign in to see deals" link
+  (#201), then the badge itself became the link, banner on the restaurant
+  page (#203).
+- Favourites tiles show a "Deal(s) available today" panel with up to 2
+  titles (`has_deal_today`, `deal_titles_today` on `/auth/me/follows`,
+  #204).
+- Deals shortcut button on the manager "Locations I manage" card and owner
+  location rows (#202).
+- Docs: wave-7 batch (#199), DECISIONS.md `user_profile` CCPA note (#200).
 
 ## Landed 2026-09-23, wave 7 (#197-#198)
 - CCPA export + approved erasure now cover `user_profile` (#198): export
@@ -165,7 +200,7 @@ to revisit later, not a final sign-off.
 - Payments/subscriptions/refunds deferred by decision (deals were deferred
   here too, reopened 2026-09-23 -- see wave 5).
 
-## Known gaps (2026-09-23)
+## Known gaps (2026-09-24)
 - Manager's own dashboard list (`GET /auth/me/managed-locations`) still
   filters to active locations only (hidden/coming-soon ones don't show).
 - Admin new-user feed covers owner accounts only (no local diner user table;
@@ -179,6 +214,9 @@ to revisit later, not a final sign-off.
   owner, manual confirm, disable/enable and password reset not built.
 - Social login not started. Payments/billing/refunds/payment reports
   deferred by decision. Deal alerts to followers not started.
+- Favourites deal panel (#204): `#deals` anchor has no target when the deal
+  is at a brand's non-primary location (page opens at top).
+- Menu (#206): no per-item soft activate/deactivate; dish photos off.
 - `NEXT_PUBLIC_CONTACT_EMAIL` set in Amplify (#150, applied to dev).
 
 ## Architect (schema + contracts)
@@ -220,7 +258,8 @@ to revisit later, not a final sign-off.
       export/deletion" for the full reasoning — closes the tracked
       `docs/PROJECT_PLAN.csv` gap
 - [x] Deals engine (#185, live in dev, free-tier)
-- [ ] Menu, Stripe — Phase 2, not started (correctly)
+- [x] Menu engine (#206, live in dev, free-tier; photos built but OFF)
+- [ ] Stripe — Phase 2, deferred by decision
 - [x] Dev/test seed script (`backend/app/scripts/seed_dev_data.py`, PR #46)
       — small, idempotent owner/brand/location/manager/claim rows across 3
       "(Dev Seed)"-labeled brands. Blocked on a human step it can't do
