@@ -9,7 +9,8 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from app.schemas.cuisine import CuisineTagOut
-from app.schemas.location import LocationStatusValue
+from app.schemas.location import LocationOut, LocationStatusValue
+from app.schemas.search import NearestLocationOut
 
 # `GET /restaurants` sort option (added for the admin "Most followed"
 # sort control, docs/API_CONTRACTS.md "GET /restaurants"). Omitted/`None`
@@ -78,6 +79,8 @@ class RestaurantUpdate(BaseModel):
 
 class LocationSummaryOut(BaseModel):
     id: int
+    # Own public-page slug (/restaurant/{brand_slug}/{slug}), unique per brand.
+    slug: str
     location_name: str | None
     address_line1: str
     city: str
@@ -117,6 +120,62 @@ class RestaurantListResponse(BaseModel):
     """
 
     results: list[RestaurantOut]
+    page: int
+    page_size: int
+    total: int
+
+
+class BrandLocationCardOut(NearestLocationOut):
+    """One ACTIVE location of a brand, as a landing-page card
+    (`GET /restaurants/by-slug/{brand_slug}`): everything a search tile
+    shows — `NearestLocationOut` (slug, address, phone, today's hours inputs,
+    `is_open_now`, `has_deal_today` with the SAME predicate `/search` uses) —
+    plus the location's own optional label and cover photo. `distance_mi` is
+    always null (no viewer position). Public and content-free: deal titles are
+    never here, only the boolean.
+    """
+
+    location_name: str | None = None
+    cover_photo_url: str | None = None
+    cover_photo_thumbnail_url: str | None = None
+
+
+class RestaurantPublicOut(RestaurantOut):
+    """`GET /restaurants/by-slug/{brand_slug}` — the brand plus its ACTIVE
+    locations (hidden locations and soft-deleted brands never appear; a
+    soft-deleted brand is a 404). Ordered by city (case-insensitive), then id.
+    The public landing / single-location page decides what to render from
+    `locations` (0 -> brand-only page, 1 -> that location's profile at the
+    brand URL, 2+ -> landing page)."""
+
+    locations: list[BrandLocationCardOut]
+
+
+class LocationPageOut(BaseModel):
+    """`GET /restaurants/by-slug/{brand_slug}/locations/{location_slug}` — one
+    round trip for the location profile page: the brand (its
+    `location_count` is the ACTIVE-location count, which is how the page
+    decides its canonical URL) and the location's full detail, exactly the
+    `GET /locations/{id}` payload (same visibility + deal-content gating)."""
+
+    restaurant: RestaurantOut
+    location: LocationOut
+
+
+class PublicLocationIndexItem(BaseModel):
+    """One row of `GET /sitemap/locations` — everything the sitemap needs to
+    emit canonical URLs without a per-brand lookup."""
+
+    brand_slug: str
+    location_slug: str
+    # ACTIVE locations of this brand: 1 means the canonical URL is the short
+    # /restaurant/{brand_slug}; 2+ means /restaurant/{brand_slug}/{location_slug}.
+    active_location_count: int
+    updated_at: datetime
+
+
+class PublicLocationIndexResponse(BaseModel):
+    results: list[PublicLocationIndexItem]
     page: int
     page_size: int
     total: int

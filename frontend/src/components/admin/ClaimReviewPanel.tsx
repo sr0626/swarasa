@@ -10,6 +10,7 @@ import { approveClaimAction, rejectClaimAction } from "@/app/admin/claims/action
 import ClaimStatusBadge from "@/components/claim/ClaimStatusBadge";
 import { CheckIcon, XIcon } from "@/components/ui/icons";
 import type { ClaimQueueItem, ClaimResponse, ClaimStatus } from "@/types/claim";
+import { brandHref } from "@/lib/restaurant/urls";
 
 interface ClaimReviewPanelProps {
   initialClaims: ClaimQueueItem[];
@@ -202,7 +203,7 @@ function ClaimCard({
         <div className="min-w-0">
           <h2 className="font-display text-lg font-bold text-brand-ink">
             <Link
-              href={`/restaurant/${claim.brand_slug}`}
+              href={brandHref(claim.brand_slug)}
               className="underline-offset-2 hover:underline"
             >
               {claim.brand_name}

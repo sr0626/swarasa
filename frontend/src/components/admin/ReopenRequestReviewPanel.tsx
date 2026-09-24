@@ -23,6 +23,7 @@ import type {
   ReopenRequestResponse,
   ReopenRequestStatus,
 } from "@/types/locationReopen";
+import { locationHref } from "@/lib/restaurant/urls";
 
 interface ReopenRequestReviewPanelProps {
   initialRequests: ReopenRequestQueueItem[];
@@ -150,7 +151,7 @@ function ReopenRequestCard({
         <div className="min-w-0">
           <h2 className="font-display text-lg font-bold text-brand-ink">
             <Link
-              href={`/restaurant/${request.brand_slug}`}
+              href={locationHref(request.brand_slug, request.location_slug)}
               className="underline-offset-2 hover:underline"
             >
               {request.brand_name}

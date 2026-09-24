@@ -1,5 +1,5 @@
 // Public "Report a problem / suggest an update" page —
-// `/restaurant/{slug}/report`, linked from the restaurant detail page.
+// `/restaurant/{brandSlug}/report`, linked from the restaurant detail page.
 // No auth required (docs/API_CONTRACTS.md "POST /reports" is public);
 // a signed-in visitor is attributed server-side by the Server Action.
 import type { Metadata } from "next";
@@ -8,13 +8,16 @@ import { notFound } from "next/navigation";
 import { ApiError } from "@/lib/api/client";
 import { getRestaurantBySlug, getRestaurantLocations } from "@/lib/api/restaurants";
 import { getServerSession } from "@/lib/auth/session";
+import { brandHref } from "@/lib/restaurant/urls";
 import TopBar from "@/components/home/TopBar";
 import ReportProblemForm from "@/components/restaurant/ReportProblemForm";
 import type { LocationSummary } from "@/types/location";
 import type { RestaurantBrand } from "@/types/restaurant";
 
 interface ReportPageProps {
-  params: { slug: string };
+  params: { brandSlug: string };
+  /** `?location={id}` pre-selects the location the visitor came from. */
+  searchParams?: { location?: string };
 }
 
 export const metadata: Metadata = {
@@ -23,10 +26,10 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function ReportPage({ params }: ReportPageProps) {
+export default async function ReportPage({ params, searchParams }: ReportPageProps) {
   let restaurant: RestaurantBrand;
   try {
-    restaurant = await getRestaurantBySlug(params.slug);
+    restaurant = await getRestaurantBySlug(params.brandSlug);
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) {
       notFound();
@@ -72,13 +75,14 @@ export default async function ReportPage({ params }: ReportPageProps) {
             brandName={restaurant.name}
             slug={restaurant.slug}
             locations={locations}
+            defaultLocationId={Number(searchParams?.location) || null}
             signedInEmail={signedInEmail}
           />
         </div>
 
         <p className="mt-4 text-center text-xs text-brand-ink-subtle">
           <Link
-            href={`/restaurant/${restaurant.slug}`}
+            href={brandHref(restaurant.slug)}
             className="font-semibold text-brand-ink underline"
           >
             Back to {restaurant.name}

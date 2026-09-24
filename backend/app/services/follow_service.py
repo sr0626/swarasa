@@ -123,6 +123,7 @@ async def _active_locations_by_brand(
             select(
                 RestaurantLocation.id,
                 RestaurantLocation.brand_id,
+                RestaurantLocation.slug,
                 RestaurantLocation.address_line1,
                 RestaurantLocation.city,
                 RestaurantLocation.state,
@@ -172,6 +173,7 @@ def _nearest_location_out(row, has_deal_today: bool, hours_rows: list) -> Neares
     status = hours_service.compute_today_status(today_row, row.timezone)
     return NearestLocationOut(
         location_id=row.id,
+        slug=row.slug,
         distance_mi=None,
         address_line1=row.address_line1,
         city=row.city,

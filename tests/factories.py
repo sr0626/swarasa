@@ -92,6 +92,10 @@ class RestaurantLocationFactory(factory.Factory):
         model = RestaurantLocation
 
     brand_id = factory.Sequence(lambda n: n + 1)
+    # Unique per (brand_id, slug) — a sequence guarantees that for any number
+    # of same-brand locations in one test. Tests of the real slug rule use
+    # `location_slug.pick_location_slug` / the create paths instead.
+    slug = factory.Sequence(lambda n: f"loc-{n}")
     location_name = None
     address_line1 = FactoryFaker("street_address")
     address_line2 = None

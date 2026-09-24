@@ -26,7 +26,15 @@ from app.schemas.location import (
 )
 from app.schemas.photo import PhotoCreate, PhotoOut, PhotoUpdate, UploadUrlResponse
 from app.schemas.restaurant import LocationListResponse, LocationSummaryOut
-from app.services import audit_service, auth_service, deal_service, hours_service, photo_service, s3_service
+from app.services import (
+    audit_service,
+    auth_service,
+    deal_service,
+    hours_service,
+    location_slug,
+    photo_service,
+    s3_service,
+)
 
 
 def _to_decimal(value: float | None) -> Decimal | None:
@@ -85,6 +93,8 @@ async def _location_to_out(
         id=location.id,
         brand_id=location.brand_id,
         brand_name=brand.name,
+        slug=location.slug,
+        brand_slug=brand.slug,
         location_name=location.location_name,
         address_line1=location.address_line1,
         address_line2=location.address_line2,
@@ -247,6 +257,11 @@ async def create_location(db: AsyncSession, body: LocationCreate, current_user) 
 
     location = RestaurantLocation(
         brand_id=body.brand_id,
+        # Fixed for life (never re-derived on an address edit) — see
+        # app/services/location_slug.py.
+        slug=await location_slug.assign_location_slug(
+            db, body.brand_id, body.city, body.address_line1
+        ),
         address_line1=body.address_line1,
         address_line2=body.address_line2,
         city=body.city,
@@ -652,6 +667,7 @@ async def list_locations_for_brand(
         results.append(
             LocationSummaryOut(
                 id=row.id,
+                slug=row.slug,
                 location_name=row.location_name,
                 address_line1=row.address_line1,
                 city=row.city,

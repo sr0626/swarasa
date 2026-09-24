@@ -30,7 +30,7 @@ const manrope = Manrope({
 
 export const metadata: Metadata = {
   // Required for relative `alternates.canonical` paths (e.g.
-  // "/restaurant/{slug}" in app/restaurant/[slug]/page.tsx) to resolve to
+  // "/restaurant/{slug}" in app/restaurant/[brandSlug]/page.tsx) to resolve to
   // real absolute URLs (frontend/CLAUDE.md "Canonical URLs on all pages").
   metadataBase: new URL(SITE_URL),
   title: {

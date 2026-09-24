@@ -24,10 +24,12 @@ from app.dependencies.pagination import Pagination, pagination_params
 from app.schemas.follow import FollowOut
 from app.schemas.restaurant import (
     LocationListResponse,
+    LocationPageOut,
     RestaurantCreate,
     RestaurantListResponse,
     RestaurantListStatusValue,
     RestaurantOut,
+    RestaurantPublicOut,
     RestaurantSortValue,
     RestaurantUpdate,
 )
@@ -126,6 +128,35 @@ async def list_restaurants(
         city=city,
         is_claimed=is_claimed,
         sort=sort,
+    )
+
+
+# `by-slug` routes are registered BEFORE `/{id_or_slug}` and `/{brand_id}/...`
+# so the literal `by-slug` segment is never swallowed by those path params.
+@router.get("/by-slug/{brand_slug}", response_model=RestaurantPublicOut)
+async def get_restaurant_by_slug(
+    brand_slug: str, db: AsyncSession = Depends(get_db)
+) -> RestaurantPublicOut:
+    """Public. The brand plus its ACTIVE locations (cards) in one round trip —
+    what the public `/restaurant/{brand_slug}` page renders from
+    (docs/API_CONTRACTS.md "GET /restaurants/by-slug/{brand_slug}")."""
+    return await restaurant_service.get_public_restaurant_by_slug(db, brand_slug)
+
+
+@router.get(
+    "/by-slug/{brand_slug}/locations/{location_slug}", response_model=LocationPageOut
+)
+async def get_location_page_by_slugs(
+    brand_slug: str,
+    location_slug: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser | None = Depends(get_current_user_optional),
+) -> LocationPageOut:
+    """Public, viewer-aware — the same visibility and deal-content gating as
+    `GET /locations/{id}` (docs/API_CONTRACTS.md "GET
+    /restaurants/by-slug/{brand_slug}/locations/{location_slug}")."""
+    return await restaurant_service.get_location_page_by_slugs(
+        db, brand_slug, location_slug, current_user
     )
 
 

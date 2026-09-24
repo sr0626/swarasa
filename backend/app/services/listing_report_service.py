@@ -48,6 +48,7 @@ def to_report_out(report: ListingReport) -> ReportOut:
         brand_name=report.brand.name,
         brand_slug=report.brand.slug,
         location_id=report.location_id,
+        location_slug=location.slug if location is not None else None,
         location_address=(
             f"{location.address_line1}, {location.city}, {location.state} {location.postal_code}"
             if location is not None

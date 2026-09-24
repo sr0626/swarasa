@@ -32,6 +32,8 @@ export interface SearchParams {
 
 export interface SearchNearestLocation {
   location_id: number;
+  /** The location's own public-page slug — tiles link to `/restaurant/{brand slug}/{slug}`. */
+  slug: string;
   /** null only for a text-search hit whose location has no coordinates. */
   distance_mi: number | null;
   // Added for a clickable full-address / Google Maps link on the search

@@ -4,9 +4,8 @@
 // its open status, with prominent Edit, Deals and Menu actions (Deals first: it's the one managers/owners update most often) (the routes a manager
 // actually works in: /portal/locations/{id} and /portal/locations/{id}/menu).
 //
-// No "View public page" action: ManagedLocation carries neither the brand
-// slug nor brand id the public /restaurant/[slug] route needs (flagged in
-// the PR — would need the contract to expose the slug).
+// "View public page" opens THIS location's own public page
+// (/restaurant/{brand_slug}/{slug}); the contract now exposes both slugs.
 //
 // Assignment is owner-controlled, so the empty state and footnote say so.
 // Server Component — links only.
@@ -19,6 +18,7 @@ import {
   secondaryLinkClass,
 } from "@/components/account/accountShared";
 import type { ManagedLocationWithStatus } from "@/lib/manager/loadManagedLocationStatuses";
+import { locationHref } from "@/lib/restaurant/urls";
 
 export default function ManagedLocationsPanel({
   locations,
@@ -120,6 +120,13 @@ export default function ManagedLocationsPanel({
                   >
                     <MenuBookIcon className="h-4 w-4" />
                     Menu
+                  </Link>
+                  <Link
+                    href={locationHref(location.brand_slug, location.slug)}
+                    aria-label={`View public page for ${label}`}
+                    className={secondaryLinkClass}
+                  >
+                    View public page
                   </Link>
                 </div>
               </li>

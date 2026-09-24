@@ -16,8 +16,10 @@ You do NOT touch `/backend`, `/infra`, or `/tests` unless explicitly told to.
   /src
     /app                        ← Next.js 14 App Router
       page.tsx                  ← homepage / search
-      /restaurant/[slug]
-        page.tsx                ← public listing page (SSR)
+      /restaurant/[brandSlug]
+        page.tsx                ← brand URL (SSR): sole location's profile, or landing page for 2+ locations
+        /[locationSlug]/page.tsx ← a location's own profile page (SSR)
+        /report/page.tsx        ← brand-level "report a problem" form
       /search
         page.tsx                ← search results page
       /portal                   ← owner + manager portal (auth-gated)
@@ -58,7 +60,7 @@ You do NOT touch `/backend`, `/infra`, or `/tests` unless explicitly told to.
 
 ### SSR listing page (SEO critical — always SSR, never CSR)
 ```typescript
-// /frontend/src/app/restaurant/[slug]/page.tsx
+// /frontend/src/app/restaurant/[brandSlug]/[locationSlug]/page.tsx (see lib/restaurant/*)
 import { Metadata } from "next";
 import { getRestaurantBySlug } from "@/lib/api/restaurants";
 

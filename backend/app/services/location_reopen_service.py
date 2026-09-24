@@ -52,6 +52,7 @@ def _to_queue_item(request: LocationReopenRequest, requester_email: str | None) 
         brand_id=brand.id,
         brand_name=brand.name,
         brand_slug=brand.slug,
+        location_slug=location.slug,
         location_address=(
             f"{location.address_line1}, {location.city}, {location.state} {location.postal_code}"
         ),

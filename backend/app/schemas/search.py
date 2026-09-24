@@ -10,6 +10,9 @@ from app.schemas.cuisine import CuisineTagOut
 
 class NearestLocationOut(BaseModel):
     location_id: int
+    # The location's own public-page slug (/restaurant/{brand_slug}/{slug}) —
+    # tiles link to that page (docs/DECISIONS.md "Location pages").
+    slug: str
     # None only for a text (`q`) search hit whose location has no coordinates.
     distance_mi: float | None
     # Added: search result cards need the full street address for display

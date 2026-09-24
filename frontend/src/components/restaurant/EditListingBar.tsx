@@ -1,6 +1,6 @@
 // Shown at the top of the public restaurant page ONLY to someone who can
 // edit this listing (admin, the owning owner, or an assigned manager -- the
-// check lives in app/restaurant/[slug]/page.tsx). Links to the existing
+// check lives in lib/restaurant/profileData.ts `canEditListing`). Links to the existing
 // location editor rather than turning the public page into an editor, so the
 // public page stays fast, cacheable-in-spirit and SEO-clean for everyone else.
 //
