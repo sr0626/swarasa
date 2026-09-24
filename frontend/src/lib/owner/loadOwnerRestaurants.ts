@@ -12,7 +12,7 @@
 // owning owner's own non-active locations here, not just active ones.
 // Managers come from the existing `GET /locations/{id}/managers`.
 // Read-only status display only -- interactive status changes live on the
-// location editor (LocationStatusControl.tsx), not this dashboard list.
+// location editor (LocationStatusMenu.tsx), not this dashboard list.
 import { ApiError } from "@/lib/api/client";
 import { getMyRestaurants, getRestaurantLocations } from "@/lib/api/restaurants";
 import { getLocationById, getLocationManagers } from "@/lib/api/locations";
