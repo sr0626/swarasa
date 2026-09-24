@@ -11,7 +11,6 @@ import {
 import { fieldErrorsFromZod } from "./fieldErrors.ts";
 
 const base = {
-  deal_type: "deal",
   title: "  Lunch buffet  ",
   description: "",
   applicable_days: [],

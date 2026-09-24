@@ -10,16 +10,11 @@
 // whether that array is present, it never re-derives viewer identity
 // itself (see app/restaurant/[slug]/page.tsx for where the access token is
 // attached to the `getLocationById` call that produces this data).
-import { DEALS_SECTION_ID } from "@/lib/deals/format";
+import { DEALS_SECTION_ID, dealTypeLabel } from "@/lib/deals/format";
 import DealBadge from "@/components/ui/DealBadge";
 import DealSignInLink from "@/components/ui/DealSignInLink";
 import { TagIcon } from "@/components/ui/icons";
 import type { DealPublic } from "@/types/deal";
-
-const DEAL_TYPE_LABEL: Record<string, string> = {
-  deal: "Deal",
-  special: "Special",
-};
 
 interface RestaurantDealsProps {
   hasDealToday: boolean;
@@ -79,7 +74,7 @@ export default function RestaurantDeals({
           >
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-brand-pill bg-brand-accent/10 px-2 py-0.5 text-xs font-semibold text-brand-accent">
-                {DEAL_TYPE_LABEL[deal.deal_type] ?? deal.deal_type}
+                {dealTypeLabel(deal.deal_type)}
               </span>
               <h3 className="font-display text-base font-semibold text-brand-ink">{deal.title}</h3>
             </div>

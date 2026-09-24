@@ -31,7 +31,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
-from app.models.deal import Deal
+from app.models.deal import Deal, effective_deal_type
 from app.models.location_manager import LocationManager
 from app.models.restaurant_brand import RestaurantBrand
 from app.models.restaurant_location import RestaurantLocation
@@ -39,7 +39,7 @@ from app.schemas.deal import DealCreate, DealOut, DealPublicOut, DealUpcomingOut
 from app.services import audit_service, auth_service, hours_service
 
 _AUDITED_FIELDS = (
-    "deal_type",
+    "deal_type",  # recorded as the EFFECTIVE (end_at-derived) type — see _snapshot
     "title",
     "description",
     "applicable_days",
@@ -51,7 +51,20 @@ _AUDITED_FIELDS = (
 # Fields on DealUpdate that are non-nullable on the model — an explicit
 # `null` for one of these is a 400, not a "clear this field" (same posture
 # as LocationUpdate.phone; see app/schemas/deal.py DealUpdate docstring).
-_NON_NULLABLE_FIELDS = ("deal_type", "title", "is_active")
+# `deal_type` is not client-writable at all (derived from `end_at`).
+_NON_NULLABLE_FIELDS = ("title", "is_active")
+
+# Fields a PATCH may write directly (everything audited except the derived
+# `deal_type`, which `_sync_deal_type` sets from the merged `end_at`).
+_WRITABLE_FIELDS = tuple(f for f in _AUDITED_FIELDS if f != "deal_type")
+
+
+def _sync_deal_type(deal: Deal) -> None:
+    """Keep the stored `deal_type` column equal to the end_at-derived value.
+    Called on every create/update. READ paths never rely on this — they use
+    `effective_deal_type` — so legacy rows need no backfill; a stale stored
+    value is simply corrected the next time the row is written."""
+    deal.deal_type = effective_deal_type(deal.end_at)
 
 
 def _aware(value: datetime) -> datetime:
@@ -64,6 +77,8 @@ def _aware(value: datetime) -> datetime:
 def _snapshot(deal: Deal) -> dict:
     """JSON-safe before/after snapshot for audit_log.old_val/new_val."""
     data = {field: getattr(deal, field) for field in _AUDITED_FIELDS}
+    # Audit the effective type (what users see), not a possibly-stale column.
+    data["deal_type"] = effective_deal_type(deal.end_at)
     if data.get("start_at") is not None:
         data["start_at"] = data["start_at"].isoformat()
     if data.get("end_at") is not None:
@@ -75,7 +90,7 @@ def _deal_to_out(deal: Deal) -> DealOut:
     return DealOut(
         id=deal.id,
         location_id=deal.location_id,
-        deal_type=deal.deal_type,
+        deal_type=effective_deal_type(deal.end_at),
         title=deal.title,
         description=deal.description,
         applicable_days=deal.applicable_days,
@@ -90,7 +105,7 @@ def _deal_to_out(deal: Deal) -> DealOut:
 def _deal_to_public_out(deal: Deal) -> DealPublicOut:
     return DealPublicOut(
         id=deal.id,
-        deal_type=deal.deal_type,
+        deal_type=effective_deal_type(deal.end_at),
         title=deal.title,
         description=deal.description,
     )
@@ -125,7 +140,7 @@ async def create_deal(
 
     deal = Deal(
         location_id=location_id,
-        deal_type=body.deal_type,
+        deal_type=effective_deal_type(body.end_at),
         title=body.title,
         description=body.description,
         applicable_days=body.applicable_days,
@@ -168,9 +183,12 @@ async def update_deal(
                 400, f"{field} cannot be cleared to null", "bad_request"
             )
 
-    for field in _AUDITED_FIELDS:
+    for field in _WRITABLE_FIELDS:
         if field in data:
             setattr(deal, field, data[field])
+    # Derived from the merged end_at — a title edit or active toggle leaves
+    # end_at (hence the type) untouched; adding/removing an end date flips it.
+    _sync_deal_type(deal)
 
     if (
         deal.start_at is not None
@@ -472,7 +490,7 @@ def upcoming_to_out(pairs: list[tuple[Deal, date]]) -> list[DealUpcomingOut]:
     return [
         DealUpcomingOut(
             id=d.id,
-            deal_type=d.deal_type,
+            deal_type=effective_deal_type(d.end_at),
             title=d.title,
             description=d.description,
             applicable_days=d.applicable_days,

@@ -4,6 +4,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   dealPanelLabel,
+  dealTypeHint,
+  dealTypeLabel,
   formatDealDateRange,
   formatDealDays,
   formatNextOccurrence,
@@ -98,4 +100,28 @@ test("formatNextOccurrence: uses the location timezone for 'today'", () => {
 
 test("formatNextOccurrence: passes through malformed input", () => {
   assert.equal(formatNextOccurrence("soon"), "soon");
+});
+
+test("dealTypeLabel: special -> Special, everything else -> Deal", () => {
+  assert.equal(dealTypeLabel("special"), "Special");
+  assert.equal(dealTypeLabel("deal"), "Deal");
+  assert.equal(dealTypeLabel(undefined), "Deal");
+  assert.equal(dealTypeLabel("nonsense"), "Deal");
+});
+
+test("dealTypeHint: ongoing -> Special, regardless of any leftover end value", () => {
+  assert.equal(dealTypeHint(true, ""), "Will show as: Special (ongoing)");
+  assert.equal(dealTypeHint(true, "2026-10-31T21:00"), "Will show as: Special (ongoing)");
+});
+
+test("dealTypeHint: an end date -> Deal with that date", () => {
+  assert.equal(dealTypeHint(false, "2026-10-31T21:00"), "Will show as: Deal (ends Oct 31, 2026, 9 PM)");
+  assert.equal(dealTypeHint(false, "2026-10-31T23:59"), "Will show as: Deal (ends Oct 31, 2026)");
+});
+
+test("dealTypeHint: not ongoing but no (valid) end date yet -> Deal, prompting for one", () => {
+  const prompt = "Will show as: Deal (once you set an end date)";
+  assert.equal(dealTypeHint(false, ""), prompt);
+  assert.equal(dealTypeHint(false, null), prompt);
+  assert.equal(dealTypeHint(false, "not a date"), prompt);
 });

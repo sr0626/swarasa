@@ -52,7 +52,6 @@ const optionalDateTimeSchema = z
 // lib/validation/location.ts is built off a plain object, not a refined
 // one — `ZodEffects` from `.superRefine`/`.refine` has no `.partial()`).
 const dealFormShape = z.object({
-  deal_type: z.enum(["deal", "special"]),
   title: z.string().trim().min(1, "Title is required").max(DEAL_TITLE_MAX_LENGTH),
   description: z
     .string()

@@ -48,7 +48,10 @@ class DealCreate(BaseModel):
     NULL`, exactly as before), so no migration and legacy rows are unaffected.
     """
 
-    deal_type: DealTypeValue = "deal"
+    # No `deal_type` field: the Deal-vs-Special label is derived from
+    # `end_at` (2026-09-24; see `app.models.deal.effective_deal_type`). A
+    # client that still sends `deal_type` is accepted and the value is
+    # IGNORED (pydantic drops unknown keys) for backward compatibility.
     title: str = Field(min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=2000)
     # NULL/omitted = every day. See app/models/deal.py module docstring.
@@ -87,15 +90,16 @@ class DealUpdate(BaseModel):
     """PATCH body — same `exclude_unset` convention as `LocationUpdate`
     (app/schemas/location.py): an omitted field leaves the stored value
     untouched; an explicit `null` on a nullable field (description,
-    applicable_days, start_at, end_at) clears it. `title`/`deal_type`/
-    `is_active` are non-nullable on the model, so an explicit `null` for
+    applicable_days, start_at, end_at) clears it. `title`/`is_active` are
+    non-nullable on the model, so an explicit `null` for
     those is rejected the same way `LocationUpdate.phone` rejects it —
     enforced in `deal_service.update_deal`, not here, since Pydantic alone
     can't distinguish "omitted" from "explicit null" without
     `exclude_unset`.
     """
 
-    deal_type: DealTypeValue | None = None
+    # No `deal_type` field — derived from the merged `end_at`; a supplied
+    # value is ignored (see `DealCreate`).
     title: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = None
     applicable_days: list[int] | None = None

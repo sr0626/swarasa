@@ -2,7 +2,8 @@
 // backend/app/schemas/deal.py exactly (PR #185).
 //
 // Two independent axes, per backend/app/models/deal.py's module docstring:
-// `deal_type` ("deal" | "special") is purely descriptive/display metadata;
+// `deal_type` ("deal" | "special") is read-only display metadata DERIVED by
+// the server from the end date (no end date -> "special", else "deal");
 // `applicable_days` (0=Monday..6=Sunday, same convention as
 // `LocationHour.day_of_week` in @/types/location) is the only thing that
 // actually restricts which days a deal shows — `null`/omitted means every
@@ -71,7 +72,8 @@ export interface DealUpcoming {
 
 /** Body for POST /locations/{id}/deals. */
 export interface CreateDealInput {
-  deal_type: DealType;
+  // No `deal_type`: derived server-side from the end date (a supplied value
+  // would be ignored).
   title: string;
   description: string | null;
   applicable_days: DayOfWeek[] | null;
@@ -91,7 +93,7 @@ export interface CreateDealInput {
  * convention as `UpdateLocationInput` — an omitted key leaves the stored
  * value untouched; an explicit `null` on a nullable field
  * (description/applicable_days/start_at/end_at) clears it.
- * `title`/`deal_type`/`is_active` are non-nullable on the model, so the
+ * `title`/`is_active` are non-nullable on the model, so the
  * client never sends `null` for those (enforced by the form, not the type
  * system — see lib/validation/deal.ts).
  */

@@ -25,14 +25,19 @@ import {
   updateLocationDealAction,
 } from "@/app/portal/locations/[id]/actions";
 import { PencilIcon, PlusIcon, TagIcon, TrashIcon } from "@/components/ui/icons";
-import { formatDealDateRange, formatDealDays } from "@/lib/deals/format";
+import {
+  dealTypeHint,
+  dealTypeLabel,
+  formatDealDateRange,
+  formatDealDays,
+} from "@/lib/deals/format";
 import {
   DEAL_DESCRIPTION_MAX_LENGTH,
   DEAL_TITLE_MAX_LENGTH,
   dealFormSchema,
 } from "@/lib/validation/deal";
 import { fieldErrorsFromZod, type FieldErrors } from "@/lib/validation/fieldErrors";
-import type { Deal, DealType } from "@/types/deal";
+import type { Deal } from "@/types/deal";
 
 const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const DAY_ABBREVIATIONS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -43,7 +48,6 @@ const inputClass =
 const labelClass = "text-sm font-semibold text-brand-ink";
 
 interface DealFormState {
-  deal_type: DealType;
   title: string;
   description: string;
   applicable_days: number[];
@@ -56,7 +60,6 @@ interface DealFormState {
 }
 
 const EMPTY_FORM: DealFormState = {
-  deal_type: "deal",
   title: "",
   description: "",
   applicable_days: [],
@@ -93,7 +96,6 @@ function formFromDeal(deal: Deal): DealFormState {
   // which is exactly what it already meant.
   const startIso = deal.start_at ?? deal.created_at;
   return {
-    deal_type: deal.deal_type,
     title: deal.title,
     description: deal.description ?? "",
     applicable_days: deal.applicable_days ? [...deal.applicable_days] : [],
@@ -300,21 +302,6 @@ export default function LocationDealsManager({
           </h3>
 
           <div>
-            <label htmlFor="deal-type" className={labelClass}>
-              Type
-            </label>
-            <select
-              id="deal-type"
-              value={form.deal_type}
-              onChange={(e) => patchForm({ deal_type: e.target.value as DealType })}
-              className={`${inputClass} min-h-[44px]`}
-            >
-              <option value="deal">Deal — time-limited offer</option>
-              <option value="special">Special — a standing offer (e.g. weekly special)</option>
-            </select>
-          </div>
-
-          <div>
             <label htmlFor="deal-title" className={labelClass}>
               Title
             </label>
@@ -450,6 +437,13 @@ export default function LocationDealsManager({
             />
             Ongoing (no end date) — runs until you turn it off
           </label>
+          <p
+            id="deal-type-hint"
+            aria-live="polite"
+            className="-mt-2 rounded-brand-control bg-brand-chip px-3 py-2 text-xs font-medium text-brand-ink-muted"
+          >
+            {dealTypeHint(form.ongoing, form.end_at)}
+          </p>
           <p className="-mt-2 text-xs text-brand-ink-subtle">
             Times use this device&apos;s timezone. For something like &ldquo;every Tuesday&rdquo;,
             pick the Tuesday chip above, a start date, and tick Ongoing.
@@ -505,7 +499,7 @@ export default function LocationDealsManager({
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="rounded-brand-pill bg-brand-accent/10 px-2 py-0.5 text-xs font-semibold text-brand-accent">
-                      {deal.deal_type === "special" ? "Special" : "Deal"}
+                      {dealTypeLabel(deal.deal_type)}
                     </span>
                     <span
                       className={

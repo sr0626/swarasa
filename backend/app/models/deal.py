@@ -17,18 +17,21 @@ guessed differently on.
 ## Two independent axes
 
 1. **`deal_type`** (`"deal"` | `"special"`) — pre-existing product decision,
-   `docs/DECISIONS.md` "deal type ENUM (deal | special)" (dated May 2026,
-   i.e. decided before this task, honored here rather than re-decided): a
-   "deal" is framed as time-limited (`end_at` set), a "special" as
-   permanent-until-removed (`end_at` NULL). This column is purely
-   descriptive/display metadata — no query or the expiry cron branches on
-   it; only `end_at` drives actual expiry behavior. Kept as a plain
-   `String`, not a DB-level ENUM, matching the established precedent for
-   every other status-like column in this codebase
+   `docs/DECISIONS.md` "deal type ENUM (deal | special)" (dated May 2026):
+   a "deal" is time-limited (`end_at` set), a "special" is
+   permanent-until-removed (`end_at` NULL). As of 2026-09-24 (user
+   decision) this is DERIVED from `end_at`, never chosen by the owner:
+   `effective_deal_type()` below is the single source of truth and every
+   serializer (management, public "today", upcoming, follows) goes through
+   it, so an API response can never disagree with the end date. The stored
+   column is kept (no migration) and re-synced from `end_at` on every
+   create/update, but READ paths never trust it — a legacy row with a
+   stale hand-picked value reads back correctly with no backfill. No query
+   or the expiry cron branches on it; only `end_at` drives expiry. Kept as
+   a plain `String`, not a DB-level ENUM, matching the established
+   precedent for every other status-like column in this codebase
    (`claim_request.status`, `listing_report.status`,
-   `restaurant_location.status` — see that model's own judgment-call note):
-   a DB ENUM needs a migration to add a value later, a plain String with
-   documented allowed values doesn't.
+   `restaurant_location.status` — see that model's own judgment-call note).
 2. **`applicable_days`** (new, this task's own design) — which day(s) of
    the week the deal/special is offered, independent of whether it's
    time-bounded. `NULL` = every day (no restriction). A non-null value is a
@@ -83,6 +86,13 @@ if TYPE_CHECKING:
     from app.models.restaurant_location import RestaurantLocation
 
 
+def effective_deal_type(end_at: datetime | None) -> str:
+    """Single source of truth for the Deal-vs-Special label: no end date
+    (ongoing) -> "special"; has an end date -> "deal". Derived, not chosen —
+    it flips automatically when an end date is added or removed."""
+    return Deal.TYPE_SPECIAL if end_at is None else Deal.TYPE_DEAL
+
+
 class Deal(TimestampMixin, Base):
     __tablename__ = "deal"
     __table_args__ = (
@@ -107,8 +117,9 @@ class Deal(TimestampMixin, Base):
         index=True,
     )
 
-    # "deal" | "special" — see module docstring. Display/framing metadata
-    # only; expiry logic keys off `end_at`, not this column.
+    # "deal" | "special" — see module docstring. A denormalised copy of
+    # `effective_deal_type(end_at)`, re-synced on every write; READ paths
+    # must use `effective_deal_type()`, never this column directly.
     deal_type: Mapped[str] = mapped_column(
         String(16), default=TYPE_DEAL, server_default=TYPE_DEAL, nullable=False
     )
@@ -122,8 +133,8 @@ class Deal(TimestampMixin, Base):
 
     # Optional bounded promotional window. NULL start_at = active
     # immediately; NULL end_at = runs indefinitely until deactivated
-    # (DECISIONS.md "deal type ENUM" framing: this is what makes a row a
-    # "special" in spirit, regardless of the `deal_type` label chosen).
+    # (DECISIONS.md "deal type ENUM" framing: NULL end_at is exactly what
+    # makes a row a "special" — see `effective_deal_type`).
     start_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -132,5 +143,10 @@ class Deal(TimestampMixin, Base):
 
     location: Mapped["RestaurantLocation"] = relationship()
 
+    @property
+    def effective_type(self) -> str:
+        """The type this deal presents as — see `effective_deal_type`."""
+        return effective_deal_type(self.end_at)
+
     def __repr__(self) -> str:  # pragma: no cover
-        return f"<Deal id={self.id} location_id={self.location_id} type={self.deal_type!r}>"
+        return f"<Deal id={self.id} location_id={self.location_id} type={self.effective_type!r}>"
