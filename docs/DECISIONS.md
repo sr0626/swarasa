@@ -1448,6 +1448,10 @@ must be registered before the parameterized one to avoid ambiguity —
 for no real benefit over a single overloaded lookup), requiring the
 frontend to pre-resolve slug->id via `/search` first (extra round trip
 on every listing-page load, defeats the point of SSR-by-slug)*
+**Update 2026-09-24:** `GET /restaurants/by-slug/{brand}` (and `.../locations/{loc}`) were
+later added for the per-location public pages — see "Location pages" in Features &
+Product for why this rejection no longer applies to them. `GET /restaurants/{id_or_slug}`
+itself is unchanged.
 
 **Tier stored as boolean (is_paid + paid_until) on restaurant_location**
 May 2026 | No stored tier enum. is_paid is set directly by Stripe webhooks and admin
@@ -1477,6 +1481,8 @@ with is_claimed=false allows unclaimed listings to exist and be searchable.
 May 2026 | Both use the same table. Deals have end_at set (time-limited).
 Specials have end_at=NULL (permanent until owner removes). Single table, clean query.
 *Rejected: Separate specials table (unnecessary duplication)*
+**Update 2026-09-24:** the Deal-vs-Special label is now derived from `end_at` rather
+chosen — see "Deal vs Special is derived from the end date" in Features & Product.
 
 **Audit log on all core entity writes**
 May 2026 | Full audit trail required for data governance. All writes to restaurant_brand,
@@ -1917,6 +1923,9 @@ for), a brand-new parallel dependency instead of extending
 caller of that dependency needed the same admin branch, so extending it
 in place is less code and one fewer thing to keep in sync than a
 second near-duplicate dependency)*
+**Update 2026-09-24:** `POST /locations` (only) is now also open to admin — see "New
+manual listings start in setup" in Features & Product. `POST /locations/{id}/managers`
+stays owner-only.
 
 **Location manager removal is owner/admin-only, no self-removal by the manager**
 2026-09-13 | Architect decision (root CLAUDE.md "Decision-Making
@@ -2010,6 +2019,230 @@ Owner adds new location during free period — it gets the benefit too.
 ---
 
 ## Features & Product
+
+**Future / parked (no code): menu QR code as a paid feature, the proposed QR-vs-web menu visibility rule (CONFLICTS with the free-public-menu decision — re-confirm before build), city landing pages**
+2026-09-25 | Nothing here is built; recorded so the ideas and the one open conflict
+aren't lost. (1) **Menu QR code** — a paid-tier future feature: a per-location QR
+that encodes the location page's menu anchor,
+`/restaurant/{brand-slug}/{location-slug}#menu` (the per-location URL and `#menu`
+anchor from "Location pages" already exist, so the QR needs no new route).
+Payments are still deferred (see "Payments deferred"), so this waits for billing.
+(2) **Open conflict — must be re-confirmed with the user before anything is
+built.** The user proposed: a menu opened by scanning the QR is public with
+prices, while on web/mobile the menu of a PAID location is visible to
+registered users only. That contradicts the standing decision that the full menu
+with prices is free and public for every location, paid or not ("Full menu with
+prices moved to free tier" and "Menu engine: free-tier, public, price-or-sizes",
+which also states the anonymous read exists so the menu stays crawlable). It would
+also make a paid location's menu weaker for search engines and signed-out
+diners than a free location's, inverting what the paid tier is meant to buy. Not
+implemented and not assumed; the current public-menu behaviour stays until the
+user re-confirms the new rule (and how a "scanned" visit would even be
+distinguished from a web visit — a query flag on the QR URL is spoofable and
+would need its own decision). (3) **City landing pages for SEO**
+(`/indian-restaurants/{city}`) — a separate future feature, distinct from the
+per-location URLs; see "Location pages" for why city-first restaurant URLs were
+rejected.
+*Rejected for now: building any of this before the user re-confirms (1)–(2)*
+
+**`/search` is empty by default; the homepage owns "Popular near you"**
+2026-09-24 | Built in PR #215. `/search` with no criteria shows an empty state
+(quick-start links plus a link to the homepage) and makes NO `GET /search`
+request — no skeleton, no results. A "criterion" is non-blank location text, a
+non-blank `q`, any cuisine/dietary/type tag, or `deals_today=true`
+(`hasSearchCriteria` in `frontend/src/lib/search/filters.ts`); `page`, `sort`
+and unknown params are not criteria. SEO: the empty state is
+`noindex, follow` with canonical `/search` (a thin prompt page, but its links are
+still crawled); pages WITH criteria stay indexable and now carry a canonical to
+their own normalised URL (parameter order and junk params dropped). Frontend
+only — no backend or homepage change, and the geocoding of typed locations is
+unchanged (nothing auto-detects a location).
+*Rejected: keeping "popular" results on bare `/search` (duplicates the
+homepage's "Popular near you" job); `noindex` on criteria pages (they are real,
+distinct result sets worth indexing)*
+
+**US phone validation: one shared rule for every phone field, stored as `+1XXXXXXXXXX`, no backfill**
+2026-09-24 | Built in PR #224, prompted by the owner profile accepting an
+11-digit number (the server had NO rule on `PATCH /auth/me`; the form's zod
+pattern was `^\+?[1-9]\d{7,14}$`). One rule, in `backend/app/core/phone.py`
+and `frontend/src/lib/phone.ts`, both driven by the SAME case table in their
+respective tests so the two layers can't drift: strip formatting (spaces, dashes,
+dots, parentheses) and one leading `+1` or bare `1`; exactly 10 digits must
+remain; the area code and the exchange must each start with 2–9; anything else
+(letters, extensions, other country codes, a `+` anywhere but the front) is
+rejected with "Enter a valid 10-digit US phone number". Accepted values are
+stored as E.164 `+1XXXXXXXXXX` — what location writes already stored and what the
+display formatter expects. Applied to: location create and update
+(`POST`/`PATCH /locations`), `PATCH /auth/me`, and bulk import (JSON and CSV —
+a bad phone is a per-row error and the rest of the batch continues). **No
+backfill:** existing rows that don't fit (non-US, free text) are left alone;
+they simply fail the new rule the next time they are edited. The claim form and
+report-a-problem have no phone input, and managers have no phone at all
+(`user_profile` has no phone column), so nothing changes there.
+*Rejected: an international (`libphonenumber`-style) rule (the platform is
+DFW/US-only for now, and a heavy dependency for a US-only need); backfilling
+legacy rows (no source of truth for the intended number); leaving the
+frontend and backend rules separate without a shared case table (that is how the
+11-digit bug got through)*
+
+**New manual listings start in setup (`coming_soon`); going live is a gated second step**
+2026-09-24 | Built in PR #224. User feedback: a manually added restaurant went
+public the moment it was created. Now `POST /locations` — used ONLY by the
+"Add restaurant" and "Add location" flows — creates the location as
+`coming_soon` (hidden; only `active` is ever public). **No `draft` value was
+added and there is no migration:** `restaurant_location.status` is a plain
+unconstrained string (no CHECK in migration 0008) and `coming_soon` already meant
+"a new, not-yet-open location the owner flips to `active` themselves", with
+every chip, label, filter, admin list and visibility rule already handling it.
+The "Coming soon" label stays; the editor's "This listing isn't live yet"
+banner and checklist are what say "not live yet". **Only `coming_soon` ->
+`active` is gated:** `POST /locations/{id}/status` returns `422` with code
+`listing_incomplete` and a `missing` list until (a) opening hours exist for all 7
+days (each day closed, or open with both times — an unknown day counts as
+missing), (b) the phone is a valid US number (see "US phone validation"), and
+(c) the brand name and full address (street, city, state, ZIP) are present. The
+gate applies to owner and admin alike, and is audit-logged like any status
+change. Un-hiding an `owner_deactivated` listing, reopen approvals and hidden
+moves are NOT gated, so seeded and imported listings with unknown hours keep
+working; `LocationOut.setup_missing` is `[]` outside `coming_soon` so live
+listings never advertise gaps. **Unchanged paths:** bulk import, the seed
+scripts, claim approval and `dev_set_location_status` still create rows directly
+and keep `active` — this applies to manual creation only.
+**Who may create:** `POST /locations` is now open to admin as well as the
+brand's owner; managers stay excluded. This supersedes the 2026-09-17 "Platform
+admin full-access parity" note that kept `POST /locations` deliberately
+owner-only — for THAT ROUTE ONLY; `POST /locations/{id}/managers` stays
+owner-only. **"Add location" for an existing brand** (`/portal/locations/new?brand={id}`,
+owner of the brand or admin) exists because "Add restaurant" always creates a
+new brand — before this, a second branch of the same restaurant could only appear
+as a second brand (`owner1-spice-garden` and `owner1-spice-garden-2`). No
+per-owner location cap exists (see "No location cap for free tier"), so none is
+enforced.
+*Rejected: adding a `draft` status (every existing surface already handles
+`coming_soon`; a new value would need each of them touched for no behavioural gain); gating every
+transition to `active` (would strand seeded listings whose hours are legitimately
+unknown); activating automatically once the checklist is complete (the owner may
+want to finish photos or review first — going live stays an explicit click);
+letting managers create locations (creating a location is the owner's
+declaration, same reasoning as the 2026-09-17 entry)*
+
+**Deal vs Special is derived from the end date, not chosen (refines "deal type ENUM (deal | special)")**
+2026-09-24 | Direct user decision, built in PR #217. The May 2026 entry
+above intended "deals are time-limited, specials are permanent" but never
+enforced it — the type was hand-picked, so the two could disagree with the
+dates. Now the label is DERIVED at read time from `end_at`:
+`NULL` (ongoing) -> `special`, otherwise `deal`, via one function,
+`effective_deal_type(end_at)` in `backend/app/models/deal.py`, used by every
+serializer (management list, `deals_today`, `upcoming_deals`). It flips
+automatically when the owner adds or removes an end date. **The stored
+`deal.deal_type` column stays** (no migration, no backfill) and is re-synced from
+the merged `end_at` on every create and update, so a legacy row with a stale
+value reads back correctly immediately and self-heals on its next write;
+untouched rows are left as-is. A client-supplied `deal_type` is accepted and
+IGNORED (the field was removed from the create/update schemas, so older clients
+get no 4xx). Audit `old_val`/`new_val` record the effective type, so toggling
+`is_active` or renaming produces no spurious `deal_type` diff. The
+`deal_expiry` Lambda keys off `end_at` only and never reads `deal_type`. The owner
+form drops the Deal/Special picker in favour of a live read-only hint tied to the
+Ongoing checkbox and end date ("Will show as: Special (ongoing)" / "Will show as:
+Deal (ends ...)").
+*Rejected: keeping the hand-picked type with validation against `end_at` (two
+sources of truth that must be kept in sync by the user); a backfill migration
+(read-time derivation makes it unnecessary); rejecting a supplied `deal_type`
+with a 4xx (would break older clients for no benefit)*
+
+**Hide menu / hide deals: non-destructive visibility switches, enforced at single choke points**
+2026-09-24 | Built in PR #223 (migration `0015_hide_menu_and_deals`, revises
+`0014_location_slug` — the PR description's "0014" naming was renumbered when
+#222 landed first). Owners, assigned managers and admins can hide, without ever
+deleting: a menu item (sold out), a menu group, the whole menu, a single deal,
+or all of a location's deals. Storage: four additive `NOT NULL DEFAULT false`
+booleans, no backfill — `menu_item.is_hidden`, `menu_section.is_hidden`,
+`restaurant_location.menu_hidden`, `restaurant_location.deals_hidden`. A hidden
+group hides its items too WITHOUT touching the items' own flags, so Show restores
+exactly what was visible before. **Hidden content is never returned by public
+reads, even to the owner:** `GET /locations/{id}/menu` (public) excludes it for
+everyone, so a token-carrying SSR preview can't leak it; the editor reads the new
+`GET /locations/{id}/menu/manage` (write access), which returns everything with
+each row's `is_hidden` flag. Whole-menu and all-deals switches are
+`PUT /locations/{id}/menu/visibility` and `PUT /locations/{id}/deals/visibility`
+(`{is_hidden}`, idempotent). **Choke points:** menu — one filter in
+`menu_service.build_menu(include_hidden=False)`, so the public read, the JSON-LD
+`hasMenu`, the "no menu" empty state and the Menu jump link all follow; deals —
+`deal_service.get_active_deals_map` returns nothing for a location with
+`deals_hidden`, so the search badge and `has_deals_today` filter, the follow list,
+location-detail `deals_today`/`upcoming_deals`, tile badges and brand landing
+cards all follow, and the "deal(s) available today" signal disappears with the
+content. **"Hide all deals" does NOT change any deal's own `is_active`:** the
+per-deal toggle stays independent (its wording is now "Hidden from diners" /
+"Visible to diners"), so Show all restores exactly the prior per-deal state. Audit:
+item and group toggles are ordinary `menu_item`/`menu_section` update rows
+(old/new including `is_hidden`); location-level switches are
+`restaurant_location` update rows (`{"menu_hidden": old}` -> new), and NO row when
+the value didn't change.
+*Rejected: deleting or soft-deleting to "hide" (loses the item and its
+ordering); one combined "hidden" enum on the location (menu and deals are
+independent decisions); filtering each public surface separately (that is how a
+surface gets missed — one choke point per kind of content); letting the public
+menu read return hidden rows to the owner (a token-carrying public render would
+leak them)*
+
+**Location pages: every location has its own public URL, `/restaurant/{brand-slug}/{location-slug}`**
+2026-09-24 | Built in PR #222 (migration `0014_location_slug`); user-approved as
+"Option B". Hours, deals, menu and address differ per branch, and before this
+the brand page only ever showed the brand's FIRST location. **Slug:**
+`restaurant_location.slug` (`varchar(100) NOT NULL`, unique per BRAND, not
+globally — `uq_restaurant_location_brand_slug`), generated once at create time by
+one helper (`app/services/location_slug.py`) used by `POST /locations`, CSV bulk
+import and the dev seed: the city (`irving`); else city + street with its trailing
+street type dropped and no suite/unit (`irving-2234-w-walnut-hill`); else `-2`,
+`-3`. Reserved words are never used (`report`, `reports`, `new`, `edit`, `admin`,
+`api`, `menu`, `deals`, `locations`, `location`) — `report` because
+`/restaurant/{brand}/report` is a real sibling route. **The slug is fixed for
+life:** an address edit never changes it, so a shared link never breaks (the only
+way a URL changes hands is a hard-deleted location's slug being reused by a later
+location of the same brand). The migration backfills existing locations
+deterministically, in `(brand_id, id)` order, using its own frozen copy of the
+rule; a unit test loads the migration and asserts it matches the app helper.
+**What each URL renders:** `/restaurant/{brand}` shows that location's profile when
+the brand has exactly ONE active location (canonical = the brand URL), a landing
+page with one tile per active location for 2 or more, and a brand-only page
+(name, description, claim CTA) for none. The long location URL of a single-location
+brand also works, with its canonical pointing at the brand URL (no duplicate
+content, no broken links). **Hidden or closed locations:** the public gets a 404
+at the location URL (never a 403, so "hidden" is indistinguishable from "doesn't
+exist"), and they never appear as a tile or as the single-location profile at
+the brand URL (only ACTIVE locations do); the owner, an assigned manager and an
+admin can still open it at the long location URL to preview, and such a preview
+never claims the brand URL as its canonical. This is exactly the visibility gate
+of `GET /locations/{id}`. **Links:** anything that represents a specific location
+(search/home/favourites tiles, a manager's location, reopen requests, reports
+with a location) links to the location URL; anything that represents the BRAND
+(owner brand card, admin listings, claims, the report page's back-link) links to
+the brand URL, which is right in both cases (`frontend/src/lib/restaurant/urls.ts`
+is the single helper). **Follow stays brand-level:** the heart on a location page
+follows the brand, and landing tiles have no heart; per-location follow is
+rejected for now. **SEO:** JSON-LD `Restaurant` per location page (that
+location's address, phone, hours, geo and `hasMenu`) and an `ItemList` of
+`Restaurant` on the landing page; the sitemap lists canonical URLs only
+(`GET /sitemap/locations` — the brand URL for a single-location brand, the
+landing page plus each location URL for a multi-location one). **API (additive):**
+`GET /restaurants/by-slug/{brand}` (brand plus its ACTIVE location cards in one
+round trip) and `GET /restaurants/by-slug/{brand}/locations/{loc}`; `slug` added
+to the location responses. This deliberately supersedes the 2026-09-13 "Restaurant
+lookup by id or slug" entry's rejection of a `by-slug` route: that entry rejected
+it as a pure duplicate of the id-or-slug lookup, but the public pages now need the
+brand plus its active location cards (and a two-segment brand/location lookup) in
+one call, which the overloaded `GET /restaurants/{id}` doesn't provide;
+`GET /restaurants/{id_or_slug}` itself is unchanged. Frontend route dir is
+`[brandSlug]/[locationSlug]` (Next needs one dynamic name per level). Roll out with
+the migration applied before or together with the frontend.
+*Rejected: city-first URLs such as `/restaurant/irving/namaste-grill` (the user
+confirmed brand-first; city-based discovery is a separate future feature — see
+"Future / parked"); ID-based location slugs (`/restaurant/{brand}/1234`, the
+original "Option A" — opaque in a shared link and unreadable for SEO); re-deriving the slug when
+the address changes (breaks shared links); a per-location follow now (follows and
+follower counts are brand-level everywhere else)*
 
 **Menu engine: free-tier, public, price-or-sizes; item photos built but flag-gated OFF**
 2026-09-24 | Built in PR #206. Menu was pulled forward by direct user
