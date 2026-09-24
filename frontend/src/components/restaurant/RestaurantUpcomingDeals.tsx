@@ -14,17 +14,22 @@ import type { DealUpcoming } from "@/types/deal";
 
 interface RestaurantUpcomingDealsProps {
   upcomingDeals: DealUpcoming[] | null | undefined;
+  /** Set to "deals" ONLY when there is no "Today's deals" section on the page (which
+   * already owns the `#deals` anchor), so the Deals jump link still lands here. */
+  anchorId?: string;
 }
 
 export default function RestaurantUpcomingDeals({
   upcomingDeals,
+  anchorId,
 }: RestaurantUpcomingDealsProps) {
   if (!upcomingDeals || upcomingDeals.length === 0) return null;
 
   return (
     <section
+      id={anchorId}
       aria-labelledby="upcoming-deals-heading"
-      className="rounded-brand-card border border-brand-border bg-white p-5 shadow-brand-card sm:p-6"
+      className="scroll-mt-24 rounded-brand-card border border-brand-border bg-white p-5 shadow-brand-card sm:p-6"
     >
       <h2
         id="upcoming-deals-heading"

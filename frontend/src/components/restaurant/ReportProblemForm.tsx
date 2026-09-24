@@ -2,7 +2,7 @@
 
 // Public "Report a problem / suggest an update" form — body matches
 // `POST /reports` exactly (docs/API_CONTRACTS.md "Listing reports").
-// Submits through a Server Action (app/restaurant/[slug]/report/actions.ts)
+// Submits through a Server Action (app/restaurant/[brandSlug]/report/actions.ts)
 // so a signed-in visitor's token is attached server-side and never handed
 // to client JS; anonymous visitors work identically.
 //
@@ -12,13 +12,14 @@
 // same success response and stores nothing, so the UI needs no special case.
 import { useState } from "react";
 import Link from "next/link";
-import { submitReportAction } from "@/app/restaurant/[slug]/report/actions";
+import { submitReportAction } from "@/app/restaurant/[brandSlug]/report/actions";
 import { REPORT_CATEGORIES } from "@/lib/constants/reportCategories";
 import {
   createReportSchema,
   REPORT_DETAILS_MAX_LENGTH,
 } from "@/lib/validation/listingReport";
 import { ClipboardCheckIcon } from "@/components/ui/icons";
+import { brandHref } from "@/lib/restaurant/urls";
 import type { LocationSummary } from "@/types/location";
 import type { ReportCategory } from "@/types/listingReport";
 
@@ -28,6 +29,9 @@ interface ReportProblemFormProps {
   /** Used for the "back to listing" link. */
   slug: string;
   locations: LocationSummary[];
+  /** Location to pre-select (from `?location=` when reached from a location page); ignored
+   * unless it is one of `locations`. */
+  defaultLocationId?: number | null;
   /** Set (server-side, from the session cookie) when the visitor is signed
    * in: the email input is replaced by a read-only note and the backend
    * attributes the report to the verified token's email. */
@@ -39,6 +43,7 @@ export default function ReportProblemForm({
   brandName,
   slug,
   locations,
+  defaultLocationId = null,
   signedInEmail = null,
 }: ReportProblemFormProps) {
   const [category, setCategory] = useState<ReportCategory | "">("");
@@ -46,7 +51,11 @@ export default function ReportProblemForm({
   const [email, setEmail] = useState("");
   const [website, setWebsite] = useState("");
   const [locationId, setLocationId] = useState<number | "">(
-    locations.length === 1 ? locations[0]!.id : ""
+    locations.length === 1
+      ? locations[0]!.id
+      : locations.some((l) => l.id === defaultLocationId)
+        ? (defaultLocationId as number)
+        : ""
   );
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -110,7 +119,7 @@ export default function ReportProblemForm({
           </div>
         </div>
         <Link
-          href={`/restaurant/${slug}`}
+          href={brandHref(slug)}
           className="mt-6 inline-flex min-h-[44px] items-center rounded-brand-pill bg-brand-ink px-5 text-sm font-semibold text-brand-bg transition hover:bg-brand-ink/90"
         >
           Back to {brandName}

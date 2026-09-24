@@ -1,7 +1,7 @@
 // Homepage top bar: wordmark + tagline, nav links, "Add Your Restaurant" CTA.
 // Shared across "/", "/login", "/search", "/about", "/contact", "/terms",
 // "/signup", "/signup/confirm", "/forgot-password",
-// "/forgot-password/confirm", "/claim", and "/restaurant/[slug]"
+// "/forgot-password/confirm", "/claim", and "/restaurant/[brandSlug]"
 // (frontend/CLAUDE.md's shared-component convention) — the wordmark links
 // back to "/" so every one of those pages has a way home, per user request.
 // `app/error.tsx` also needs this header but can't render this component

@@ -8,7 +8,7 @@
 // that role reaches for most, not a copy of the sidebar.
 //
 // NOT linked, on purpose: "Report a problem" (only exists per restaurant,
-// /restaurant/[slug]/report -- there is no site-wide route) and a per-owner
+// /restaurant/[brandSlug]/report -- there is no site-wide route) and a per-owner
 // "Deals"/"Menu" shortcut (both live under /portal/locations/[id]/..., so
 // there is no single target without picking a location).
 import type { UserRole } from "@/types/auth";

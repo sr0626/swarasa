@@ -12,8 +12,11 @@ import {
   restaurantDealsHref,
 } from "./format.ts";
 
-test("restaurantDealsHref points at the deals anchor on the restaurant page", () => {
-  assert.equal(restaurantDealsHref("spice-garden-irving"), "/restaurant/spice-garden-irving#deals");
+test("restaurantDealsHref points at the deals anchor on the LOCATION page", () => {
+  assert.equal(
+    restaurantDealsHref("spice-garden", "irving"),
+    "/restaurant/spice-garden/irving#deals"
+  );
 });
 
 test("dealPanelLabel names the restaurant and lists titles, skipping blanks", () => {

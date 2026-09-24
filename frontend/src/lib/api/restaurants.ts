@@ -7,7 +7,9 @@ import type { LocationSummary } from "@/types/location";
 import type { ListingStatusFilter } from "@/lib/adminListings";
 import type {
   CreateRestaurantInput,
+  LocationPage,
   RestaurantBrand,
+  RestaurantPublic,
   UpdateRestaurantInput,
 } from "@/types/restaurant";
 
@@ -86,22 +88,50 @@ export async function getRestaurantById(id: number): Promise<RestaurantBrand> {
 }
 
 /**
- * FLAGGED CONTRACT GAP (see final report): frontend/CLAUDE.md's SSR listing
- * page pattern calls `getRestaurantBySlug(params.slug)` from
- * `/restaurant/[slug]/page.tsx`, but docs/API_CONTRACTS.md only documents
- * `GET /restaurants/{id}` with a numeric id — there is no dedicated
- * slug-lookup route. This assumes the backend's `{id}` path param can
- * resolve a slug string too (a common "id_or_slug" pattern); if that's not
- * actually true server-side, Architect/Backend Dev need to add a real
- * slug route (e.g. `GET /restaurants/by-slug/{slug}`) and this function
- * should be repointed at it. Not calling this a bug — it's a documented
- * open item to confirm.
+ * GET /restaurants/{id_or_slug} — the brand only (no locations). The public
+ * restaurant pages use `getRestaurantPublicBySlug` / `getLocationPageBySlugs`
+ * below instead (brand + locations in one round trip); this remains for the
+ * brand-level "report a problem" page. `{id}` resolves a slug too
+ * (docs/API_CONTRACTS.md "GET /restaurants/{id}").
  */
 export async function getRestaurantBySlug(slug: string): Promise<RestaurantBrand> {
   return apiFetch<RestaurantBrand>(
     `/restaurants/${slug}`,
     { method: "GET" },
     { revalidateSeconds: 60 }
+  );
+}
+
+/**
+ * GET /restaurants/by-slug/{brand_slug} — public. The brand plus its ACTIVE
+ * locations (cards) in ONE round trip: what `/restaurant/{brandSlug}` renders
+ * from (one location -> that location's profile, several -> the landing page).
+ * 404 for an unknown or soft-deleted brand.
+ */
+export async function getRestaurantPublicBySlug(brandSlug: string): Promise<RestaurantPublic> {
+  return apiFetch<RestaurantPublic>(
+    `/restaurants/by-slug/${encodeURIComponent(brandSlug)}`,
+    { method: "GET" },
+    { revalidateSeconds: 60 }
+  );
+}
+
+/**
+ * GET /restaurants/by-slug/{brand_slug}/locations/{location_slug} — public and
+ * viewer-aware, one round trip (brand + full location). Same visibility and
+ * deal-content gating as `GET /locations/{id}`: pass `accessToken` when signed
+ * in (deal content; an owner/admin/manager previewing a hidden location),
+ * omit it for the anonymous, 60s-cached read.
+ */
+export async function getLocationPageBySlugs(
+  brandSlug: string,
+  locationSlug: string,
+  accessToken?: string
+): Promise<LocationPage> {
+  return apiFetch<LocationPage>(
+    `/restaurants/by-slug/${encodeURIComponent(brandSlug)}/locations/${encodeURIComponent(locationSlug)}`,
+    { method: "GET" },
+    { accessToken, revalidateSeconds: accessToken ? undefined : 60 }
   );
 }
 

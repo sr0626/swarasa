@@ -10,6 +10,7 @@ import Link from "next/link";
 import { updateReportAction } from "@/app/admin/reports/actions";
 import { reportCategoryLabel } from "@/lib/constants/reportCategories";
 import type { ListingReport, ReportStatus } from "@/types/listingReport";
+import { brandHref, locationHref } from "@/lib/restaurant/urls";
 
 interface ReportsTriagePanelProps {
   initialReports: ListingReport[];
@@ -125,7 +126,11 @@ function ReportCard({
         <div className="min-w-0">
           <h2 className="font-display text-lg font-bold text-brand-ink">
             <Link
-              href={`/restaurant/${report.brand_slug}`}
+              href={
+                report.location_slug
+                  ? locationHref(report.brand_slug, report.location_slug)
+                  : brandHref(report.brand_slug)
+              }
               className="underline-offset-2 hover:underline"
             >
               {report.brand_name}

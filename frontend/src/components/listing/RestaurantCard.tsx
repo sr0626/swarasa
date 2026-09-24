@@ -44,6 +44,7 @@ import FollowButton from "@/components/ui/FollowButton";
 import { LocationPinIcon, StarIcon } from "@/components/ui/icons";
 import OpenStatusBadge from "@/components/ui/OpenStatusBadge";
 import { cardSideNote, formatFullAddress, googleMapsSearchUrl } from "@/lib/listing/cardText";
+import { brandHref, locationHref } from "@/lib/restaurant/urls";
 
 interface RestaurantCardProps {
   item: RestaurantCardItem;
@@ -103,7 +104,13 @@ export default function RestaurantCard({
     // living inside the card's own Link.
     <div className="group relative flex h-full min-h-[18.8rem] flex-col overflow-hidden rounded-brand-card border border-brand-border bg-white shadow-brand-card transition hover:shadow-brand-card-hover">
       <TrackedTileLink
-        href={`/restaurant/${item.slug}`}
+        // The tile represents ONE location, so it links to that location's own page
+        // (a followed brand with no active location falls back to the brand URL).
+        href={
+          nearest_location
+            ? locationHref(item.slug, nearest_location.slug)
+            : brandHref(item.slug)
+        }
         className="flex flex-col"
         track={
           isRegisteredUser && clickSource

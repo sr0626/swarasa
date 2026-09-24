@@ -1,6 +1,8 @@
 // Types for `restaurant_brand`, matching docs/API_CONTRACTS.md
 // "Restaurants (`restaurant_brand`)".
 import type { CuisineTag } from "./cuisine";
+import type { LocationDetail } from "./location";
+import type { SearchNearestLocation } from "./search";
 
 /** Response shape for GET /restaurants/{id}, POST /restaurants, PATCH /restaurants/{id}. */
 export interface RestaurantBrand {
@@ -11,7 +13,7 @@ export interface RestaurantBrand {
   // (restaurant_brand.description) has always allowed NULL, and every
   // CSV-imported restaurant has one (no description column in that
   // import). Found live 2026-09-18: crashed generateMetadata on
-  // /restaurant/[slug] with "Cannot read properties of null (reading
+  // /restaurant/[brandSlug] with "Cannot read properties of null (reading
   // 'slice')" for every such restaurant.
   description: string | null;
   /** Restaurant's own site (brand-level, nullable) — already returned by GET /restaurants/{id}. */
@@ -53,3 +55,39 @@ export interface CreateRestaurantInput {
 
 /** Body for PATCH /restaurants/{id}. Any subset of the create fields. */
 export type UpdateRestaurantInput = Partial<CreateRestaurantInput>;
+
+/**
+ * One ACTIVE location of a brand as a landing-page card
+ * (`GET /restaurants/by-slug/{brand_slug}` -> `locations[]`; backend
+ * `BrandLocationCardOut`). It is a `SearchNearestLocation` (slug, address,
+ * today's hours inputs, `is_open_now`, `has_deal_today`; `distance_mi` always
+ * null) plus the location's optional label and cover photo.
+ */
+export interface BrandLocationCard extends SearchNearestLocation {
+  location_name: string | null;
+  cover_photo_url: string | null;
+  cover_photo_thumbnail_url: string | null;
+}
+
+/** Response of `GET /restaurants/by-slug/{brand_slug}`: the brand + its ACTIVE locations
+ * (city, then id order). `location_count` equals `locations.length`. */
+export interface RestaurantPublic extends RestaurantBrand {
+  locations: BrandLocationCard[];
+}
+
+/** Response of `GET /restaurants/by-slug/{brand_slug}/locations/{location_slug}`:
+ * the brand (its `location_count` = ACTIVE locations, which decides the canonical URL)
+ * and the location's full detail — the same payload as `GET /locations/{id}`. */
+export interface LocationPage {
+  restaurant: RestaurantBrand;
+  location: LocationDetail;
+}
+
+/** One row of `GET /sitemap/locations`. */
+export interface PublicLocationIndexItem {
+  brand_slug: string;
+  location_slug: string;
+  /** ACTIVE locations of the brand: 1 -> canonical is the short brand URL. */
+  active_location_count: number;
+  updated_at: string;
+}

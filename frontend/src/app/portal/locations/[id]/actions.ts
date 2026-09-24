@@ -634,11 +634,13 @@ export async function deleteLocationDealAction(
 /**
  * Menu writes change what the public restaurant page shows, and that page
  * reads the (public) menu through a 60s-cached GET — purge every restaurant
- * page (the slug isn't known here) plus this location's editor.
+ * page (the slugs aren't known here) plus this location's editor.
  */
 function revalidateMenuPaths(locationId: number): void {
   revalidateLocationPaths(locationId);
-  revalidatePath("/restaurant/[slug]", "page");
+  // Brand URL (single-location brand / landing) and the location page.
+  revalidatePath("/restaurant/[brandSlug]", "page");
+  revalidatePath("/restaurant/[brandSlug]/[locationSlug]", "page");
 }
 
 /** GET /locations/{id}/menu with the caller's token — the editor re-reads the

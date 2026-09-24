@@ -10,7 +10,13 @@
 // components/listing/RestaurantCard.tsx (address search) plus the
 // directions URL for the "Get directions" affordance.
 import { formatPhone } from "@/lib/formatPhone";
-import { DirectionsIcon, GlobeIcon, LocationPinIcon, PhoneIcon } from "@/components/ui/icons";
+import {
+  DirectionsIcon,
+  GlobeIcon,
+  LocationPinIcon,
+  MenuBookIcon,
+  PhoneIcon,
+} from "@/components/ui/icons";
 import OpenStatusBadge from "@/components/ui/OpenStatusBadge";
 import RestaurantHours from "@/components/restaurant/RestaurantHours";
 import { todayIndexInTimezone } from "@/lib/formatHours";
@@ -38,10 +44,14 @@ const linkClass =
 export default function RestaurantInfoCard({
   location,
   website,
+  hasMenu = false,
 }: {
   /** Null when the brand has no location yet -- then only the website (if any) can show. */
   location: LocationDetail | null;
   website: string | null;
+  /** The location's menu has items: adds a "View menu" button (jumps to `#menu`) next to
+   * "Get directions". */
+  hasMenu?: boolean;
 }) {
   const site = parseWebsite(website);
   const hasHours = location?.hours.some((h) => h.is_closed !== null) ?? false;
@@ -104,16 +114,29 @@ export default function RestaurantInfoCard({
               </span>
             </a>
 
-            <a
-              href={mapsDirectionsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-1 flex min-h-[44px] items-center justify-center gap-2 rounded-brand-pill border border-brand-ink px-4 text-sm font-semibold text-brand-ink transition hover:bg-brand-chip focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent"
-            >
-              <DirectionsIcon className="h-4 w-4" />
-              Get directions
-              <span className="sr-only"> (opens in Google Maps in a new tab)</span>
-            </a>
+            {/* Actions row: "Get directions" and, only when the location has a menu,
+                "View menu" (in-page jump to #menu) beside it; wraps on very narrow cards. */}
+            <div className="mt-1 flex flex-wrap gap-2">
+              <a
+                href={mapsDirectionsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex min-h-[44px] flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-brand-pill border border-brand-ink px-4 text-sm font-semibold text-brand-ink transition hover:bg-brand-chip focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent"
+              >
+                <DirectionsIcon className="h-4 w-4" />
+                Get directions
+                <span className="sr-only"> (opens in Google Maps in a new tab)</span>
+              </a>
+              {hasMenu && (
+                <a
+                  href="#menu"
+                  className="flex min-h-[44px] flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-brand-pill border border-brand-ink px-4 text-sm font-semibold text-brand-ink transition hover:bg-brand-chip focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent"
+                >
+                  <MenuBookIcon className="h-4 w-4" />
+                  View menu
+                </a>
+              )}
+            </div>
 
             {location.phone && (
               <a href={`tel:${location.phone}`} className={linkClass}>
@@ -141,7 +164,7 @@ export default function RestaurantInfoCard({
       </div>
 
       {location && hasHours && (
-        <div className="mt-4 border-t border-brand-border pt-4">
+        <div id="hours" className="mt-4 scroll-mt-24 border-t border-brand-border pt-4">
           <RestaurantHours hours={location.hours} todayIndex={todayIndex} />
         </div>
       )}
