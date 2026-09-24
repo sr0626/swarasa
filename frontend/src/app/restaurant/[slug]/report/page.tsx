@@ -7,6 +7,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ApiError } from "@/lib/api/client";
 import { getRestaurantBySlug, getRestaurantLocations } from "@/lib/api/restaurants";
+import { getServerSession } from "@/lib/auth/session";
 import TopBar from "@/components/home/TopBar";
 import ReportProblemForm from "@/components/restaurant/ReportProblemForm";
 import type { LocationSummary } from "@/types/location";
@@ -43,6 +44,13 @@ export default async function ReportPage({ params }: ReportPageProps) {
     locations = [];
   }
 
+  // Signed-in state is read server-side from the httpOnly session cookie
+  // (never client-side). For a signed-in visitor the form shows a read-only
+  // "Reporting as ..." note instead of the email input, and the backend
+  // takes the email from the verified token regardless of what is sent.
+  const session = await getServerSession().catch(() => null);
+  const signedInEmail = session?.email ? session.email : null;
+
   return (
     <main className="min-h-screen bg-brand-bg">
       <TopBar />
@@ -64,6 +72,7 @@ export default async function ReportPage({ params }: ReportPageProps) {
             brandName={restaurant.name}
             slug={restaurant.slug}
             locations={locations}
+            signedInEmail={signedInEmail}
           />
         </div>
 

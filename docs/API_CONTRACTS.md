@@ -2056,13 +2056,19 @@ Body:
 }
 ```
 - `category`: `address_incorrect` | `hours_incorrect` | `phone_incorrect`
-  | `price_incorrect` | `menu_incorrect` | `permanently_closed` | `other`.
+  | `price_incorrect` | `menu_incorrect` | `deal_incorrect` |
+  `permanently_closed` | `other`. (`deal_incorrect` added 2026-09-24; the
+  column is plain text validated here, so no migration.)
 - `details`: required, trimmed, 1-2000 chars.
 - `location_id`: optional; must belong to `brand_id` (else `400`
   `invalid_location`).
 - `reporter_email`: optional, max 254 chars, simple `a@b.c` shape check
   (blank string is treated as omitted). Used only for a manual admin
-  follow-up; never shown publicly.
+  follow-up; never shown publicly. **Anonymous callers only:** when the
+  request carries a valid token, the server ignores this field entirely
+  and stores the verified token's `email` claim instead (`null` if the
+  token has none), so a client cannot attribute a report to another
+  address. Attribution by `reporter_user_id` (Cognito `sub`) is unchanged.
 - `website`: **honeypot** — the UI renders it hidden; real users leave it
   empty. Any non-empty value returns the normal `201` below but stores
   nothing.

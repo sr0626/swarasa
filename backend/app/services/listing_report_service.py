@@ -86,12 +86,22 @@ async def create_report(
                 400, "location_id does not belong to this restaurant", "invalid_location"
             )
 
+    # Signed-in caller: the email comes from the verified token claims,
+    # never from the request body (a client could otherwise attribute a
+    # report to someone else's address). A token without an email claim
+    # yields None rather than falling back to the client-supplied value.
+    # Anonymous caller: the optional client-supplied email, as before.
+    if current_user is not None:
+        reporter_email = current_user.email or None
+    else:
+        reporter_email = body.reporter_email
+
     report = ListingReport(
         brand_id=brand.id,
         location_id=body.location_id,
         category=body.category,
         details=body.details,
-        reporter_email=body.reporter_email,
+        reporter_email=reporter_email,
         reporter_user_id=current_user.cognito_sub if current_user is not None else None,
         status="new",
     )

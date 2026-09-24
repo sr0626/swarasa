@@ -12,6 +12,7 @@ export const REPORT_CATEGORIES: ReadonlyArray<{
   { value: "phone_incorrect", label: "Phone number is wrong" },
   { value: "price_incorrect", label: "Price is not correct" },
   { value: "menu_incorrect", label: "Menu is wrong" },
+  { value: "deal_incorrect", label: "Deal is wrong or outdated" },
   { value: "permanently_closed", label: "Permanently closed" },
   { value: "other", label: "Other" },
 ];

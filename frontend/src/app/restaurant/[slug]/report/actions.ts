@@ -29,12 +29,15 @@ export async function submitReportAction(
     };
   }
 
+  const session = await getServerSession().catch(() => null);
+
+  // Signed in: never forward a client-supplied email. The backend takes the
+  // email from the verified token for an authenticated caller and ignores
+  // the body field anyway; dropping it here too keeps the two consistent.
   const body: CreateReportInput = {
     ...parsed.data,
-    reporter_email: parsed.data.reporter_email || null,
+    reporter_email: session ? null : parsed.data.reporter_email || null,
   };
-
-  const session = await getServerSession().catch(() => null);
 
   try {
     try {
