@@ -8,12 +8,10 @@
 // directly (see "SESSION-AWARE" note below) — it renders TopBarShell.tsx
 // instead.
 //
-// HEADER ORDER: logo | "Add Your Restaurant" (plain link, hidden below `sm:`) |
-// "Sign In" pill on the far right (the account menu takes that spot once
-// signed in). Swapped 2026-09-19 at the user's request; the separate "For
-// Owners" link was removed earlier. Signed-out "Add Your Restaurant" goes to
-// `/login?next=/portal/brands/new` (sign in, then land on the add-restaurant
-// page), "Sign In" to `/login`. See TopBarShell.tsx.
+// HEADER ORDER (redesigned 2026-09-24): logo | role-specific nav links |
+// account menu (or "Sign In") on the right; below `lg` the links collapse
+// into a menu button. The link set per role lives in lib/nav/topBarLinks.ts,
+// the markup in TopBarShell.tsx / TopBarNav.tsx.
 //
 // SESSION-AWARE, ASYNC SERVER COMPONENT (docs/PROJECT_PLAN.csv "Signed-in
 // account dropdown in site header" — flagged in this PR's description):

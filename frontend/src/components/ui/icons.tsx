@@ -368,3 +368,12 @@ export function MenuBookIcon(props: IconProps) {
     </svg>
   );
 }
+
+/** Added for the top bar's mobile navigation toggle. */
+export function MenuIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} {...props}>
+      <path d="M4 7h16M4 12h16M4 17h16" />
+    </svg>
+  );
+}

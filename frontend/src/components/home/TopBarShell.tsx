@@ -21,6 +21,8 @@ import Link from "next/link";
 import SwarasaMark from "@/components/icons/SwarasaMark";
 import AccountMenu from "./AccountMenu";
 import AdminNotificationsBell from "./AdminNotificationsBell";
+import { TopBarDesktopNav, TopBarMobileNav } from "./TopBarNav";
+import { topBarLinksFor } from "@/lib/nav/topBarLinks";
 import type { AdminNotifications } from "@/types/adminNotifications";
 import type { UserRole } from "@/types/auth";
 
@@ -44,6 +46,7 @@ export default function TopBarShell({
    */
   notifications?: AdminNotifications | null;
 }) {
+  const links = topBarLinksFor(greetingName ? role : null);
   return (
     // STICKY: stays visible on scroll. `sticky` (not `fixed`) keeps the bar
     // in normal flow so there is no layout shift and no spacer needed. Every
@@ -56,70 +59,57 @@ export default function TopBarShell({
     // `bg-brand-bg/95 backdrop-blur` keeps scrolled content from showing
     // through legibly.
     <header className="sticky top-0 z-40 border-b border-brand-border bg-brand-bg/95 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
-        <Link href="/" className="flex flex-col leading-tight">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-4 sm:gap-4 sm:px-6">
+        <Link
+          href="/"
+          className="flex shrink-0 flex-col leading-tight focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent"
+        >
           <span className="flex items-center gap-1.5 font-display text-xl font-bold text-brand-ink sm:text-2xl">
             <SwarasaMark className="h-5 w-auto text-brand-accent sm:h-6" />
             Swarasa
           </span>
-          <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-ink-subtle sm:text-xs">
+          <span className="text-[9px] font-semibold uppercase tracking-[0.1em] text-brand-ink-subtle sm:text-xs sm:tracking-[0.14em]">
             Discover Your Taste
           </span>
         </Link>
 
-        {/* HEADER LAYOUT (user requests 2026-09-19): "Add Your Restaurant"
-            sits in the middle and carries the dark pill (the header's one
-            call to action); "Sign In" is a plain link at the far right,
-            where the account menu also lives once signed in.
+        {/* HEADER LAYOUT (redesign, user request 2026-09-24: "important links
+            based on the user type ... instead of empty space"): logo | role-
+            specific links in the middle | account menu / Sign in on the right.
+            The link set comes from lib/nav/topBarLinks.ts (one map from
+            session role to links; every href is an existing route). From `lg`
+            the links are inline; below it they collapse into the menu button
+            at the end of the right-hand cluster (TopBarNav.tsx), so nothing
+            overflows at 375px.
 
-            MOBILE OVERFLOW (frontend/CLAUDE.md "No horizontal scroll on
-            mobile"; 375px): wordmark + the Add Your Restaurant pill + Sign
-            In do not fit together, so "Add Your Restaurant" steps aside below
-            `sm:`. Sign In (short) now shows at every width -- it was hidden
-            on mobile before, leaving signed-out phone visitors with no
-            sign-in link at all.
+            The old middle-slot "Add Your Restaurant" pill is now just the `cta`
+            link in that set (signed-out -> `/login?next=/portal/brands/new`,
+            owner -> `/portal/brands/new`; manager/admin/registered_user never
+            get it -- `POST /restaurants` is owner-only). It is reachable on
+            mobile now too, via the menu. "Sign In" stays a single plain link on
+            the right, and there is still no separate "For Owners" link. */}
+        <TopBarDesktopNav links={links} />
 
-            ROUTING: signed-out -> `/login?next=/portal/brands/new` (user
-            request 2026-09-19: sign in first, then land on the add-restaurant
-            page; `next` survives the "Create an account" -> confirm -> login
-            round trip, and sign-up defaults to Owner for /portal paths).
-            Signed-in owner ->
-            `/portal/brands/new` (`POST /restaurants` is owner-only,
-            docs/API_CONTRACTS.md). Signed-in manager/admin/registered_user
-            never see it -- it would just 403. */}
-        {/* `empty:hidden`: for admin/manager/registered_user (and every signed-in
-            phone view) this nav renders no children, and an empty flex item
-            still costs a full `gap-4` on each side -- which, with the admin
-            bell added, pushed the account menu past the header's right padding
-            at 375px. */}
-        <nav className="flex items-center text-sm font-medium text-brand-ink-muted empty:hidden">
-          {(!greetingName || role === "owner") && (
+        <div className="flex items-center gap-1 sm:gap-2">
+          {greetingName ? (
+            <>
+              {/* Admin bell: only when the session role is admin. `notifications`
+                  is fetched by TopBar.tsx (null = fetch failed). This wrapper is
+                  deliberately NOT positioned so the bell's dropdown can anchor
+                  to the header on mobile (see AdminNotificationsBell.tsx). */}
+              {role === "admin" && <AdminNotificationsBell data={notifications} />}
+              <AccountMenu greetingName={greetingName} role={role} />
+            </>
+          ) : (
             <Link
-              href={greetingName ? "/portal/brands/new" : "/login?next=/portal/brands/new"}
-              className="hidden min-h-[44px] items-center whitespace-nowrap rounded-brand-pill bg-brand-ink px-5 text-sm font-semibold text-brand-bg transition hover:bg-brand-ink/90 sm:flex"
+              href="/login"
+              className="flex min-h-[44px] items-center whitespace-nowrap px-1 text-sm font-medium text-brand-ink-muted transition hover:text-brand-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent"
             >
-              Add Your Restaurant
+              Sign In
             </Link>
           )}
-        </nav>
-
-        {greetingName ? (
-          <div className="flex items-center gap-2">
-            {/* Admin bell: only when the session role is admin. `notifications`
-                is fetched by TopBar.tsx (null = fetch failed). The wrapper is
-                deliberately NOT positioned so the bell's dropdown can anchor
-                to the header on mobile (see AdminNotificationsBell.tsx). */}
-            {role === "admin" && <AdminNotificationsBell data={notifications} />}
-            <AccountMenu greetingName={greetingName} role={role} />
-          </div>
-        ) : (
-          <Link
-            href="/login"
-            className="flex min-h-[44px] items-center whitespace-nowrap px-1 text-sm font-medium text-brand-ink-muted transition hover:text-brand-ink"
-          >
-            Sign In
-          </Link>
-        )}
+          <TopBarMobileNav links={links} />
+        </div>
       </div>
     </header>
   );
