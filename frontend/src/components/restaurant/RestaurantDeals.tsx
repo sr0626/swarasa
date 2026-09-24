@@ -26,9 +26,10 @@ interface RestaurantDealsProps {
    * badge, per `hasDealToday`); a real (non-empty, in practice) array =
    * full content. */
   dealsToday: DealPublic[] | null;
-  /** This page's path, passed ONLY for a signed-out visitor — adds the
-   * "Sign in to see deals" link (returns here after sign-in). Omitted for
-   * every signed-in role, whose UI is unchanged. */
+  /** This page's path, passed ONLY for a signed-out visitor — turns the
+   * "Deal(s) available today" pane into a large sign-in banner that returns
+   * here after sign-in. Omitted for every signed-in role, whose UI is
+   * unchanged (plain badge). */
   signInReturnPath?: string;
 }
 
@@ -45,9 +46,13 @@ export default function RestaurantDeals({
     // title/description, no explanation of why (that would itself hint at
     // there being more to see for some viewers and not others).
     return (
-      <section aria-label="Deals" className="flex flex-wrap items-center gap-x-3">
-        <DealBadge />
-        {signInReturnPath && <DealSignInLink currentPath={signInReturnPath} />}
+      <section aria-label="Deals">
+        {signInReturnPath ? (
+          // Signed-out: a large, prominent banner that IS the sign-in link.
+          <DealSignInLink currentPath={signInReturnPath} variant="banner" />
+        ) : (
+          <DealBadge />
+        )}
       </section>
     );
   }
