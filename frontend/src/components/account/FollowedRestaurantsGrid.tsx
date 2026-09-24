@@ -7,6 +7,13 @@
 // uses the shared default coffee-cup image over the warm gradient
 // (components/ui/DefaultRestaurantImage) — same treatment as an un-photographed
 // RestaurantCard. Add the real photo here once the follows contract exposes one.
+//
+// UNIFORM TILE (2026-09-24): every tile has the same height whether or not the
+// brand has a deal today. The "Deal(s) available today" badge is an overlay on
+// the cover (same place as on search tiles, decorative + aria-hidden because
+// the deal panel below carries the accessible label), and the footer panel is
+// ALWAYS present at a fixed height: up to 2 deal titles as a link when there
+// is a deal, or a muted "No deals today" strip when there isn't.
 import Link from "next/link";
 import TrackedTileLink from "@/components/listing/TrackedTileLink";
 import DealBadge from "@/components/ui/DealBadge";
@@ -83,8 +90,9 @@ export default function FollowedRestaurantsGrid({
                   (its own "Restaurants you follow" section), so every tile
                   click is tracked; the route handler/backend re-check role.
                   The tile is two sibling links (an <a> can't nest in an
-                  <a>): the main one (image/name/date) and, only when the
-                  brand has a deal today, the deal panel beneath it. */}
+                  <a>): the main one (image/name/date) and the footer panel
+                  beneath it (a deal link when there is a deal today,
+                  otherwise a plain "No deals today" strip). */}
               <TrackedTileLink
                 href={`/restaurant/${follow.slug}`}
                 track={{ brand_id: follow.brand_id, location_id: null, source: "favourites" }}
@@ -92,42 +100,57 @@ export default function FollowedRestaurantsGrid({
               >
                 <div className="relative h-32 w-full shrink-0 overflow-hidden bg-brand-warm-gradient">
                   <DefaultRestaurantImage />
-                </div>
-                <div className="flex flex-1 flex-col gap-1.5 p-4">
-                  <h3 className="font-display text-lg font-semibold text-brand-ink group-hover:text-brand-accent">
-                    {follow.name}
-                  </h3>
-                  <p className="text-xs text-brand-ink-subtle">
-                    Following since {formatDate(follow.followed_at)}
-                  </p>
-                  {!follow.is_claimed && (
-                    <span className="mt-1 inline-flex w-fit rounded-brand-pill bg-brand-bg px-2 py-0.5 text-xs font-semibold text-brand-ink-subtle">
-                      Unclaimed
+                  {follow.has_deal_today && (
+                    <span aria-hidden="true" className="absolute bottom-3 left-3 max-w-[calc(100%-1.5rem)]">
+                      <DealBadge variant="overlay" />
                     </span>
                   )}
                 </div>
+                <div className="flex flex-col gap-1.5 p-4">
+                  <h3 className="line-clamp-2 h-12 font-display text-lg font-semibold leading-6 text-brand-ink group-hover:text-brand-accent">
+                    {follow.name}
+                  </h3>
+                  <p className="text-xs leading-4 text-brand-ink-subtle">
+                    Following since {formatDate(follow.followed_at)}
+                  </p>
+                  {/* Fixed row: reserved whether or not the brand is unclaimed. */}
+                  <div className="h-6">
+                    {!follow.is_claimed && (
+                      <span className="inline-flex rounded-brand-pill bg-brand-bg px-2 py-0.5 text-xs font-semibold text-brand-ink-subtle">
+                        Unclaimed
+                      </span>
+                    )}
+                  </div>
+                </div>
               </TrackedTileLink>
 
-              {follow.has_deal_today && (
+              {follow.has_deal_today ? (
                 // This page is registered-user-only, so deal titles (content)
                 // are allowed here. Links to the restaurant's Today's deals.
                 <TrackedTileLink
                   href={restaurantDealsHref(follow.slug)}
                   track={{ brand_id: follow.brand_id, location_id: null, source: "favourites" }}
                   aria-label={dealPanelLabel(follow.name, follow.deal_titles_today)}
-                  className="flex min-h-11 flex-col justify-center gap-1 border-t border-brand-border bg-brand-accent/5 px-4 py-2.5 transition hover:bg-brand-accent/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-accent"
+                  className="mt-auto flex h-16 flex-col justify-center gap-0.5 border-t border-brand-border bg-brand-accent/5 px-4 transition hover:bg-brand-accent/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-accent"
                 >
-                  <DealBadge className="w-fit" />
-                  {follow.deal_titles_today.length > 0 && (
-                    <ul className="flex flex-col gap-0.5 text-sm text-brand-ink">
-                      {follow.deal_titles_today.map((title, i) => (
+                  {follow.deal_titles_today.length > 0 ? (
+                    <ul className="flex flex-col gap-0.5 text-sm leading-5 text-brand-ink">
+                      {follow.deal_titles_today.slice(0, 2).map((title, i) => (
                         <li key={`${i}-${title}`} className="truncate">
                           {title}
                         </li>
                       ))}
                     </ul>
+                  ) : (
+                    <span className="text-sm font-medium leading-5 text-brand-accent">
+                      See today&apos;s deals &rarr;
+                    </span>
                   )}
                 </TrackedTileLink>
+              ) : (
+                <div className="mt-auto flex h-16 items-center border-t border-brand-border px-4 text-sm text-brand-ink-subtle">
+                  No deals today
+                </div>
               )}
             </li>
           ))}

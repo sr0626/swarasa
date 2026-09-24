@@ -13,10 +13,23 @@
 // RestaurantCard needs — there is no richer variant to reach for there.
 import { TagIcon } from "@/components/ui/icons";
 
-export default function DealBadge({ className = "" }: { className?: string }) {
+// `variant="overlay"`: the same pill on a solid white background with a soft
+// shadow, for sitting over a cover photo (search/home tiles) where the
+// default 10%-tint background would be illegible.
+export default function DealBadge({
+  className = "",
+  variant = "inline",
+}: {
+  className?: string;
+  variant?: "inline" | "overlay";
+}) {
+  const tone =
+    variant === "overlay"
+      ? "bg-white shadow-brand-card ring-1 ring-brand-accent/20"
+      : "bg-brand-accent/10";
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-brand-pill bg-brand-accent/10 px-2.5 py-1 text-xs font-semibold text-brand-accent ${className}`}
+      className={`inline-flex items-center gap-1 whitespace-nowrap rounded-brand-pill px-2.5 py-1 text-xs font-semibold text-brand-accent ${tone} ${className}`}
     >
       <TagIcon className="h-3.5 w-3.5" />
       Deal(s) available today

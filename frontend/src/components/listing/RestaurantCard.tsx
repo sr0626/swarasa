@@ -8,6 +8,19 @@
 // numeric rating is omitted. The star glyph the design calls for is still
 // built (`StarIcon`) and used on the "Featured" ribbon instead, so the
 // icon requirement is met without inventing a number.
+//
+// UNIFORM TILE (2026-09-24, user feedback: tiles differed in height/white
+// space depending on which labels they carried): every card has the exact
+// same height and layout regardless of hours/deal/tags/phone/claim state.
+//   - Cover (h-40): Featured ribbon top-left, follow heart top-right, and the
+//     "Deal(s) available today" badge bottom-left as an OVERLAY - it consumes
+//     no body height. Signed-out it is a real sign-in <Link> that is a
+//     SIBLING of the tile link (an <a> can't nest in an <a>), positioned over
+//     the cover.
+//   - Body rows all have fixed heights (name 2 lines, tags 1 line, address 2
+//     lines, phone 1 line, meta row) and clamp overflow, so a missing or long
+//     value never moves anything. The meta row (hours pill, plus Unclaimed /
+//     "N locations" on the right) is one fixed-height row.
 import type { SearchResultItem } from "@/types/search";
 import type { ActivitySource } from "@/types/userActivity";
 import TrackedTileLink from "@/components/listing/TrackedTileLink";
@@ -66,6 +79,13 @@ export default function RestaurantCard({
   const visibleTags = item.cuisine_tags.slice(0, 3);
   const coverPhoto = item.cover_photo_thumbnail_url ?? item.cover_photo_url;
   const fullAddress = `${nearest_location.address_line1}, ${nearest_location.city}, ${nearest_location.state} ${nearest_location.postal_code}`;
+  // Right-hand slot of the meta row: one short note, Unclaimed taking
+  // precedence over the nearby-locations count.
+  const sideNote = !item.is_claimed
+    ? "Unclaimed"
+    : item.location_count_nearby > 1
+      ? `${item.location_count_nearby} locations`
+      : null;
   const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddress)}`;
 
   return (
@@ -78,7 +98,7 @@ export default function RestaurantCard({
     // same nested-<a> reason — its signed-out state is itself a Link) can
     // sit absolutely positioned over the image's top-right corner without
     // living inside the card's own Link.
-    <div className="group relative flex flex-col overflow-hidden rounded-brand-card border border-brand-border bg-white shadow-brand-card transition hover:shadow-brand-card-hover">
+    <div className="group relative flex h-full flex-col overflow-hidden rounded-brand-card border border-brand-border bg-white shadow-brand-card transition hover:shadow-brand-card-hover">
       <TrackedTileLink
         href={`/restaurant/${item.slug}`}
         className="flex flex-col"
@@ -113,29 +133,23 @@ export default function RestaurantCard({
           )}
         </div>
 
-        <div className="flex flex-col gap-2 p-4 pb-0">
-          <h3 className="font-display text-lg font-semibold text-brand-ink">
+        <div className="flex flex-col gap-2 px-4 pt-4">
+          <h3 className="line-clamp-2 h-12 font-display text-lg font-semibold leading-6 text-brand-ink">
             {item.name}
           </h3>
 
-          {visibleTags.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {visibleTags.map((tag) => (
-                <span
-                  key={tag.name}
-                  className="rounded-brand-pill bg-brand-chip px-2 py-0.5 text-xs font-medium text-brand-chip-ink"
-                >
-                  {tag.display_name}
-                </span>
-              ))}
-            </div>
-          )}
-
-          {item.location_count_nearby > 1 && (
-            <p className="text-xs text-brand-ink-subtle">
-              {item.location_count_nearby} locations nearby
-            </p>
-          )}
+          {/* One line only: chips that don't fit wrap onto a second line
+              that the fixed height clips, so no chip is ever cut in half. */}
+          <div className="flex h-6 flex-wrap gap-1.5 overflow-hidden">
+            {visibleTags.map((tag) => (
+              <span
+                key={tag.name}
+                className="whitespace-nowrap rounded-brand-pill bg-brand-chip px-2 py-0.5 text-xs font-medium text-brand-chip-ink"
+              >
+                {tag.display_name}
+              </span>
+            ))}
+          </div>
         </div>
       </TrackedTileLink>
 
@@ -150,48 +164,64 @@ export default function RestaurantCard({
         />
       )}
 
-      <div className="flex flex-1 flex-col gap-2 p-4 pt-2">
+      {/* Deal badge: overlay on the cover's bottom-left (see file header).
+          A sibling of the tile link, never a child, so the signed-out
+          sign-in <Link> stays valid HTML. The wrapper is 44px tall so the
+          link keeps a 44px touch target; the non-link badge variant is
+          pointer-events-none so clicks fall through to the tile link. */}
+      {nearest_location.has_deal_today &&
+        (isSignedOut ? (
+          <div className="absolute left-1 top-40 z-10 max-w-[calc(100%-0.5rem)] -translate-y-full">
+            <DealSignInLink currentPath={currentPath} variant="badge" overlay />
+          </div>
+        ) : (
+          <div className="pointer-events-none absolute left-1 top-40 z-10 flex min-h-11 max-w-[calc(100%-0.5rem)] -translate-y-full items-center px-2">
+            <DealBadge variant="overlay" />
+          </div>
+        ))}
+
+      <div className="flex flex-col gap-2 px-4 pb-4 pt-2">
         <a
           href={googleMapsUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="mt-1 flex items-start gap-1 text-sm text-brand-ink-subtle hover:text-brand-ink hover:underline"
+          className="flex h-10 items-start gap-1 text-sm leading-5 text-brand-ink-subtle hover:text-brand-ink hover:underline"
         >
           <LocationPinIcon className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>
+          <span className="line-clamp-2 min-w-0">
             {fullAddress}
             {nearest_location.distance_mi !== null && ` · ${nearest_location.distance_mi.toFixed(1)} mi`}
           </span>
         </a>
 
-        {nearest_location.phone && (
-          <a
-            href={`tel:${nearest_location.phone}`}
-            className="flex items-center gap-1 text-sm text-brand-ink-subtle hover:text-brand-ink hover:underline"
-          >
-            <PhoneIcon className="h-4 w-4 shrink-0" />
-            <span>{formatPhone(nearest_location.phone)}</span>
-          </a>
-        )}
+        {/* Always occupies one row, even with no phone, so cards without a
+            number are the same height as those with one. */}
+        <div className="h-5">
+          {nearest_location.phone && (
+            <a
+              href={`tel:${nearest_location.phone}`}
+              className="inline-flex items-center gap-1 text-sm leading-5 text-brand-ink-subtle hover:text-brand-ink hover:underline"
+            >
+              <PhoneIcon className="h-4 w-4 shrink-0" />
+              <span>{formatPhone(nearest_location.phone)}</span>
+            </a>
+          )}
+        </div>
 
-        <div className="mt-auto flex flex-wrap items-center gap-2 pt-2">
-          <OpenStatusBadge
-            isOpenNow={nearest_location.is_open_now}
-            isClosedToday={nearest_location.is_closed}
-            openTime={nearest_location.open_time}
-            closeTime={nearest_location.close_time}
-          />
-          {/* Signed-out: the badge itself is the sign-in link (no separate
-              text link). Signed-in: the plain badge, unchanged. */}
-          {nearest_location.has_deal_today &&
-            (isSignedOut ? (
-              <DealSignInLink currentPath={currentPath} variant="badge" />
-            ) : (
-              <DealBadge />
-            ))}
-          {!item.is_claimed && (
-            <span className="ml-auto text-xs font-medium text-brand-ink-subtle">
-              Unclaimed
+        {/* The single fixed-height meta row. The hours pill renders nothing
+            when hours are unknown, but the row's height is still reserved. */}
+        <div className="flex h-7 items-center gap-2">
+          <span className="shrink-0">
+            <OpenStatusBadge
+              isOpenNow={nearest_location.is_open_now}
+              isClosedToday={nearest_location.is_closed}
+              openTime={nearest_location.open_time}
+              closeTime={nearest_location.close_time}
+            />
+          </span>
+          {sideNote && (
+            <span className="ml-auto min-w-0 truncate text-xs font-medium text-brand-ink-subtle">
+              {sideNote}
             </span>
           )}
         </div>
