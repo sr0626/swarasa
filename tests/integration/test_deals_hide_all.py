@@ -201,6 +201,7 @@ async def _search(db_session, location, *, has_deals_today=None):
             search_service._CandidateRow(
                 location_id=location.id,
                 brand_id=location.brand_id,
+                slug=location.slug,
                 address_line1=location.address_line1,
                 city=location.city,
                 state=location.state,
