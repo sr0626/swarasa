@@ -9,31 +9,31 @@
 // built (`StarIcon`) and used on the "Featured" ribbon instead, so the
 // icon requirement is met without inventing a number.
 //
-// UNIFORM TILE (2026-09-24, user feedback: tiles differed in height/white
-// space depending on which labels they carried): every card has the exact
-// same height and layout regardless of hours/deal/tags/phone/claim state.
-//   - Cover (h-40): Featured ribbon top-left, follow heart top-right, and the
-//     "Deal(s) available today" badge bottom-left as an OVERLAY - it consumes
-//     no body height. Signed-out it is a real sign-in <Link> that is a
-//     SIBLING of the tile link (an <a> can't nest in an <a>), positioned over
-//     the cover.
-//   - Body rows all have fixed heights (name 2 lines, tags 1 line, address 2
-//     lines, phone 1 line, meta row) and clamp overflow, so a missing or long
-//     value never moves anything. The meta row (hours pill, plus Unclaimed /
-//     "N locations" on the right) is one fixed-height row.
+// UNIFORM, COMPACT TILE: every card is the same height whatever labels it
+// carries, WITHOUT spacing the text lines apart. The text keeps the original
+// tight rhythm (name, cuisines, address); the card has a shared min-height
+// sized for the maximum bounded content, and the hours row is pinned to the
+// bottom (`mt-auto`), so any slack shows up as ONE gap just above that row,
+// never between text lines. Everything is bounded (name, cuisines and address
+// each 1 line with ellipsis; full text in `title`) so long text can never grow
+// a tile past the shared height.
+//   - Cover (h-40): Featured ribbon top-left, follow heart top-right, the
+//     "Deal(s) available today" badge bottom-left as an OVERLAY (no body
+//     height; signed-out it is a real sign-in <Link>, a SIBLING of the tile
+//     link so no <a> nests in an <a>), and an "Unclaimed" / "N locations"
+//     note chip bottom-right.
+//   - Body: name (1 line, ellipsis, full name in `title`), cuisines as one
+//     muted line (rendered only when present, so its absence leaves no hole),
+//     address + distance (1 line), then the hours pill row at the bottom.
+//     The phone number lives on the detail page, not the tile.
 import type { SearchResultItem } from "@/types/search";
 import type { ActivitySource } from "@/types/userActivity";
 import TrackedTileLink from "@/components/listing/TrackedTileLink";
-import { formatPhone } from "@/lib/formatPhone";
 import DealBadge from "@/components/ui/DealBadge";
 import DealSignInLink from "@/components/ui/DealSignInLink";
 import DefaultRestaurantImage from "@/components/ui/DefaultRestaurantImage";
 import FollowButton from "@/components/ui/FollowButton";
-import {
-  LocationPinIcon,
-  PhoneIcon,
-  StarIcon,
-} from "@/components/ui/icons";
+import { LocationPinIcon, StarIcon } from "@/components/ui/icons";
 import OpenStatusBadge from "@/components/ui/OpenStatusBadge";
 
 interface RestaurantCardProps {
@@ -76,11 +76,14 @@ export default function RestaurantCard({
   // manager/admin) but the viewer isn't a registered user. Fails closed:
   // with the default `showFollowButton=false` no sign-in CTA ever renders.
   const isSignedOut = showFollowButton && !isRegisteredUser;
-  const visibleTags = item.cuisine_tags.slice(0, 3);
+  const cuisineLine = item.cuisine_tags
+    .slice(0, 3)
+    .map((tag) => tag.display_name)
+    .join(" \u00b7 ");
   const coverPhoto = item.cover_photo_thumbnail_url ?? item.cover_photo_url;
   const fullAddress = `${nearest_location.address_line1}, ${nearest_location.city}, ${nearest_location.state} ${nearest_location.postal_code}`;
-  // Right-hand slot of the meta row: one short note, Unclaimed taking
-  // precedence over the nearby-locations count.
+  // Bottom-right cover chip: one short note, Unclaimed taking precedence
+  // over the nearby-locations count.
   const sideNote = !item.is_claimed
     ? "Unclaimed"
     : item.location_count_nearby > 1
@@ -98,7 +101,7 @@ export default function RestaurantCard({
     // same nested-<a> reason — its signed-out state is itself a Link) can
     // sit absolutely positioned over the image's top-right corner without
     // living inside the card's own Link.
-    <div className="group relative flex h-full flex-col overflow-hidden rounded-brand-card border border-brand-border bg-white shadow-brand-card transition hover:shadow-brand-card-hover">
+    <div className="group relative flex h-full min-h-[18.8rem] flex-col overflow-hidden rounded-brand-card border border-brand-border bg-white shadow-brand-card transition hover:shadow-brand-card-hover">
       <TrackedTileLink
         href={`/restaurant/${item.slug}`}
         className="flex flex-col"
@@ -131,25 +134,25 @@ export default function RestaurantCard({
               Featured
             </span>
           )}
+          {sideNote && (
+            <span className="absolute bottom-3 right-3 max-w-[40%] truncate rounded-brand-pill bg-brand-ink/85 px-2.5 py-1 text-xs font-semibold text-brand-bg">
+              {sideNote}
+            </span>
+          )}
         </div>
 
-        <div className="flex flex-col gap-2 px-4 pt-4">
-          <h3 className="line-clamp-2 h-12 font-display text-lg font-semibold leading-6 text-brand-ink">
+        <div className="flex flex-col gap-1.5 px-4 pt-4">
+          <h3
+            title={item.name}
+            className="truncate font-display text-lg font-semibold leading-6 text-brand-ink"
+          >
             {item.name}
           </h3>
-
-          {/* One line only: chips that don't fit wrap onto a second line
-              that the fixed height clips, so no chip is ever cut in half. */}
-          <div className="flex h-6 flex-wrap gap-1.5 overflow-hidden">
-            {visibleTags.map((tag) => (
-              <span
-                key={tag.name}
-                className="whitespace-nowrap rounded-brand-pill bg-brand-chip px-2 py-0.5 text-xs font-medium text-brand-chip-ink"
-              >
-                {tag.display_name}
-              </span>
-            ))}
-          </div>
+          {cuisineLine && (
+            <p className="truncate text-xs font-medium leading-4 text-brand-ink-subtle">
+              {cuisineLine}
+            </p>
+          )}
         </div>
       </TrackedTileLink>
 
@@ -180,51 +183,31 @@ export default function RestaurantCard({
           </div>
         ))}
 
-      <div className="flex flex-col gap-2 px-4 pb-4 pt-2">
+      <div className="px-4 pt-2">
         <a
           href={googleMapsUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex h-10 items-start gap-1 text-sm leading-5 text-brand-ink-subtle hover:text-brand-ink hover:underline"
+          className="flex items-start gap-1 text-sm leading-5 text-brand-ink-subtle hover:text-brand-ink hover:underline"
         >
           <LocationPinIcon className="mt-0.5 h-4 w-4 shrink-0" />
-          <span className="line-clamp-2 min-w-0">
+          <span className="min-w-0 truncate" title={fullAddress}>
             {fullAddress}
-            {nearest_location.distance_mi !== null && ` · ${nearest_location.distance_mi.toFixed(1)} mi`}
+            {nearest_location.distance_mi !== null && ` \u00b7 ${nearest_location.distance_mi.toFixed(1)} mi`}
           </span>
         </a>
+      </div>
 
-        {/* Always occupies one row, even with no phone, so cards without a
-            number are the same height as those with one. */}
-        <div className="h-5">
-          {nearest_location.phone && (
-            <a
-              href={`tel:${nearest_location.phone}`}
-              className="inline-flex items-center gap-1 text-sm leading-5 text-brand-ink-subtle hover:text-brand-ink hover:underline"
-            >
-              <PhoneIcon className="h-4 w-4 shrink-0" />
-              <span>{formatPhone(nearest_location.phone)}</span>
-            </a>
-          )}
-        </div>
-
-        {/* The single fixed-height meta row. The hours pill renders nothing
-            when hours are unknown, but the row's height is still reserved. */}
-        <div className="flex h-7 items-center gap-2">
-          <span className="shrink-0">
-            <OpenStatusBadge
-              isOpenNow={nearest_location.is_open_now}
-              isClosedToday={nearest_location.is_closed}
-              openTime={nearest_location.open_time}
-              closeTime={nearest_location.close_time}
-            />
-          </span>
-          {sideNote && (
-            <span className="ml-auto min-w-0 truncate text-xs font-medium text-brand-ink-subtle">
-              {sideNote}
-            </span>
-          )}
-        </div>
+      {/* Pinned to the bottom: any slack in the card appears just above this
+          row. Its height is kept even when hours are unknown (renders
+          nothing) so the row is identical on every tile. */}
+      <div className="mt-auto flex h-7 items-center px-4 pb-3 pt-2 box-content">
+        <OpenStatusBadge
+          isOpenNow={nearest_location.is_open_now}
+          isClosedToday={nearest_location.is_closed}
+          openTime={nearest_location.open_time}
+          closeTime={nearest_location.close_time}
+        />
       </div>
     </div>
   );
