@@ -57,6 +57,7 @@ import {
 } from "@/lib/validation/menu";
 import { fieldErrorsFromZod, type FieldErrors } from "@/lib/validation/fieldErrors";
 import type { MenuItem, MenuResponse, MenuSectionWithItems } from "@/types/menu";
+import { SECTION_ANCHOR_CLASS } from "@/components/portal/editorSectionAnchor";
 
 const errorTextClass = "mt-1 text-xs font-medium text-brand-closed";
 const inputClass =
@@ -1076,7 +1077,7 @@ export default function LocationMenuManager({
     <section
       id="menu"
       aria-labelledby="menu-heading"
-      className="rounded-brand-card border border-brand-border bg-white p-5 shadow-brand-card sm:p-6"
+      className={`${SECTION_ANCHOR_CLASS} rounded-brand-card border border-brand-border bg-white p-5 shadow-brand-card sm:p-6`}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2

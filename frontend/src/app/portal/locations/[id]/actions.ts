@@ -509,7 +509,7 @@ export async function submitReopenRequestAction(
  *
  * Unlike every other action here, there is no `LocationDetail` to return
  * on success — the location is gone. Callers should navigate away (see
- * `LocationStatusControl.tsx`) rather than re-render this page.
+ * `LocationStatusMenu.tsx`) rather than re-render this page.
  */
 export async function removeLocationAction(locationId: number): Promise<ActionResult<null>> {
   const auth = await requireLocationSession();
