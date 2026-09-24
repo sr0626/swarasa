@@ -8,11 +8,13 @@
 // (components/ui/DefaultRestaurantImage) — same treatment as an un-photographed
 // RestaurantCard. Add the real photo here once the follows contract exposes one.
 //
-// UNIFORM TILE (2026-09-24): every tile has the same height whether or not the
-// brand has a deal today. The "Deal(s) available today" badge is an overlay on
-// the cover (same place as on search tiles, decorative + aria-hidden because
-// the deal panel below carries the accessible label), and the footer panel is
-// ALWAYS present at a fixed height: up to 2 deal titles as a link when there
+// UNIFORM, COMPACT TILE: every tile has the same height whether or not the
+// brand has a deal today or is unclaimed. Text keeps a tight rhythm (name on
+// one line with the full name in `title`, then "Following since"). The "Deal(s)
+// available today" badge (bottom-left) and "Unclaimed" chip (bottom-right) are
+// overlays on the cover (the badge is decorative + aria-hidden because the deal
+// panel below carries the accessible label), and the footer panel is ALWAYS
+// present at a compact fixed height: up to 2 deal titles as a link when there
 // is a deal, or a muted "No deals today" strip when there isn't.
 import Link from "next/link";
 import TrackedTileLink from "@/components/listing/TrackedTileLink";
@@ -105,22 +107,22 @@ export default function FollowedRestaurantsGrid({
                       <DealBadge variant="overlay" />
                     </span>
                   )}
+                  {!follow.is_claimed && (
+                    <span className="absolute bottom-3 right-3 rounded-brand-pill bg-brand-ink/85 px-2.5 py-1 text-xs font-semibold text-brand-bg">
+                      Unclaimed
+                    </span>
+                  )}
                 </div>
                 <div className="flex flex-col gap-1.5 p-4">
-                  <h3 className="line-clamp-2 h-12 font-display text-lg font-semibold leading-6 text-brand-ink group-hover:text-brand-accent">
+                  <h3
+                    title={follow.name}
+                    className="truncate font-display text-lg font-semibold leading-6 text-brand-ink group-hover:text-brand-accent"
+                  >
                     {follow.name}
                   </h3>
                   <p className="text-xs leading-4 text-brand-ink-subtle">
                     Following since {formatDate(follow.followed_at)}
                   </p>
-                  {/* Fixed row: reserved whether or not the brand is unclaimed. */}
-                  <div className="h-6">
-                    {!follow.is_claimed && (
-                      <span className="inline-flex rounded-brand-pill bg-brand-bg px-2 py-0.5 text-xs font-semibold text-brand-ink-subtle">
-                        Unclaimed
-                      </span>
-                    )}
-                  </div>
                 </div>
               </TrackedTileLink>
 
@@ -131,7 +133,7 @@ export default function FollowedRestaurantsGrid({
                   href={restaurantDealsHref(follow.slug)}
                   track={{ brand_id: follow.brand_id, location_id: null, source: "favourites" }}
                   aria-label={dealPanelLabel(follow.name, follow.deal_titles_today)}
-                  className="mt-auto flex h-16 flex-col justify-center gap-0.5 border-t border-brand-border bg-brand-accent/5 px-4 transition hover:bg-brand-accent/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-accent"
+                  className="mt-auto flex h-14 flex-col justify-center gap-0.5 border-t border-brand-border bg-brand-accent/5 px-4 transition hover:bg-brand-accent/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-accent"
                 >
                   {follow.deal_titles_today.length > 0 ? (
                     <ul className="flex flex-col gap-0.5 text-sm leading-5 text-brand-ink">
@@ -148,7 +150,7 @@ export default function FollowedRestaurantsGrid({
                   )}
                 </TrackedTileLink>
               ) : (
-                <div className="mt-auto flex h-16 items-center border-t border-brand-border px-4 text-sm text-brand-ink-subtle">
+                <div className="mt-auto flex h-14 items-center border-t border-brand-border px-4 text-sm text-brand-ink-subtle">
                   No deals today
                 </div>
               )}
