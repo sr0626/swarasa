@@ -24,35 +24,39 @@ export default function Footer() {
 
   return (
     <footer className="border-t border-brand-border bg-brand-bg">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-10 sm:flex-row sm:items-start sm:justify-between sm:px-6">
-        <div className="flex flex-col leading-tight">
-          <span className="flex items-center gap-1.5 font-display text-lg font-bold text-brand-ink">
-            <SwarasaMark className="h-4 w-auto text-brand-accent" />
-            Swarasa
-          </span>
-          <span className="mt-1 text-xs text-brand-ink-subtle">
-            Discover Your Taste — {DEFAULT_CITY_LABEL}
-          </span>
+      {/* Same container as TopBarShell and page content (max-w-6xl, px-4 /
+          sm:px-6) so left/right edges line up at every breakpoint. */}
+      <div className="mx-auto max-w-6xl px-4 sm:px-6">
+        <div className="flex flex-col gap-4 py-8 sm:flex-row sm:items-center sm:justify-between sm:py-10">
+          <div className="flex flex-col gap-1 leading-tight">
+            <span className="flex items-center gap-1.5 font-display text-lg font-bold text-brand-ink">
+              <SwarasaMark className="h-4 w-auto text-brand-accent" />
+              Swarasa
+            </span>
+            <span className="text-xs text-brand-ink-subtle">
+              Discover Your Taste — {DEFAULT_CITY_LABEL}
+            </span>
+          </div>
+
+          <nav
+            aria-label="Footer"
+            className="-my-2 flex flex-wrap items-center gap-x-6 text-sm font-medium text-brand-ink-muted sm:my-0"
+          >
+            {FOOTER_LINKS.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="flex min-h-[44px] items-center transition hover:text-brand-ink sm:min-h-0"
+              >
+                {link.label}
+              </Link>
+            ))}
+          </nav>
         </div>
 
-        <nav
-          aria-label="Footer"
-          className="flex flex-wrap gap-x-6 gap-y-3 text-sm font-medium text-brand-ink-muted"
-        >
-          {FOOTER_LINKS.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="min-h-[44px] py-2.5 transition hover:text-brand-ink sm:min-h-0 sm:py-0"
-            >
-              {link.label}
-            </Link>
-          ))}
-        </nav>
-      </div>
-
-      <div className="border-t border-brand-border px-4 py-4 text-center text-xs text-brand-ink-subtle sm:px-6">
-        &copy; {year} Swarasa. All rights reserved.
+        <div className="border-t border-brand-border py-4 text-xs text-brand-ink-subtle">
+          &copy; {year} Swarasa. All rights reserved.
+        </div>
       </div>
     </footer>
   );
