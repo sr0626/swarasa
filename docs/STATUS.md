@@ -28,15 +28,58 @@ fully satisfied and asked to stop iterating for now, with an explicit intent
 to revisit later, not a final sign-off.
 
 ## Open PRs
-- Only in-flight docs PRs as of 2026-09-24: this wave-8 tracker/status/
-  cmd-log batch and the BRD v3.9 (menu + catch-up) PR. No code PRs open.
+- Only in-flight docs PRs as of 2026-09-24: this wave-9 tracker/status/
+  cmd-log batch. No code PRs open.
 
 ## Live state (2026-09-24)
-- Migration `0013_menu` applied to dev via `alembic_upgrade` (2026-09-24).
+- Migrations through `0015_hide_menu_and_deals` applied to dev via
+  `alembic_upgrade` (0013 menu, 0014 location slug, 0015 hide/show;
+  2026-09-24). Head is `0015_hide_menu_and_deals`; #224 added no migration.
+- Current BRD is v3.9 (`docs/BRD_v39_Restaurant_Platform.docx`; v3.7-v3.9
+  kept under n-2 retention).
 - `menu_item_photos_enabled` platform flag is OFF (seeded false); flip with
   the `set_platform_flag` management command when paid tiers exist.
 - Repo now has "Automatically delete head branches" enabled; the 200+
   merged branches were cleaned up by the user on 2026-09-23.
+
+## Landed 2026-09-24, wave 9 (#209-#224)
+- **BRD v3.9** (#209): menu engine documented as free/public, stale
+  paid-only menu wording corrected, section 13 rewritten, six new known
+  gaps; v3.6 file removed under n-2 retention.
+- **Per-location public pages** (#222): `restaurant_location.slug` (migration
+  `0014_location_slug`), `/restaurant/{brand}/{location}`; brand URL is the
+  location page for a single-location brand and a landing page with a tile
+  per location for 2+; by-slug endpoints, sitemap index, per-location
+  JSON-LD, "View menu" button + Deals/Menu/Hours jump links. Closes the
+  "restaurant page shows only the first location" gap.
+- **Hide/show** (#223, migration `0015_hide_menu_and_deals`): menu items,
+  groups, the whole menu, single deals and all deals; nothing deleted;
+  public reads never return hidden content (even to the owner).
+- **New manual listings start in setup** (#224): `POST /locations` creates
+  `coming_soon`; going live is gated (422 `listing_incomplete` until 7 days
+  of hours, a valid US phone, name/address); editor checklist banner +
+  "Activate listing". No migration.
+- One US phone rule everywhere (#224): 10 digits, stored `+1XXXXXXXXXX`
+  (fixes 11-digit numbers passing `PATCH /auth/me`); owner profile
+  collapsed to a summary with "Edit phone".
+- "Add location" for an existing brand, owner + admin (#224); admin can now
+  `POST /locations`.
+- Deal vs Special label derived from the end date (#217): no end date =
+  Special; client `deal_type` ignored; no migration.
+- Report a problem (#211): "Deal is wrong or outdated" category; a
+  signed-in reporter's email comes from the token, not the form.
+- Search/home/favourites tile: uniform then compact layout (#210, #214);
+  deal badge top-left, non-link, green (#220); favourites reuse the search
+  tile with address/map link at the deal's location (#219).
+- `/search` is empty by default, canonical + `noindex` empty state (#215).
+- Role-aware top bar + mobile menu (#212); About removed from it (#213);
+  footer alignment (#218).
+- Location editor: sticky section jump links + status chip menu, Listing
+  status panel removed (#216); sticky Back link, uniform Edit/Deals/Menu
+  buttons, Activity as its own view `/account/activity` (#221).
+- Future backlog (not built): QR-code menu (paid; its visibility rule
+  conflicts with the free/public menu decision, user confirmation needed
+  before build); city landing pages `/indian-restaurants/{city}` for SEO.
 
 ## Landed 2026-09-24, wave 8 (#199-#206)
 - **Menu engine** (#206, free tier, never `is_paid`-gated): groups + items
@@ -214,9 +257,8 @@ to revisit later, not a final sign-off.
   owner, manual confirm, disable/enable and password reset not built.
 - Social login not started. Payments/billing/refunds/payment reports
   deferred by decision. Deal alerts to followers not started.
-- Favourites deal panel (#204): `#deals` anchor has no target when the deal
-  is at a brand's non-primary location (page opens at top).
-- Menu (#206): no per-item soft activate/deactivate; dish photos off.
+- Menu (#206): prices are free text (not machine-readable); dish photos
+  off.
 - `NEXT_PUBLIC_CONTACT_EMAIL` set in Amplify (#150, applied to dev).
 
 ## Architect (schema + contracts)
