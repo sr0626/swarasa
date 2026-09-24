@@ -16,10 +16,12 @@ import { requireSession } from "@/lib/auth/guards";
 import TopBar from "@/components/home/TopBar";
 import { getLocationById, getLocationManagers } from "@/lib/api/locations";
 import { getLocationDeals } from "@/lib/api/deals";
+import { getLocationMenu } from "@/lib/api/menu";
 import LocationInfoForm from "@/components/portal/LocationInfoForm";
 import LocationAboutForm from "@/components/portal/LocationAboutForm";
 import LocationHoursEditor from "@/components/portal/LocationHoursEditor";
 import LocationDealsManager from "@/components/portal/LocationDealsManager";
+import LocationMenuManager from "@/components/portal/LocationMenuManager";
 import LocationPhotoManager from "@/components/portal/LocationPhotoManager";
 import LocationManagerAssignment from "@/components/portal/LocationManagerAssignment";
 import LocationStatusControl from "@/components/portal/LocationStatusControl";
@@ -28,6 +30,7 @@ import NewListingNotice, { parseNewListingParam } from "@/components/portal/NewL
 import InfoPanel from "@/components/ui/InfoPanel";
 import type { Deal } from "@/types/deal";
 import type { LocationDetail, LocationManager } from "@/types/location";
+import type { MenuResponse } from "@/types/menu";
 
 export const metadata: Metadata = {
   title: "Edit Location",
@@ -124,6 +127,16 @@ export default async function PortalLocationPage({ params, searchParams }: Locat
     deals = null;
   }
 
+  // Menu (groups + items). Same access rule and same fail-safe as deals: a
+  // load failure shows an error panel, never an empty editor an owner could
+  // mistake for "no menu yet" (and re-enter everything).
+  let menu: MenuResponse | null = null;
+  try {
+    menu = await getLocationMenu(locationId, session.accessToken);
+  } catch {
+    menu = null;
+  }
+
   const isOwner = session.role === "owner";
   const isAdmin = session.role === "admin";
   const back = backTarget(session.role);
@@ -164,6 +177,14 @@ export default async function PortalLocationPage({ params, searchParams }: Locat
           <LocationInfoForm location={location} />
           <LocationAboutForm locationId={location.id} about={location.about} specialties={location.specialties} />
           <LocationHoursEditor locationId={location.id} hours={location.hours} />
+          {menu ? (
+            <LocationMenuManager locationId={location.id} initialMenu={menu} />
+          ) : (
+            <InfoPanel
+              title="Menu couldn't be loaded"
+              body="We couldn't load this location's menu right now. Refresh the page to try again."
+            />
+          )}
           {deals ? (
             <LocationDealsManager locationId={location.id} initialDeals={deals} />
           ) : (

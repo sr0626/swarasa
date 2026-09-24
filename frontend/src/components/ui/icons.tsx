@@ -357,3 +357,14 @@ export function TagIcon(props: IconProps) {
     </svg>
   );
 }
+
+/** Added for the menu — the location editor's "Menu" section and the public
+ * restaurant page's menu heading. An open book/menu card. */
+export function MenuBookIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} {...props}>
+      <path d="M12 6.5C10.5 5.3 8.4 4.75 5 4.75v13.5c3.4 0 5.5.55 7 1.75 1.5-1.2 3.6-1.75 7-1.75V4.75c-3.4 0-5.5.55-7 1.75z" />
+      <path d="M12 6.5V20" />
+    </svg>
+  );
+}

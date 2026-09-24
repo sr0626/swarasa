@@ -19,6 +19,7 @@ from app.routers import (
     cuisine,
     data_deletion,
     deals,
+    menu,
     health,
     listing_report,
     location_reopen,
@@ -37,6 +38,7 @@ app.include_router(activity.router)
 app.include_router(restaurants.router)
 app.include_router(locations.router)
 app.include_router(deals.router)
+app.include_router(menu.router)
 app.include_router(claim.router)
 app.include_router(listing_report.router)
 app.include_router(auth.router)

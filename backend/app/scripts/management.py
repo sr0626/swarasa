@@ -506,6 +506,35 @@ def _run_set_user_name(event: dict) -> dict:
     return {"command": "set_user_name", **result}
 
 
+@_command("set_platform_flag")
+def _run_set_platform_flag(event: dict) -> dict:
+    """Flip (or read) a platform-level boolean feature flag in
+    `platform_config` -- today only `menu_item_photos_enabled` (menu-item
+    photos are built but OFF until paid tiers exist). See
+    app/scripts/set_platform_flag.py's module docstring.
+
+    Event payload shape:
+        {"_management_command": "set_platform_flag",
+         "key": "menu_item_photos_enabled",
+         "value": true}          # omit "value" to just read the current one
+    """
+    from app.db.session import dispose_engine
+    from app.scripts.set_platform_flag import SetPlatformFlagError, set_platform_flag
+
+    # Same same-loop-disposal reasoning as _run_seed_dev_data above.
+    async def _run_and_dispose() -> dict:
+        try:
+            return await set_platform_flag(event.get("key"), event.get("value"))
+        finally:
+            await dispose_engine()
+
+    try:
+        result = asyncio.run(_run_and_dispose())
+    except SetPlatformFlagError as exc:
+        return {"ok": False, "command": "set_platform_flag", "error": str(exc)}
+    return {"ok": True, "command": "set_platform_flag", **result}
+
+
 @_command("dev_clear_manager_assignments")
 def _run_dev_clear_manager_assignments(event: dict) -> dict:
     """DEV-ONLY: soft-remove one manager's active location_manager

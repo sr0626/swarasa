@@ -32,6 +32,8 @@ from app.models.data_deletion_request import DataDeletionRequest
 from app.models.deal import Deal
 from app.models.listing_report import ListingReport
 from app.models.location_manager import LocationManager
+from app.models.menu_item import MenuItem
+from app.models.menu_section import MenuSection
 from app.models.owner_account import OwnerAccount
 from app.models.restaurant_brand import RestaurantBrand
 from app.models.restaurant_location import RestaurantLocation
@@ -220,6 +222,33 @@ class DealFactory(factory.Factory):
     is_active = True
 
 
+class MenuSectionFactory(factory.Factory):
+    class Meta:
+        model = MenuSection
+
+    location_id = factory.Sequence(lambda n: n + 1)
+    name = factory.Sequence(lambda n: f"Group {n}")
+    description = None
+    display_order = 0
+
+
+class MenuItemFactory(factory.Factory):
+    """Single-price, ungrouped item by default (`price` set, `sizes=None`)."""
+
+    class Meta:
+        model = MenuItem
+
+    location_id = factory.Sequence(lambda n: n + 1)
+    section_id = None
+    name = factory.Sequence(lambda n: f"Dish {n}")
+    description = None
+    price = "$10"
+    sizes = None
+    display_order = 0
+    photo_s3_key = None
+    photo_thumbnail_s3_key = None
+
+
 class RestaurantPhotoFactory(factory.Factory):
     class Meta:
         model = RestaurantPhoto
@@ -293,6 +322,20 @@ async def create_deal(db: AsyncSession, **overrides) -> Deal:
     db.add(deal)
     await db.flush()
     return deal
+
+
+async def create_menu_section(db: AsyncSession, **overrides) -> MenuSection:
+    section = MenuSectionFactory(**overrides)
+    db.add(section)
+    await db.flush()
+    return section
+
+
+async def create_menu_item(db: AsyncSession, **overrides) -> MenuItem:
+    item = MenuItemFactory(**overrides)
+    db.add(item)
+    await db.flush()
+    return item
 
 
 async def create_photo(db: AsyncSession, **overrides) -> RestaurantPhoto:
