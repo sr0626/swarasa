@@ -63,7 +63,6 @@ export function topBarLinksFor(role: UserRole | null): TopBarLink[] {
       return [
         FIND_RESTAURANTS,
         DEALS_TODAY,
-        { key: "about", label: "About", href: "/about" },
         {
           key: "add",
           label: "Add your restaurant",
