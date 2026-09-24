@@ -27,6 +27,18 @@ flipping the flag back on restores them. FUTURE INTENT (not implemented, no
 Every write on `menu_section` / `menu_item` writes an `audit_log` row in the
 same transaction (root CLAUDE.md "ALWAYS — Quality"); snapshots include the
 item's `price` AND `sizes`.
+
+Visibility (added 2026-09-24, docs/DECISIONS.md "Hide menu / hide deals"):
+nothing is ever deleted to hide it. Three independent, non-destructive
+switches — `menu_item.is_hidden`, `menu_section.is_hidden` (hides the group
+AND its items, leaving the items' own flags untouched so un-hiding restores
+exactly what was visible before) and `restaurant_location.menu_hidden` (the
+entire menu). ALL public-facing menu content goes through `build_menu(...,
+include_hidden=False)` — the one place the rule is applied — so the public
+read, the JSON-LD and the "empty menu renders no section" rule all follow
+from a single filter. The management read (`GET …/menu/manage`, write
+access required) uses `include_hidden=True` and reports the flags so the
+editor can show a clear "Hidden" state and a one-click Show.
 """
 from __future__ import annotations
 
@@ -54,11 +66,12 @@ from app.schemas.menu import (
     MenuSectionUpdate,
     MenuSectionWithItemsOut,
     MenuSizeOut,
+    MenuVisibilityOut,
 )
 from app.schemas.photo import UploadUrlResponse
 from app.services import audit_service, location_service, platform_config_service, s3_service
 
-_SECTION_AUDITED_FIELDS = ("name", "description", "display_order")
+_SECTION_AUDITED_FIELDS = ("name", "description", "display_order", "is_hidden")
 _ITEM_AUDITED_FIELDS = (
     "section_id",
     "name",
@@ -68,6 +81,7 @@ _ITEM_AUDITED_FIELDS = (
     "display_order",
     "photo_s3_key",
     "photo_thumbnail_s3_key",
+    "is_hidden",
 )
 
 
@@ -111,6 +125,7 @@ def _section_out(section: MenuSection) -> MenuSectionOut:
         name=section.name,
         description=section.description,
         display_order=section.display_order,
+        is_hidden=section.is_hidden,
     )
 
 
@@ -137,6 +152,7 @@ def _item_out(item: MenuItem, photos_on: bool) -> MenuItemOut:
         display_order=item.display_order,
         photo_url=photo_url,
         photo_thumbnail_url=photo_thumbnail_url,
+        is_hidden=item.is_hidden,
     )
 
 
@@ -192,8 +208,25 @@ async def _count(db: AsyncSession, model: type[MenuSection] | type[MenuItem], lo
 # ---------------------------------------------------------------------------
 
 
-async def build_menu(db: AsyncSession, location_id: int) -> MenuOut:
+async def build_menu(
+    db: AsyncSession, location_id: int, *, include_hidden: bool = False
+) -> MenuOut:
+    """The structured menu. `include_hidden=False` (the default, and what
+    every public read uses) drops hidden items, hidden groups WITH their
+    items, and — when the location's `menu_hidden` flag is set — the whole
+    menu. `include_hidden=True` is the management view: everything, each
+    row carrying its `is_hidden` flag."""
     photos_on = await photos_enabled(db)
+    location = await _get_location_or_404(db, location_id)
+    menu_hidden = bool(location.menu_hidden)
+    if menu_hidden and not include_hidden:
+        return MenuOut(
+            location_id=location_id,
+            menu_photos_enabled=photos_on,
+            menu_hidden=True,
+            ungrouped_items=[],
+            sections=[],
+        )
     sections = (
         (
             await db.execute(
@@ -217,6 +250,14 @@ async def build_menu(db: AsyncSession, location_id: int) -> MenuOut:
         .all()
     )
 
+    if not include_hidden:
+        sections = [s for s in sections if not s.is_hidden]
+        items = [i for i in items if not i.is_hidden]
+        visible_section_ids = {s.id for s in sections}
+        # An item of a hidden group is hidden with it (ungrouped items have
+        # no group to hide them).
+        items = [i for i in items if i.section_id is None or i.section_id in visible_section_ids]
+
     by_section: dict[int | None, list[MenuItemOut]] = {}
     for item in items:
         by_section.setdefault(item.section_id, []).append(_item_out(item, photos_on))
@@ -224,6 +265,7 @@ async def build_menu(db: AsyncSession, location_id: int) -> MenuOut:
     return MenuOut(
         location_id=location_id,
         menu_photos_enabled=photos_on,
+        menu_hidden=menu_hidden,
         ungrouped_items=by_section.get(None, []),
         sections=[
             MenuSectionWithItemsOut(
@@ -232,6 +274,7 @@ async def build_menu(db: AsyncSession, location_id: int) -> MenuOut:
                 description=s.description,
                 display_order=s.display_order,
                 items=by_section.get(s.id, []),
+                is_hidden=s.is_hidden,
             )
             for s in sections
         ],
@@ -242,7 +285,40 @@ async def get_menu(db: AsyncSession, location_id: int, current_user=None) -> Men
     """`GET /locations/{id}/menu` — public. 404 (via the shared visibility
     gate) for a missing/hidden location or a soft-deleted brand."""
     await location_service.get_readable_location_or_404(db, location_id, current_user)
-    return await build_menu(db, location_id)
+    return await build_menu(db, location_id, include_hidden=False)
+
+
+async def get_menu_for_management(db: AsyncSession, location_id: int) -> MenuOut:
+    """`GET /locations/{id}/menu/manage` — the editor's read: EVERYTHING,
+    hidden groups/items included and flagged. Access (owner / assigned
+    manager / admin) is enforced upstream by the router dependency."""
+    return await build_menu(db, location_id, include_hidden=True)
+
+
+async def set_menu_hidden(
+    db: AsyncSession, location_id: int, is_hidden: bool, current_user
+) -> MenuVisibilityOut:
+    """`PUT /locations/{id}/menu/visibility` — hide/show the ENTIRE menu.
+    Idempotent: re-sending the current value changes nothing and writes no
+    audit row. The change is audited on `restaurant_location` (old/new
+    `menu_hidden`) in the same transaction."""
+    location = await _get_location_or_404(db, location_id)
+    old_hidden = bool(location.menu_hidden)
+    if old_hidden != is_hidden:
+        location.menu_hidden = is_hidden
+        await db.flush()
+        await audit_service.log(
+            db,
+            table_name="restaurant_location",
+            record_id=location.id,
+            action="update",
+            actor_id=current_user.cognito_sub,
+            actor_role=current_user.role,
+            old_val={"menu_hidden": old_hidden},
+            new_val={"menu_hidden": is_hidden},
+        )
+        await db.commit()
+    return MenuVisibilityOut(location_id=location_id, is_hidden=is_hidden)
 
 
 # ---------------------------------------------------------------------------
@@ -294,7 +370,9 @@ async def update_section(
     data = body.model_dump(exclude_unset=True)
     if "name" in data and data["name"] is None:
         raise AppError(400, "name cannot be cleared to null", "bad_request")
-    for field in ("name", "description"):
+    if "is_hidden" in data and data["is_hidden"] is None:
+        raise AppError(400, "is_hidden cannot be cleared to null", "bad_request")
+    for field in ("name", "description", "is_hidden"):
         if field in data:
             setattr(section, field, data[field])
 
@@ -426,7 +504,7 @@ async def reorder_sections(
             new_val=_section_snapshot(section),
         )
     await db.commit()
-    return await build_menu(db, location_id)
+    return await build_menu(db, location_id, include_hidden=True)
 
 
 # ---------------------------------------------------------------------------
@@ -487,6 +565,8 @@ async def update_item(
     data = body.model_dump(exclude_unset=True)
     if "name" in data and data["name"] is None:
         raise AppError(400, "name cannot be cleared to null", "bad_request")
+    if "is_hidden" in data and data["is_hidden"] is None:
+        raise AppError(400, "is_hidden cannot be cleared to null", "bad_request")
 
     # Pricing form: send the new form's field and the other is cleared. The
     # merged result must still have exactly one of price / sizes.
@@ -516,6 +596,8 @@ async def update_item(
         item.name = data["name"]
     if "description" in data:
         item.description = data["description"]
+    if "is_hidden" in data:
+        item.is_hidden = data["is_hidden"]
     item.price = new_price
     item.sizes = new_sizes
 
@@ -594,7 +676,7 @@ async def reorder_items(
             new_val=_item_snapshot(item),
         )
     await db.commit()
-    return await build_menu(db, location_id)
+    return await build_menu(db, location_id, include_hidden=True)
 
 
 # ---------------------------------------------------------------------------

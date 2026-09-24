@@ -91,6 +91,8 @@ class MenuSectionUpdate(BaseModel):
 
     name: SectionName | None = None
     description: str | None = Field(default=None, max_length=SECTION_DESCRIPTION_MAX_LENGTH)
+    # Hide/show the whole group (and its items) publicly; `null` is a `400`.
+    is_hidden: bool | None = None
 
     _clean_description = field_validator("description", mode="before")(_blank_to_none)
 
@@ -101,6 +103,7 @@ class MenuSectionOut(BaseModel):
     name: str
     description: str | None
     display_order: int
+    is_hidden: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -139,6 +142,8 @@ class MenuItemUpdate(BaseModel):
     price: PriceText | None = None
     sizes: list[MenuSizeIn] | None = Field(default=None, min_length=1, max_length=MAX_SIZES_PER_ITEM)
     section_id: int | None = None
+    # Hide/show this dish publicly (e.g. sold out); `null` is a `400`.
+    is_hidden: bool | None = None
 
     _clean_description = field_validator("description", mode="before")(_blank_to_none)
 
@@ -164,6 +169,9 @@ class MenuItemOut(BaseModel):
     # (docs/API_CONTRACTS.md "Menu"), and null for an item with no photo.
     photo_url: str | None
     photo_thumbnail_url: str | None
+    # Always false on the public read (hidden items are excluded from it);
+    # meaningful on the management read (`GET …/menu/manage`).
+    is_hidden: bool = False
 
 
 class MenuSectionWithItemsOut(BaseModel):
@@ -172,6 +180,7 @@ class MenuSectionWithItemsOut(BaseModel):
     description: str | None
     display_order: int
     items: list[MenuItemOut]
+    is_hidden: bool = False
 
 
 class MenuOut(BaseModel):
@@ -186,8 +195,24 @@ class MenuOut(BaseModel):
 
     location_id: int
     menu_photos_enabled: bool
+    # True when the location's whole menu is hidden. The public read then
+    # returns empty lists (nothing to render); the management read returns
+    # the full content (hidden things included, each flagged `is_hidden`) so
+    # the editor can show the switch state.
+    menu_hidden: bool = False
     ungrouped_items: list[MenuItemOut]
     sections: list[MenuSectionWithItemsOut]
+
+
+class MenuVisibilityIn(BaseModel):
+    """`PUT /locations/{id}/menu/visibility` — hide/show the ENTIRE menu."""
+
+    is_hidden: bool
+
+
+class MenuVisibilityOut(BaseModel):
+    location_id: int
+    is_hidden: bool
 
 
 # ---------------------------------------------------------------------------

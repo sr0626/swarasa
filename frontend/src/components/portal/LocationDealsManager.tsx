@@ -16,14 +16,22 @@
 //
 // Delete is a real, irreversible hard delete on the backend, so it uses the
 // same two-step "click, then Confirm" pattern as LocationManagerAssignment /
-// LocationStatusMenu. Deactivate is the reversible alternative and is
-// offered right next to it.
+// LocationStatusMenu. Hide is the reversible alternative and is offered right
+// next to it.
+//
+// Hide / show (never deletes): each deal has a one-click Hide/Show (the API
+// field is still `is_active`; the UI says "Hidden from diners" / "Visible to
+// diners"), and the location has a "Hide all deals" / "Show all deals" switch
+// that suppresses every deal and the public "Deal(s) available today" signal
+// without touching the individual switches. Toggles are instant/optimistic.
 import { useState } from "react";
 import {
   createLocationDealAction,
   deleteLocationDealAction,
+  setDealsHiddenAction,
   updateLocationDealAction,
 } from "@/app/portal/locations/[id]/actions";
+import { HiddenChip, SectionVisibilityBar, VisibilityToggleButton } from "@/components/portal/VisibilityControls";
 import { PencilIcon, PlusIcon, TagIcon, TrashIcon } from "@/components/ui/icons";
 import {
   dealTypeHint,
@@ -110,11 +118,16 @@ function formFromDeal(deal: Deal): DealFormState {
 export default function LocationDealsManager({
   locationId,
   initialDeals,
+  initialDealsHidden = false,
 }: {
   locationId: number;
   initialDeals: Deal[];
+  initialDealsHidden?: boolean;
 }) {
   const [deals, setDeals] = useState<Deal[]>(initialDeals);
+  // "Hide all deals" — location-level, independent of each deal's own switch.
+  const [dealsHidden, setDealsHidden] = useState(initialDealsHidden);
+  const [hideAllBusy, setHideAllBusy] = useState(false);
   // null = form closed, "new" = creating, number = editing that deal id.
   const [editing, setEditing] = useState<"new" | number | null>(null);
   const [form, setForm] = useState<DealFormState>(EMPTY_FORM);
@@ -221,9 +234,11 @@ export default function LocationDealsManager({
     }
   }
 
+  /** Per-deal Hide/Show (the API field is `is_active`) — optimistic. */
   async function handleToggleActive(deal: Deal) {
     setListError(null);
     setPendingId(deal.id);
+    setDeals((prev) => prev.map((d) => (d.id === deal.id ? { ...d, is_active: !deal.is_active } : d)));
     try {
       const result = await updateLocationDealAction(locationId, deal.id, {
         is_active: !deal.is_active,
@@ -231,10 +246,28 @@ export default function LocationDealsManager({
       if (result.ok) {
         setDeals((prev) => prev.map((d) => (d.id === deal.id ? result.data : d)));
       } else {
+        setDeals((prev) => prev.map((d) => (d.id === deal.id ? deal : d)));
         setListError(result.error);
       }
     } finally {
       setPendingId(null);
+    }
+  }
+
+  /** "Hide all deals" / "Show all deals" — optimistic, reverts on failure. */
+  async function handleToggleHideAll() {
+    const next = !dealsHidden;
+    setListError(null);
+    setDealsHidden(next);
+    setHideAllBusy(true);
+    try {
+      const result = await setDealsHiddenAction(locationId, next);
+      if (!result.ok) {
+        setDealsHidden(!next);
+        setListError(result.error);
+      }
+    } finally {
+      setHideAllBusy(false);
     }
   }
 
@@ -289,8 +322,23 @@ export default function LocationDealsManager({
       </div>
       <p className="mt-1 text-sm text-brand-ink-muted">
         Free for every listing. Signed-in diners see the full deal; everyone else just sees
-        &ldquo;Deal(s) available today&rdquo; on the restaurant&apos;s card and page.
+        &ldquo;Deal(s) available today&rdquo; on the restaurant&apos;s card and page. Hide a deal,
+        or all of them at once, without deleting anything.
       </p>
+
+      {/* Location-level switch. Hidden state is loud so an owner never
+          wonders why no deal badge shows publicly. */}
+      {(deals.length > 0 || dealsHidden) && (
+        <SectionVisibilityBar
+          hidden={dealsHidden}
+          visibleText="Your deals are visible to diners (each deal follows its own Hide / Show)."
+          hiddenText="All your deals are hidden from diners, and “Deal(s) available today” is off. Nothing is deleted."
+          hideLabel="Hide all deals"
+          showLabel="Show all deals"
+          onToggle={handleToggleHideAll}
+          busy={hideAllBusy}
+        />
+      )}
 
       {editing !== null && (
         <form
@@ -457,7 +505,7 @@ export default function LocationDealsManager({
               onChange={(e) => patchForm({ is_active: e.target.checked })}
               className="h-4 w-4 accent-brand-accent"
             />
-            Active (visible to diners when it applies today)
+            Visible to diners (when it applies today)
           </label>
 
           {formError && (
@@ -502,15 +550,15 @@ export default function LocationDealsManager({
                     <span className="rounded-brand-pill bg-brand-accent/10 px-2 py-0.5 text-xs font-semibold text-brand-accent">
                       {dealTypeLabel(deal.deal_type)}
                     </span>
-                    <span
-                      className={
-                        deal.is_active
-                          ? "rounded-brand-pill bg-brand-success-bg px-2 py-0.5 text-xs font-semibold text-brand-success"
-                          : "rounded-brand-pill bg-brand-chip px-2 py-0.5 text-xs font-semibold text-brand-ink-subtle"
-                      }
-                    >
-                      {deal.is_active ? "Active" : "Inactive"}
-                    </span>
+                    {!deal.is_active ? (
+                      <HiddenChip label="Hidden from diners" />
+                    ) : dealsHidden ? (
+                      <HiddenChip label="Hidden — all deals hidden" />
+                    ) : (
+                      <span className="rounded-brand-pill bg-brand-success-bg px-2 py-0.5 text-xs font-semibold text-brand-success">
+                        Visible to diners
+                      </span>
+                    )}
                   </div>
                   <p className="mt-1.5 break-words text-sm font-semibold text-brand-ink">
                     {deal.title}
@@ -536,14 +584,12 @@ export default function LocationDealsManager({
                     <PencilIcon className="h-3.5 w-3.5" />
                     Edit
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => handleToggleActive(deal)}
-                    disabled={busy}
-                    className={rowButton}
-                  >
-                    {deal.is_active ? "Deactivate" : "Activate"}
-                  </button>
+                  <VisibilityToggleButton
+                    hidden={!deal.is_active}
+                    name={`deal ${deal.title}`}
+                    onToggle={() => handleToggleActive(deal)}
+                    busy={busy}
+                  />
                   <button
                     type="button"
                     onClick={() => handleDelete(deal)}

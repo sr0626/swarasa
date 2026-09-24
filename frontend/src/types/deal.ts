@@ -35,6 +35,9 @@ export interface Deal {
 
 export interface DealListResponse {
   results: Deal[];
+  /** "Hide all deals" is on for this location: every deal is hidden from
+   * diners (each deal keeps its own `is_active`). */
+  deals_hidden: boolean;
 }
 
 /** Content-gated public shape — see backend/app/schemas/deal.py

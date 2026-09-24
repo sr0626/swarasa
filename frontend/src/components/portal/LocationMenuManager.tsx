@@ -17,6 +17,11 @@
 // platform flag is on (`menu.menu_photos_enabled`); while it is off there is
 // no photo UI at all and the API returns no photo URLs.
 //
+// Hide / show (never deletes): each item, each group (hides its items too) and
+// the ENTIRE menu can be hidden from diners with one click and shown again the
+// same way. Hidden things stay in this editor, marked "Hidden". Toggles are
+// instant and optimistic (reverted with an error if the server refuses).
+//
 // After every successful write the whole menu is re-read from the server
 // (or taken from the reorder response) so the editor can never drift from
 // what the public sees. Deletes are two-step (click, then confirm).
@@ -30,6 +35,9 @@ import {
   getMenuPhotoUploadUrlAction,
   removeMenuItemPhotoAction,
   reorderMenuItemsAction,
+  setMenuHiddenAction,
+  setMenuItemHiddenAction,
+  setMenuSectionHiddenAction,
   reorderMenuSectionsAction,
   setMenuItemPhotoAction,
   updateMenuItemAction,
@@ -44,6 +52,17 @@ import {
   TrashIcon,
 } from "@/components/ui/icons";
 import { formatItemPrice, moveId, moveRow } from "@/lib/menu/format";
+import {
+  countHidden,
+  hiddenSummary,
+  withItemHidden,
+  withSectionHidden,
+} from "@/lib/menu/visibility";
+import {
+  HiddenChip,
+  SectionVisibilityBar,
+  VisibilityToggleButton,
+} from "@/components/portal/VisibilityControls";
 import { postFileToS3 } from "@/lib/photoUpload";
 import {
   MENU_LIMITS,
@@ -158,6 +177,61 @@ export default function LocationMenuManager({
     }
     setListError(result.error);
     return false;
+  }
+
+  // ---------------------------------------------------------------------
+  // Hide / show (instant + optimistic; reverts on failure)
+  // ---------------------------------------------------------------------
+
+  async function toggleItemHidden(item: MenuItem) {
+    const next = !item.is_hidden;
+    const previous = menu;
+    setListError(null);
+    setMenu(withItemHidden(menu, item.id, next));
+    setBusyKey(`vis-item-${item.id}`);
+    try {
+      const result = await setMenuItemHiddenAction(locationId, item.id, next);
+      if (!result.ok) {
+        setMenu(previous);
+        setListError(result.error);
+      }
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function toggleSectionHidden(section: MenuSectionWithItems) {
+    const next = !section.is_hidden;
+    const previous = menu;
+    setListError(null);
+    setMenu(withSectionHidden(menu, section.id, next));
+    setBusyKey(`vis-section-${section.id}`);
+    try {
+      const result = await setMenuSectionHiddenAction(locationId, section.id, next);
+      if (!result.ok) {
+        setMenu(previous);
+        setListError(result.error);
+      }
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function toggleMenuHidden() {
+    const next = !menu.menu_hidden;
+    const previous = menu;
+    setListError(null);
+    setMenu({ ...menu, menu_hidden: next });
+    setBusyKey("vis-menu");
+    try {
+      const result = await setMenuHiddenAction(locationId, next);
+      if (!result.ok) {
+        setMenu(previous);
+        setListError(result.error);
+      }
+    } finally {
+      setBusyKey(null);
+    }
   }
 
   // ---------------------------------------------------------------------
@@ -859,7 +933,7 @@ export default function LocationMenuManager({
   // Lists
   // ---------------------------------------------------------------------
 
-  function renderItemRows(sectionId: number | null, items: MenuItem[]) {
+  function renderItemRows(sectionId: number | null, items: MenuItem[], groupHidden = false) {
     const reorderBusy = busyKey === `items-${sectionId ?? "none"}`;
     return (
       <ul className="divide-y divide-brand-border rounded-brand-control border border-brand-border empty:hidden">
@@ -884,7 +958,13 @@ export default function LocationMenuManager({
                     className="h-14 w-14 shrink-0 rounded-brand-control border border-brand-border object-cover"
                   />
                 )}
-                <div className="min-w-0">
+                <div className={item.is_hidden || groupHidden ? "min-w-0 opacity-70" : "min-w-0"}>
+                  {(item.is_hidden || groupHidden) && (
+                    <div className="mb-1 flex flex-wrap gap-1.5">
+                      {item.is_hidden && <HiddenChip label="Hidden from diners" />}
+                      {groupHidden && !item.is_hidden && <HiddenChip label="Hidden with its group" />}
+                    </div>
+                  )}
                   <p className="break-words text-sm font-semibold text-brand-ink">{item.name}</p>
                   {item.description && (
                     <p className="mt-0.5 whitespace-pre-line break-words text-sm text-brand-ink-muted">
@@ -915,6 +995,13 @@ export default function LocationMenuManager({
                 >
                   <ChevronDownIcon className="h-4 w-4" />
                 </button>
+                <VisibilityToggleButton
+                  hidden={item.is_hidden}
+                  name={item.name}
+                  onToggle={() => toggleItemHidden(item)}
+                  busy={busyKey === `vis-item-${item.id}`}
+                  disabled={busy}
+                />
                 <button
                   type="button"
                   onClick={() => openEditItem(item)}
@@ -961,6 +1048,11 @@ export default function LocationMenuManager({
       <div key={section.id} className="flex flex-col gap-3">
         <div className="flex flex-col gap-3 rounded-brand-control bg-brand-bg p-4">
           <div className="min-w-0">
+            {section.is_hidden && (
+              <div className="mb-1">
+                <HiddenChip label="Group hidden from diners" />
+              </div>
+            )}
             <h3 className="break-words font-display text-lg font-bold text-brand-ink">
               {section.name}
             </h3>
@@ -989,6 +1081,13 @@ export default function LocationMenuManager({
             >
               <ChevronDownIcon className="h-4 w-4" />
             </button>
+            <VisibilityToggleButton
+              hidden={section.is_hidden}
+              name={`group ${section.name}`}
+              onToggle={() => toggleSectionHidden(section)}
+              busy={busyKey === `vis-section-${section.id}`}
+              disabled={busy}
+            />
             <button
               type="button"
               onClick={() => openEditSection(section)}
@@ -1065,7 +1164,7 @@ export default function LocationMenuManager({
           )}
         </div>
         {count > 0 ? (
-          renderItemRows(section.id, section.items)
+          renderItemRows(section.id, section.items, section.is_hidden)
         ) : (
           <p className="text-sm text-brand-ink-subtle">No items in this group yet.</p>
         )}
@@ -1102,8 +1201,27 @@ export default function LocationMenuManager({
       </div>
       <p className="mt-1 text-sm text-brand-ink-muted">
         Free for every listing and visible to everyone. Group items (Appetizers, Main Course…) or
-        leave them ungrouped; give each item a price, or several sizes with their own prices.
+        leave them ungrouped; give each item a price, or several sizes with their own prices. Use
+        Hide to take a dish, a group or the whole menu off your listing without deleting it.
       </p>
+
+      {/* Whole-menu switch. Hidden state is loud so an owner never wonders why
+          nothing shows publicly; nothing is deleted either way. */}
+      {!isEmpty && (
+        <SectionVisibilityBar
+          hidden={menu.menu_hidden}
+          visibleText={
+            hiddenSummary(countHidden(menu))
+              ? `Your menu is visible to diners (except ${hiddenSummary(countHidden(menu))}).`
+              : "Your menu is visible to diners."
+          }
+          hiddenText="Your whole menu is hidden from diners. Nothing is deleted — everything below is kept."
+          hideLabel="Hide entire menu"
+          showLabel="Show menu"
+          onToggle={toggleMenuHidden}
+          busy={busyKey === "vis-menu"}
+        />
+      )}
 
       {/* New group / new item forms always open here at the top (a stable
           spot, so changing the item's Group dropdown never moves the form

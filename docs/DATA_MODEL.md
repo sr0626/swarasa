@@ -19,9 +19,26 @@ An optional, owner-named group of menu items on a location ("Appetizers",
 | name | varchar(100) | NOT NULL, free text, trimmed, non-empty (schema-enforced) |
 | description | varchar(500) | nullable — every group has its own optional description |
 | display_order | integer | NOT NULL default 0; 0-based, dense after any reorder; ties broken by id |
+| is_hidden | boolean | NOT NULL default `false` (migration `0014_hide_menu_and_deals`). Hides the group AND its items from the public menu without touching the items' own flags |
 | created_at / updated_at | timestamptz | `TimestampMixin` |
 
 Index: `ix_menu_section_location_order (location_id, display_order)`.
+
+## restaurant_location — `menu_hidden`, `deals_hidden` (migration `0014_hide_menu_and_deals`)
+
+Two NOT NULL boolean columns, `server_default false`, so every existing
+location stays fully visible with no backfill:
+
+| Column | Meaning |
+|---|---|
+| menu_hidden | the ENTIRE menu is hidden from the public menu read (menu rows are untouched) |
+| deals_hidden | "Hide all deals": every public deal surface behaves as if the location had no deals (per-deal `deal.is_active` untouched and independent) |
+
+Judgment call — plain columns on the location rather than a per-location
+settings table: they are read on every public menu/deal path, there are only
+two, and a table would add a join to each of those reads (and a second audit
+surface). Changes are audited as `restaurant_location` `update` rows with the
+old/new value of the one column.
 
 ## menu_item
 
@@ -40,6 +57,7 @@ One dish/drink on a location's menu. Migration `0013_menu`. Model:
 | display_order | integer | NOT NULL default 0; ordering is within `(location_id, section_id)` |
 | photo_s3_key | varchar(512) | nullable; predicted `processed/…` key; only read/written while the photo flag is on |
 | photo_thumbnail_s3_key | varchar(512) | nullable; predicted `thumbnails/…` key |
+| is_hidden | boolean | NOT NULL default `false` (migration `0014_hide_menu_and_deals`). Non-destructive "hide this dish" (e.g. sold out): excluded from the public menu, kept in the editor |
 | created_at / updated_at | timestamptz | `TimestampMixin` |
 
 Index: `ix_menu_item_location_section_order (location_id, section_id, display_order)`.

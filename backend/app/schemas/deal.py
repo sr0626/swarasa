@@ -163,6 +163,22 @@ class DealOut(BaseModel):
 
 class DealListResponse(BaseModel):
     results: list[DealOut]
+    # True when the location's deals are all hidden from diners
+    # (`restaurant_location.deals_hidden`) — the editor's "Hide all deals"
+    # switch state. Individual `is_active` toggles are independent of it.
+    deals_hidden: bool = False
+
+
+class DealVisibilityIn(BaseModel):
+    """`PUT /locations/{id}/deals/visibility` — hide/show EVERY deal of the
+    location publicly (search badge/filter, follow list, location detail)."""
+
+    is_hidden: bool
+
+
+class DealVisibilityOut(BaseModel):
+    location_id: int
+    is_hidden: bool
 
 
 class DealUpcomingOut(BaseModel):

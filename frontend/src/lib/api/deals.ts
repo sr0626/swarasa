@@ -7,6 +7,7 @@
 // backend's own split (backend/app/routers/deals.py module docstring).
 import { apiFetch } from "./client";
 import type { CreateDealInput, Deal, DealListResponse, UpdateDealInput } from "@/types/deal";
+import type { VisibilityResponse } from "@/types/menu";
 
 /** GET /locations/{id}/deals — auth: owner/assigned-manager/admin. Every
  * deal for this location, active or not (used by the deal editor list). */
@@ -17,6 +18,21 @@ export async function getLocationDeals(
   return apiFetch<DealListResponse>(
     `/locations/${locationId}/deals`,
     { method: "GET" },
+    { accessToken }
+  );
+}
+
+/** PUT /locations/{id}/deals/visibility — "Hide all deals" / "Show all
+ * deals" for the location. Non-destructive; each deal's own `is_active` is
+ * untouched and independent. */
+export async function setDealsVisibility(
+  locationId: number,
+  isHidden: boolean,
+  accessToken: string
+): Promise<VisibilityResponse> {
+  return apiFetch<VisibilityResponse>(
+    `/locations/${locationId}/deals/visibility`,
+    { method: "PUT", body: JSON.stringify({ is_hidden: isHidden }) },
     { accessToken }
   );
 }

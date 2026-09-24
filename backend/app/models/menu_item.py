@@ -53,15 +53,18 @@ Other notes
 * `location_id` is `ON DELETE CASCADE` (same reasoning as
   `menu_section.location_id` and `deal.location_id`): hard-deleting a
   location via Core `delete()` cascades the whole menu away.
-* No `is_available` toggle in this first cut (not requested); deleting or
-  editing an item is the way to change the menu. Easy additive follow-up.
+* `is_hidden` (added 2026-09-24, migration 0014) is the non-destructive
+  "hide this dish" switch (e.g. sold out): a hidden item stays in the
+  owner's editor (marked "Hidden", one-click Show) but is excluded from the
+  public menu read and everything derived from it. Default false, so
+  existing rows stay visible with no backfill.
 * No ORM relationships — see `menu_section.py`.
 """
 from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import BigInteger, ForeignKey, Index, Integer, JSON, String
+from sqlalchemy import BigInteger, Boolean, ForeignKey, Index, Integer, JSON, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin
@@ -104,6 +107,11 @@ class MenuItem(TimestampMixin, Base):
 
     display_order: Mapped[int] = mapped_column(
         Integer, default=0, server_default="0", nullable=False
+    )
+
+    # Non-destructive hide switch — see module docstring.
+    is_hidden: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
     )
 
     # Processed (1200px) and thumbnail (400px) S3 keys, same predicted-key
