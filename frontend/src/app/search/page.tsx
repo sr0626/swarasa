@@ -9,6 +9,10 @@
 // `?cuisine=north_indian` form keeps working. The tag taxonomy that drives
 // the Filters dropdown is fetched server-side from `GET /cuisine-tags`, falling
 // back to a small built-in list if that call fails.
+// With NO criteria (no q/location/tag filter/deals_today — `page`/`sort`
+// don't count, see `hasSearchCriteria`) the page renders an empty "start a
+// search" state and makes no /search call; the homepage owns "Popular near
+// you". Any criterion loads results exactly as before.
 // `q` round-trips straight to the backend `q` param. `location` is
 // geocoded server-side in SearchResults (lib/geocode's Census/Nominatim
 // chain) before the GET /search call — see SearchFilterBar.tsx for why it
@@ -17,6 +21,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import TopBar from "@/components/home/TopBar";
 import SearchFilterBar from "@/components/search/SearchFilterBar";
+import SearchEmptyState from "@/components/search/SearchEmptyState";
 import SearchResults from "@/components/search/SearchResults";
 import SearchResultsSkeleton from "@/components/search/SearchResultsSkeleton";
 import { getCuisineTags } from "@/lib/api/cuisine";
@@ -24,7 +29,9 @@ import { FALLBACK_FILTER_TAGS } from "@/lib/constants/cuisineFilters";
 import { DEFAULT_CITY_LABEL } from "@/lib/constants/city";
 import {
   buildFilterGroups,
+  buildSearchHref,
   FILTER_PARAMS,
+  hasSearchCriteria,
   labelFor,
   parseFilters as parseTagFilters,
   type FilterGroup,
@@ -67,7 +74,20 @@ async function loadFilterGroups(): Promise<FilterGroup[]> {
 }
 
 export function generateMetadata({ searchParams }: SearchPageProps): Metadata {
-  const { location, filters } = parseParams(searchParams);
+  const { location, query, filters, page } = parseParams(searchParams);
+  // Empty /search (no criteria) is a thin "start a search" prompt with no
+  // listing content of its own — canonical to the bare path, but noindex
+  // (follow stays on so its quick-start links are still crawled). Searches
+  // with criteria keep today's title/description and are indexable, each
+  // canonical to its own normalised URL (param order/junk params dropped).
+  if (!hasSearchCriteria({ location, query, filters })) {
+    return {
+      title: "Find Restaurants",
+      description: `Search verified Indian restaurants in ${DEFAULT_CITY_LABEL} by name, cuisine, dietary need or city.`,
+      alternates: { canonical: "/search" },
+      robots: { index: false, follow: true },
+    };
+  }
   // Labels come from the built-in list (no extra fetch just for a <title>);
   // unknown slugs fall back to a prettified form.
   const known = buildFilterGroups(FALLBACK_FILTER_TAGS);
@@ -88,12 +108,14 @@ export function generateMetadata({ searchParams }: SearchPageProps): Metadata {
       : "Search Results",
     description:
       `Browse verified restaurants across ${cityLabel}, filtered by regional cuisine and dietary needs.`,
+    alternates: { canonical: buildSearchHref({ location, query, filters, page }) },
   };
 }
 
 export default async function SearchPage({ searchParams }: SearchPageProps) {
   const { location, query, filters, page } = parseParams(searchParams);
   const cityLabel = location || DEFAULT_CITY_LABEL;
+  const hasCriteria = hasSearchCriteria({ location, query, filters });
   const groups = await loadFilterGroups();
   const resultsKey = `${JSON.stringify(filters)}-${page}`;
 
@@ -103,10 +125,12 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
       <section className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
         <h1 className="font-display text-2xl font-bold text-brand-ink sm:text-3xl">
-          Search results
+          {hasCriteria ? "Search results" : "Find restaurants"}
         </h1>
         <p className="mt-1 text-sm text-brand-ink-muted">
-          Verified restaurants around {cityLabel}.
+          {hasCriteria
+            ? `Verified restaurants around ${cityLabel}.`
+            : "Search by restaurant, cuisine or city."}
         </p>
 
         <div className="mt-6">
@@ -119,9 +143,14 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         </div>
 
         <div className="mt-5">
-          <Suspense key={resultsKey} fallback={<SearchResultsSkeleton />}>
-            <SearchResults filters={filters} page={page} location={location} query={query} />
-          </Suspense>
+          {hasCriteria ? (
+            <Suspense key={resultsKey} fallback={<SearchResultsSkeleton />}>
+              <SearchResults filters={filters} page={page} location={location} query={query} />
+            </Suspense>
+          ) : (
+            // No criteria: no backend call, no skeleton — just the prompt.
+            <SearchEmptyState />
+          )}
         </div>
       </section>
     </main>

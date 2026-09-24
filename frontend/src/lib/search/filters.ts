@@ -84,6 +84,24 @@ export function countFilters(filters: SearchFilters): number {
   );
 }
 
+/** True when the search URL carries at least one real search criterion:
+ * non-blank location text, non-blank free-text `q`, any tag facet, or the
+ * "Deals today" toggle. `page`/`sort` (and any unknown param) are NOT
+ * criteria — they only shape how a search is displayed. When this is false
+ * the /search page renders its empty "start a search" state and makes no
+ * backend call (the homepage already shows "Popular near you"). */
+export function hasSearchCriteria({
+  location,
+  query,
+  filters,
+}: {
+  location?: string;
+  query?: string;
+  filters: SearchFilters;
+}): boolean {
+  return Boolean(location?.trim()) || Boolean(query?.trim()) || countFilters(filters) > 0;
+}
+
 export function isSelected(filters: SearchFilters, param: FilterParam, name: string): boolean {
   return filters[param].includes(name);
 }

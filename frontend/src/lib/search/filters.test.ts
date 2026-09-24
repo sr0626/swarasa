@@ -6,6 +6,7 @@ import {
   buildSearchHref,
   countFilters,
   EMPTY_FILTERS,
+  hasSearchCriteria,
   parseFilters,
   toggleDealsToday,
 } from "./filters.ts";
@@ -37,4 +38,31 @@ test("toggleDealsToday flips the flag and countFilters counts it", () => {
   assert.equal(countFilters(on), 1);
   assert.equal(toggleDealsToday(on).dealsToday, false);
   assert.equal(countFilters(EMPTY_FILTERS), 0);
+});
+
+test("hasSearchCriteria is false for an empty search", () => {
+  assert.equal(hasSearchCriteria({ filters: EMPTY_FILTERS }), false);
+  assert.equal(hasSearchCriteria({ location: "", query: "", filters: EMPTY_FILTERS }), false);
+  // Whitespace-only text is not a criterion.
+  assert.equal(hasSearchCriteria({ location: "  ", query: "\t ", filters: EMPTY_FILTERS }), false);
+});
+
+test("hasSearchCriteria is true for each criterion type on its own", () => {
+  assert.equal(hasSearchCriteria({ query: "indian", filters: EMPTY_FILTERS }), true);
+  assert.equal(hasSearchCriteria({ location: "Plano", filters: EMPTY_FILTERS }), true);
+  assert.equal(hasSearchCriteria({ filters: { ...EMPTY_FILTERS, cuisine: ["andhra"] } }), true);
+  assert.equal(hasSearchCriteria({ filters: { ...EMPTY_FILTERS, dietary: ["vegan"] } }), true);
+  assert.equal(hasSearchCriteria({ filters: { ...EMPTY_FILTERS, type: ["buffet"] } }), true);
+  assert.equal(hasSearchCriteria({ filters: { ...EMPTY_FILTERS, dealsToday: true } }), true);
+});
+
+test("page and sort params alone are not criteria (via parseFilters on raw params)", () => {
+  assert.equal(hasSearchCriteria({ filters: parseFilters({ page: "3", sort: "distance" }) }), false);
+  // deals_today=false and invalid slugs don't count either.
+  assert.equal(
+    hasSearchCriteria({ filters: parseFilters({ deals_today: "false", cuisine: "Not A Slug!" }) }),
+    false
+  );
+  // The top bar's link is a criterion.
+  assert.equal(hasSearchCriteria({ filters: parseFilters({ deals_today: "true" }) }), true);
 });
