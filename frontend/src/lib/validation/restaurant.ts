@@ -62,6 +62,19 @@ export const addRestaurantSchema = createRestaurantSchema.extend({
   phone: requiredPhoneSchema,
 });
 
+/**
+ * "Add location" form (another branch of an EXISTING restaurant): just the
+ * address and phone — the brand fields are already on the restaurant. The
+ * brand id travels separately (URL/param), never as form input.
+ */
+export const addLocationSchema = z.object({
+  ...locationAddressShape,
+  phone: requiredPhoneSchema,
+});
+
+export type AddLocationFormInput = z.input<typeof addLocationSchema>;
+export type AddLocationValues = z.output<typeof addLocationSchema>;
+
 /** Raw (pre-transform) input shape the form holds; the parsed output has normalised phone/website/state. */
 export type AddRestaurantFormInput = z.input<typeof addRestaurantSchema>;
 export type AddRestaurantValues = z.output<typeof addRestaurantSchema>;

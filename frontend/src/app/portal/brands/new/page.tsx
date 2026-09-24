@@ -6,6 +6,7 @@
 // the business console frame by app/portal/brands/layout.tsx (no own
 // <main>/TopBar; the left menu replaces the old "Back to dashboard" link).
 import type { Metadata } from "next";
+import Link from "next/link";
 import { requireSession } from "@/lib/auth/guards";
 import { getCuisineTags } from "@/lib/api/cuisine";
 import CreateBrandForm from "@/components/portal/CreateBrandForm";
@@ -36,6 +37,18 @@ export default async function NewBrandPage() {
       </h1>
       <p className="mt-1 text-sm text-brand-ink-muted">
         Tell us about your restaurant and where to find it. You can add hours and photos next.
+      </p>
+      {/* The #1 way owners end up with duplicate restaurants: adding a second
+          location of an existing restaurant through this new-restaurant form. */}
+      <p
+        data-testid="add-location-hint"
+        className="mt-3 rounded-brand-control bg-brand-chip px-3 py-2.5 text-sm text-brand-ink"
+      >
+        Already have this restaurant? Add another location from your{" "}
+        <Link href="/account#restaurants" className="font-semibold text-brand-accent underline">
+          business account
+        </Link>{" "}
+        instead of a new restaurant.
       </p>
 
       <div className="mt-6 rounded-brand-card border border-brand-border bg-white p-5 shadow-brand-card sm:p-6">

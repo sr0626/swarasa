@@ -7,6 +7,7 @@
 // HTML <input type="time"> values are "HH:MM" with no seconds, but the
 // contract's open_time/close_time are "HH:MM:SS" — converted at the
 // state <-> payload boundary below, never sent/displayed inconsistently.
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { updateLocationHoursAction } from "@/app/portal/locations/[id]/actions";
 import { ClockIcon } from "@/components/ui/icons";
@@ -56,6 +57,7 @@ export default function LocationHoursEditor({
   locationId: number;
   hours: LocationHour[];
 }) {
+  const router = useRouter();
   const [days, setDays] = useState<DayFormState[]>(buildInitialState(hours));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -86,6 +88,9 @@ export default function LocationHoursEditor({
       if (result.ok) {
         setDays(buildInitialState(result.data));
         setSaved(true);
+        // Re-render the page around us so the setup checklist reflects the
+        // new hours.
+        router.refresh();
       } else {
         setError(result.error);
       }

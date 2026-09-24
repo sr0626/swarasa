@@ -1,5 +1,5 @@
-// One-time banner on the location editor right after the "Add restaurant"
-// flow creates a listing (`?new=exact|approximate|none`, set by
+// One-time banner on the location editor right after the "Add restaurant" /
+// "Add location" flow creates a listing (`?new=exact|approximate|none`, set by
 // components/portal/CreateBrandForm.tsx). Server-renderable — no state.
 // The map-position wording matters: without coordinates a listing is
 // invisible to geo search, so the owner has to be told, not left guessing.
@@ -19,9 +19,10 @@ export default function NewListingNotice({ mapPosition }: { mapPosition: MapPosi
         warn ? "bg-brand-chip text-brand-ink" : "bg-brand-success-bg text-brand-success"
       }`}
     >
-      <p className="font-semibold">Your restaurant has been added.</p>
+      <p className="font-semibold">Your listing has been added — it isn&rsquo;t live yet.</p>
       <p className="mt-1">
-        Next, add your opening hours and photos below so diners know when to visit.
+        Finish the checklist below (opening hours are next), then activate it to make it public.
+        Photos and an About section are optional and can come later.
       </p>
       {mapPosition === "approximate" && (
         <p className="mt-2 border-t border-brand-border pt-2">

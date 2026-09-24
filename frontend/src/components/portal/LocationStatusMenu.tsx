@@ -30,6 +30,7 @@ import {
 } from "@/app/portal/locations/[id]/actions";
 import LocationStatusBadge from "@/components/portal/LocationStatusBadge";
 import { CheckIcon, ChevronDownIcon, ClockIcon, TrashIcon } from "@/components/ui/icons";
+import { activationBlockedReason } from "@/lib/portal/listingSetup";
 import { SELF_SERVICE_STATUSES, statusMenuActions } from "@/lib/portal/locationStatusActions";
 import type { LocationStatus } from "@/types/location";
 
@@ -46,10 +47,14 @@ export default function LocationStatusMenu({
   initialStatus,
   role,
   backHref,
+  setupMissing = [],
 }: {
   locationId: number;
   initialStatus: LocationStatus;
   role: string;
+  /** What's still missing before a listing in setup can go live
+   * (`LocationDetail.setup_missing`); blocks the "Active" choice with a reason. */
+  setupMissing?: string[];
   /** Where to go after a successful permanent removal (page can't render
    * itself once the location is gone) -- same target as the page's back link. */
   backHref: string;
@@ -359,21 +364,31 @@ export default function LocationStatusMenu({
               <p role="presentation" className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-brand-ink-subtle">
                 Visibility
               </p>
-              {SELF_SERVICE_STATUSES.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={status === option.value}
-                  onClick={() => chooseStatus(option.value)}
-                  className={itemBase}
-                >
-                  <span className="flex h-4 w-4 shrink-0 items-center justify-center">
-                    {status === option.value && <CheckIcon className="h-4 w-4 text-brand-accent" />}
-                  </span>
-                  {option.label}
-                </button>
-              ))}
+              {SELF_SERVICE_STATUSES.map((option) => {
+                const blockedReason =
+                  option.value === "active" ? activationBlockedReason(status, setupMissing) : null;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={status === option.value}
+                    disabled={blockedReason !== null}
+                    onClick={() => chooseStatus(option.value)}
+                    className={`${itemBase} ${blockedReason ? "py-2" : ""}`}
+                  >
+                    <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+                      {status === option.value && <CheckIcon className="h-4 w-4 text-brand-accent" />}
+                    </span>
+                    <span className="flex flex-col">
+                      {option.label}
+                      {blockedReason && (
+                        <span className="text-xs text-brand-ink-subtle">{blockedReason}</span>
+                      )}
+                    </span>
+                  </button>
+                );
+              })}
             </>
           )}
 

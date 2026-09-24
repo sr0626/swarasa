@@ -130,6 +130,15 @@ export interface LocationDetail {
   status: LocationStatus;
   /** Backward-compat derived flag — `true` only when `status === "active"`. */
   is_active: boolean;
+  /**
+   * What is still missing before this listing can be activated (moved out of
+   * `coming_soon`): any of "name" | "address" | "phone" | "hours"
+   * (backend/app/services/listing_readiness.py). Empty when it's ready. Kept as
+   * `string[]` so a newer server's extra keys don't break the type; see
+   * `lib/portal/listingSetup.ts`. Display-only — the activation itself is
+   * re-checked server-side (422 `listing_incomplete`).
+   */
+  setup_missing: string[];
   is_open_now: boolean | null;
   hours: LocationHour[];
   cover_photo_url: string | null;

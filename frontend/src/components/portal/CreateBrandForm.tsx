@@ -22,6 +22,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { addRestaurantAction } from "@/app/portal/brands/new/actions";
+import { Field, LocationFields, labelClass } from "@/components/portal/formFields";
 import { fieldErrorsFromZod, type FieldErrors } from "@/lib/validation/fieldErrors";
 import { addRestaurantSchema } from "@/lib/validation/restaurant";
 import type { CuisineCategory, CuisineTag } from "@/types/cuisine";
@@ -41,16 +42,6 @@ const CATEGORY_ORDER: CuisineCategory[] = [
   "signature",
   "dining_time",
 ];
-
-const inputBase =
-  "mt-1.5 min-h-[44px] w-full rounded-brand-control border bg-white px-3 py-2.5 text-base text-brand-ink placeholder:text-brand-placeholder focus:outline-none read-only:bg-brand-chip read-only:text-brand-ink-muted sm:text-sm";
-const labelClass = "text-sm font-semibold text-brand-ink";
-
-function inputClass(hasError: boolean): string {
-  return `${inputBase} ${
-    hasError ? "border-brand-closed focus:border-brand-closed" : "border-brand-border focus:border-brand-accent"
-  }`;
-}
 
 function groupByCategory(tags: CuisineTag[]): Map<CuisineCategory, CuisineTag[]> {
   const groups = new Map<CuisineCategory, CuisineTag[]>();
@@ -85,52 +76,6 @@ const EMPTY_VALUES: FormValues = {
   postal_code: "",
   phone: "",
 };
-
-interface FieldProps {
-  id: keyof FormValues;
-  label: string;
-  hint?: string;
-  optional?: boolean;
-  error?: string;
-  children: (props: {
-    id: string;
-    className: string;
-    "aria-invalid": boolean;
-    "aria-describedby": string | undefined;
-    "aria-required": boolean;
-  }) => React.ReactNode;
-}
-
-function Field({ id, label, hint, optional, error, children }: FieldProps) {
-  const describedBy = [error ? `${id}-error` : null, hint ? `${id}-hint` : null]
-    .filter(Boolean)
-    .join(" ");
-  return (
-    <div>
-      <label htmlFor={id} className={labelClass}>
-        {label}
-        {optional && <span className="ml-1 font-normal text-brand-ink-subtle">(optional)</span>}
-      </label>
-      {children({
-        id,
-        className: inputClass(Boolean(error)),
-        "aria-invalid": Boolean(error),
-        "aria-describedby": describedBy || undefined,
-        "aria-required": !optional,
-      })}
-      {hint && !error && (
-        <p id={`${id}-hint`} className="mt-1 text-xs text-brand-ink-subtle">
-          {hint}
-        </p>
-      )}
-      {error && (
-        <p id={`${id}-error`} role="alert" className="mt-1 text-xs font-medium text-brand-closed">
-          {error}
-        </p>
-      )}
-    </div>
-  );
-}
 
 export default function CreateBrandForm({ cuisineTags }: { cuisineTags: CuisineTag[] }) {
   const router = useRouter();
@@ -351,109 +296,10 @@ export default function CreateBrandForm({ cuisineTags }: { cuisineTags: CuisineT
         <legend className="mb-4 font-display text-lg font-bold text-brand-ink">Location</legend>
         <p className="text-sm text-brand-ink-muted">
           Where diners can find you. We use the address to place your restaurant on the map, so
-          it shows up in nearby searches. You can add more locations later.
+          it shows up in nearby searches. Your listing starts hidden until you add your hours and activate it.
         </p>
 
-        <Field id="address_line1" label="Street address" error={fieldErrors.address_line1}>
-          {(props) => (
-            <input
-              {...props}
-              type="text"
-              maxLength={200}
-              autoComplete="address-line1"
-              value={values.address_line1}
-              onChange={(e) => set("address_line1", e.target.value)}
-              placeholder="123 Main St"
-            />
-          )}
-        </Field>
-
-        <Field
-          id="address_line2"
-          label="Suite / unit"
-          optional
-          error={fieldErrors.address_line2}
-        >
-          {(props) => (
-            <input
-              {...props}
-              type="text"
-              maxLength={200}
-              autoComplete="address-line2"
-              value={values.address_line2}
-              onChange={(e) => set("address_line2", e.target.value)}
-              placeholder="Suite 150"
-            />
-          )}
-        </Field>
-
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-6">
-          <div className="sm:col-span-3">
-            <Field id="city" label="City" error={fieldErrors.city}>
-              {(props) => (
-                <input
-                  {...props}
-                  type="text"
-                  maxLength={100}
-                  autoComplete="address-level2"
-                  value={values.city}
-                  onChange={(e) => set("city", e.target.value)}
-                  placeholder="Irving"
-                />
-              )}
-            </Field>
-          </div>
-          <div className="grid grid-cols-2 gap-4 sm:col-span-3">
-            <Field id="state" label="State" error={fieldErrors.state}>
-              {(props) => (
-                <input
-                  {...props}
-                  type="text"
-                  maxLength={2}
-                  autoComplete="address-level1"
-                  autoCapitalize="characters"
-                  value={values.state}
-                  onChange={(e) => set("state", e.target.value.toUpperCase())}
-                  placeholder="TX"
-                />
-              )}
-            </Field>
-            <Field id="postal_code" label="ZIP code" error={fieldErrors.postal_code}>
-              {(props) => (
-                <input
-                  {...props}
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={10}
-                  autoComplete="postal-code"
-                  value={values.postal_code}
-                  onChange={(e) => set("postal_code", e.target.value)}
-                  placeholder="75063"
-                />
-              )}
-            </Field>
-          </div>
-        </div>
-
-        <Field
-          id="phone"
-          label="Phone"
-          error={fieldErrors.phone}
-          hint="Shown on your listing so diners can call you."
-        >
-          {(props) => (
-            <input
-              {...props}
-              type="tel"
-              inputMode="tel"
-              maxLength={20}
-              autoComplete="tel"
-              value={values.phone}
-              onChange={(e) => set("phone", e.target.value)}
-              placeholder="(972) 555-0142"
-            />
-          )}
-        </Field>
+        <LocationFields values={values} errors={fieldErrors} onChange={set} />
       </fieldset>
 
       {error && (

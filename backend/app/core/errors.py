@@ -38,10 +38,20 @@ class AppError(Exception):
     from the HTTP status).
     """
 
-    def __init__(self, status_code: int, detail: str, code: str) -> None:
+    def __init__(
+        self,
+        status_code: int,
+        detail: str,
+        code: str,
+        extra: dict[str, object] | None = None,
+    ) -> None:
         self.status_code = status_code
         self.detail = detail
         self.code = code
+        # Optional machine-readable extras merged into the error body next to
+        # `detail`/`code` (e.g. `missing` on `listing_incomplete`). Must never
+        # carry internal details — same rule as `detail`.
+        self.extra = extra or {}
         super().__init__(detail)
 
 
@@ -54,7 +64,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def _handle_app_error(request: Request, exc: AppError) -> JSONResponse:
         return JSONResponse(
             status_code=exc.status_code,
-            content={"detail": exc.detail, "code": exc.code},
+            content={**exc.extra, "detail": exc.detail, "code": exc.code},
         )
 
     @app.exception_handler(RequestValidationError)

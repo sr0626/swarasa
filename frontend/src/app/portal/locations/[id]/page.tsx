@@ -25,6 +25,7 @@ import LocationDealsManager from "@/components/portal/LocationDealsManager";
 import LocationMenuManager from "@/components/portal/LocationMenuManager";
 import LocationPhotoManager from "@/components/portal/LocationPhotoManager";
 import LocationManagerAssignment from "@/components/portal/LocationManagerAssignment";
+import ListingSetupBanner from "@/components/portal/ListingSetupBanner";
 import LocationStatusMenu from "@/components/portal/LocationStatusMenu";
 import EditorSectionNav from "@/components/portal/EditorSectionNav";
 import { SECTION_ANCHOR_CLASS } from "@/components/portal/editorSectionAnchor";
@@ -146,8 +147,9 @@ export default async function PortalLocationPage({ params, searchParams }: Locat
   const isOwner = session.role === "owner";
   const isAdmin = session.role === "admin";
   const back = backTarget(session.role);
-  // Only owners create listings; ignore the flag for anyone else.
-  const newListing = isOwner ? parseNewListingParam(searchParams?.new) : null;
+  // Owners and admins create listings (Add restaurant / Add location); ignore
+  // the flag for anyone else.
+  const newListing = isOwner || isAdmin ? parseNewListingParam(searchParams?.new) : null;
 
   // Each panel, keyed by section id. Order and visibility come from
   // editorSectionsForRole (Deals, Hours, Menu, Photos, About, Info, then the
@@ -241,12 +243,21 @@ export default async function PortalLocationPage({ params, searchParams }: Locat
             initialStatus={location.status}
             role={session.role}
             backHref={back.href}
+            setupMissing={location.setup_missing}
           />
         </div>
         <p className="mt-1 text-sm text-brand-ink-muted">
           {location.address_line1}, {location.city}, {location.state} {location.postal_code}
         </p>
         {newListing && <NewListingNotice mapPosition={newListing} />}
+        {/* A listing in setup (coming_soon, right after Add restaurant/Add
+            location) says it's not live and shows the checklist + Activate. */}
+        <ListingSetupBanner
+          locationId={location.id}
+          status={location.status}
+          setupMissing={location.setup_missing}
+          role={session.role}
+        />
 
         <div className="mt-6 flex flex-col gap-6">
           {sections.map((section) => (

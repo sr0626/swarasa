@@ -13,22 +13,25 @@
 //      it cannot geocode. Best-effort: never blocks creation.
 //   3. POST /locations    (the first location — address, phone, timezone,
 //      and lat/lng when geocoding succeeded; the backend syncs the PostGIS
-//      `geom` column search queries from them on create).
+//      `geom` column search queries from them on create). Steps 2-3 live in
+//      lib/portal/createLocationStep.ts, shared with the "Add location" flow.
+//
+// The new listing starts hidden (`coming_soon`, set by the backend) until the
+// owner adds their hours and activates it from the location editor.
 //
 // Partial failure: if step 1 succeeds and step 3 fails, the brand exists
 // but has no location. The result carries `brandId` so the form can retry
 // ONLY the location step (`existingBrandId`) instead of creating a
 // duplicate brand.
-import { ApiError } from "@/lib/api/client";
-import { createLocation } from "@/lib/api/locations";
 import { createRestaurant } from "@/lib/api/restaurants";
 import { getServerSession } from "@/lib/auth/session";
-import { geocodeAddress } from "@/lib/geocode";
-import { timezoneForState } from "@/lib/timezone";
+import {
+  apiMessageFor as messageFor,
+  geocodeAndCreateLocation,
+  type MapPosition,
+} from "@/lib/portal/createLocationStep";
 import { fieldErrorsFromZod, type FieldErrors } from "@/lib/validation/fieldErrors";
 import { addRestaurantSchema } from "@/lib/validation/restaurant";
-
-export type MapPosition = "exact" | "approximate" | "none";
 
 export type AddRestaurantResult =
   | {
@@ -48,10 +51,6 @@ export type AddRestaurantResult =
       /** Set when the brand was created (or already existed) but the location step failed. */
       brandId?: number;
     };
-
-function messageFor(error: unknown, fallback: string): string {
-  return error instanceof ApiError ? error.message : fallback;
-}
 
 export async function addRestaurantAction(
   input: unknown,
@@ -104,46 +103,24 @@ export async function addRestaurantAction(
     }
   }
 
-  const coordinates = await geocodeAddress({
-    address_line1: values.address_line1,
-    city: values.city,
-    state: values.state,
-    postal_code: values.postal_code,
-  });
-
-  try {
-    const location = await createLocation(
-      {
-        brand_id: brandId,
-        address_line1: values.address_line1,
-        address_line2: values.address_line2,
-        city: values.city,
-        state: values.state,
-        postal_code: values.postal_code,
-        country: "US",
-        phone: values.phone,
-        timezone: timezoneForState(values.state),
-        // Never fabricated: null/omitted when geocoding found nothing, and
-        // the listing then stays out of geo search until an admin sets it.
-        latitude: coordinates?.latitude ?? null,
-        longitude: coordinates?.longitude ?? null,
-      },
-      session.accessToken
-    );
-    const mapPosition: MapPosition = !coordinates
-      ? "none"
-      : coordinates.precision === "postal_code"
-        ? "approximate"
-        : "exact";
-    return { ok: true, locationId: location.id, mapPosition };
-  } catch (error) {
-    return {
-      ok: false,
-      brandId,
-      error: `Your restaurant was created, but we couldn't save its address. ${messageFor(
-        error,
-        "Please try again."
-      )}`,
-    };
+  const created = await geocodeAndCreateLocation(
+    brandId,
+    {
+      address_line1: values.address_line1,
+      address_line2: values.address_line2,
+      city: values.city,
+      state: values.state,
+      postal_code: values.postal_code,
+      phone: values.phone,
+    },
+    session.accessToken
+  );
+  if (created.ok) {
+    return { ok: true, locationId: created.locationId, mapPosition: created.mapPosition };
   }
+  return {
+    ok: false,
+    brandId,
+    error: `Your restaurant was created, but we couldn't save its address. ${created.error}`,
+  };
 }

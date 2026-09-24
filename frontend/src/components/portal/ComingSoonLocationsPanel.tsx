@@ -33,7 +33,7 @@ export default function ComingSoonLocationsPanel({ brands }: { brands: BrandWith
         Coming soon
       </h2>
       <p className="mt-1 text-sm text-brand-ink-muted">
-        These locations are hidden from the public until you switch them to active.
+        These locations are hidden from the public until you finish setting them up and activate them.
       </p>
       <ul className="mt-3 flex flex-col gap-2">
         {comingSoon.map(({ brand, location }) => (

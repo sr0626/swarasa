@@ -1,9 +1,12 @@
 // Client-side validation mirroring PATCH /auth/me (docs/API_CONTRACTS.md "Auth").
 import { z } from "zod";
+import { requiredPhoneSchema } from "./phone";
 
 export const updateAuthMeSchema = z.object({
   full_name: z.string().trim().min(1, "Name is required").max(200),
-  phone: z.string().trim().regex(/^\+?[1-9]\d{7,14}$/, "Enter a valid phone number"),
+  // The shared US phone rule (lib/phone.ts): normalised to +1XXXXXXXXXX. The
+  // old `^\+?[1-9]\d{7,14}$` accepted any 8-15 digit string, incl. 11 digits.
+  phone: requiredPhoneSchema,
 });
 
 export type UpdateAuthMeFormValues = z.infer<typeof updateAuthMeSchema>;

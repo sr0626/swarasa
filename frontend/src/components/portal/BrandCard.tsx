@@ -11,7 +11,15 @@
 // Server Component — no interactivity here, just links into the location
 // editor (`/portal/locations/{id}`) and the brand's public page.
 import Link from "next/link";
-import { EyeIcon, HeartIcon, LocationPinIcon, PencilIcon, StoreIcon, TagIcon } from "@/components/ui/icons";
+import {
+  EyeIcon,
+  HeartIcon,
+  LocationPinIcon,
+  PencilIcon,
+  PlusIcon,
+  StoreIcon,
+  TagIcon,
+} from "@/components/ui/icons";
 import { secondaryLinkClass } from "@/components/account/accountShared";
 import LocationStatusChip from "@/components/console/LocationStatusChip";
 import LocationTierBadge from "@/components/portal/LocationTierBadge";
@@ -71,6 +79,16 @@ export default function BrandCard({
               Unclaimed
             </span>
           )}
+          {/* Another branch of THIS restaurant — not "Add a restaurant", which
+              always creates a new, unrelated brand. */}
+          <Link
+            href={`/portal/locations/new?brand=${brand.id}`}
+            aria-label={`Add a location to ${brand.name}`}
+            className={secondaryLinkClass}
+          >
+            <PlusIcon className="h-4 w-4" />
+            Add location
+          </Link>
           <Link
             href={brandHref(brand.slug)}
             aria-label={`View public page for ${brand.name}`}
