@@ -560,7 +560,8 @@ Response:
   "cover_photo_thumbnail_url": null,
   "gallery_photos": [],
   "has_deal_today": true,
-  "deals_today": null
+  "deals_today": null,
+  "upcoming_deals": null
 }
 ```
 Notes:
@@ -629,6 +630,27 @@ location (see `frontend/src/lib/api/locations.ts` `getLocationById`'s
     CLAUDE.md's "is_paid=false locations: ... deals ... are NOT returned
     by API" line. See `docs/DECISIONS.md`'s dedicated flagged entry for
     the full reasoning; not silently resolved either way.
+  - `upcoming_deals` (added 2026-09-23, owner feedback — "show other
+    active deals to the registered user") — the location's OTHER active
+    deals: `is_active`, NOT applicable today, and NOT expired. That is
+    recurring deals on other weekdays plus deals whose `start_at` is still
+    in the future; a deal that will never occur again (e.g. Friday-only,
+    `end_at` on Thursday) or whose `end_at` has passed is excluded. Exactly
+    the same content gate as `deals_today`: **`null`** (never `[]`, never a
+    count, no titles anywhere in the body) for anonymous/public callers, a
+    different owner, or an unassigned manager; an array (possibly `[]`) for
+    a signed-in `registered_user`, `admin`, the owning owner or an
+    actively-assigned manager. `has_deal_today` and the sign-in CTA
+    behaviour are unchanged. Each entry:
+    `{ id, deal_type, title, description, applicable_days, start_at,
+    end_at, next_occurrence }` — `applicable_days` `null` = every day
+    (0=Monday..6=Sunday otherwise); `end_at` `null` = ongoing;
+    `next_occurrence` is a `YYYY-MM-DD` date in the **location's**
+    timezone, the next day the deal is offered. **Sorted** by
+    `next_occurrence` ascending, then title (case-insensitive), then `id`
+    ("what can I get next"). Computed from the same single deal query as
+    `deals_today` (no extra round trip, no N+1). No `is_active` /
+    `location_id` on entries (not a management view).
 
 ### POST /locations
 
@@ -1035,7 +1057,11 @@ list of int, 0=Monday..6=Sunday (matches `restaurant_hours.day_of_week`
 exactly) — `null`/omitted means every day; an empty list is rejected
 (422). `start_at`/`end_at` are ISO 8601 timestamps (not dates) —
 `null`/omitted `start_at` means active immediately, `null`/omitted
-`end_at` means runs indefinitely until deactivated.
+`end_at` means runs indefinitely until deactivated — **for legacy rows
+only**: as of 2026-09-23 (owner feedback) new deals can no longer be
+created without dates (see "Required dates" under POST below). Existing
+rows with NULL dates keep working and displaying unchanged (no
+migration/backfill).
 
 ### GET /locations/{id}/deals
 
@@ -1073,10 +1099,18 @@ are small enough that pagination would be premature (same reasoning as
 
 Auth: same as `GET /locations/{id}/deals` above.
 
-Body: `{ deal_type?, title, description?, applicable_days?, start_at?,
-end_at?, is_active? }` — `deal_type` defaults to `"deal"`, `is_active`
-defaults to `true`. `title` required (1-255 chars). `start_at` must be
-before `end_at` when both are present (422 otherwise).
+Body: `{ deal_type?, title, description?, applicable_days?, start_at,
+end_at?, ongoing?, is_active? }` — `deal_type` defaults to `"deal"`,
+`is_active` defaults to `true`. `title` required (1-255 chars).
+
+**Required dates (added 2026-09-23):** `start_at` is required; `end_at` is
+required UNLESS the request explicitly sends `ongoing: true` (an "every
+Tuesday, until I stop it" deal is `applicable_days: [1]`, a `start_at` and
+`ongoing: true`). `ongoing: true` together with an `end_at` is rejected.
+`start_at` must be before `end_at` when both are present. Every violation is
+a `422`. `ongoing` is a request-only flag — not persisted and not returned;
+an ongoing deal is simply `end_at: null`. Timezone-less datetimes are read
+as UTC.
 
 Response: `201`, full `DealOut` (same shape as one entry in `GET
 /locations/{id}/deals`'s `results` array).
@@ -1093,6 +1127,14 @@ untouched; an explicit `null` on a nullable field (`description`,
 on `deal_type`/`title`/`is_active` (non-nullable) is a `400`. Used to
 toggle `is_active` (owner/manager "pause" control) as well as edit
 content.
+
+Date rules on PATCH (2026-09-23) apply only to the date fields actually
+sent, so a legacy deal with NULL dates can still be toggled or retitled:
+sending `start_at: null` is a `422` (a deal can't lose its start date);
+sending `end_at: null` is a `422` unless `ongoing: true` accompanies it;
+`ongoing: true` alone clears `end_at`; `ongoing: true` with a non-null
+`end_at` is a `422`. The merged stored+sent `start_at`/`end_at` must still
+satisfy start < end (`400`).
 
 Response: `200`, full `DealOut`.
 
@@ -1120,9 +1162,14 @@ How the frontend consumes the endpoints above (typed client
   (`/portal/locations/{id}`, `#deals`; `/portal/locations/{id}/deals`
   redirects there). Same access rule as hours/photos: owner, assigned
   manager, admin. Lists every deal (active or not) from `GET
-  /locations/{id}/deals`; create/edit send the full form each save (blank
-  dates clear `start_at`/`end_at`; no day selected is sent as
-  `applicable_days: null`, never `[]`); activate/deactivate is `PATCH
+  /locations/{id}/deals`; create/edit send the full form each save (start
+  date required; end date required unless "Ongoing (no end date)" is
+  ticked, which sends `end_at: null` + `ongoing: true`; inline field errors;
+  a legacy deal with no start date opens with the start pre-filled from its
+  created date and a short note; no day selected is sent as
+  `applicable_days: null`, never `[]`). Each deal card shows days
+  ("Tuesdays", "Mon–Fri", "Every day") and the date range or "Ongoing".
+  Activate/deactivate is `PATCH
   {is_active}`; delete is two-step confirm then `DELETE`. No `is_paid`
   check anywhere (deals are free-tier).
 - **Search** — Filters dropdown "Deals today" toggle, URL param
@@ -1134,7 +1181,10 @@ How the frontend consumes the endpoints above (typed client
   viewer's access token when signed in, so `deals_today` reflects their
   content access. `deals_today` array present -> full deal cards
   (title/description); `null` with `has_deal_today: true` -> the
-  content-free badge only.
+  content-free badge only. A separate "More deals & specials" section
+  (`RestaurantUpcomingDeals`) lists `upcoming_deals` (title, Deal/Special
+  badge, description, days, date range or "Ongoing", next date) and renders
+  nothing when the field is `null`/empty.
 
 ---
 

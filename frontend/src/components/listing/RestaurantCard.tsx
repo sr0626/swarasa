@@ -181,10 +181,14 @@ export default function RestaurantCard({
             openTime={nearest_location.open_time}
             closeTime={nearest_location.close_time}
           />
-          {nearest_location.has_deal_today && <DealBadge />}
-          {nearest_location.has_deal_today && isSignedOut && (
-            <DealSignInLink currentPath={currentPath} />
-          )}
+          {/* Signed-out: the badge itself is the sign-in link (no separate
+              text link). Signed-in: the plain badge, unchanged. */}
+          {nearest_location.has_deal_today &&
+            (isSignedOut ? (
+              <DealSignInLink currentPath={currentPath} variant="badge" />
+            ) : (
+              <DealBadge />
+            ))}
           {!item.is_claimed && (
             <span className="ml-auto text-xs font-medium text-brand-ink-subtle">
               Unclaimed

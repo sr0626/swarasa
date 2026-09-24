@@ -63,23 +63,63 @@ const dealFormShape = z.object({
   applicable_days: applicableDaysSchema,
   start_at: optionalDateTimeSchema,
   end_at: optionalDateTimeSchema,
+  // Explicit "no end date" acknowledgement (owner feedback 2026-09-23): an
+  // empty end date is only accepted when this is true, so it can never be
+  // left blank by accident. Mirrors `ongoing` in backend/app/schemas/deal.py.
+  ongoing: z.boolean().optional(),
   is_active: z.boolean(),
 });
 
-function checkDateRange(
-  value: { start_at?: string | null; end_at?: string | null },
-  ctx: z.RefinementCtx
-) {
+type DateFields = { start_at?: string | null; end_at?: string | null; ongoing?: boolean };
+
+function checkDateRange(value: DateFields, ctx: z.RefinementCtx) {
   if (value.start_at && value.end_at && new Date(value.start_at) >= new Date(value.end_at)) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "Start date/time must be before end date/time",
+      message: "End date/time must be after the start date/time",
       path: ["end_at"],
     });
   }
 }
 
-export const dealFormSchema = dealFormShape.superRefine(checkDateRange);
+export const START_REQUIRED_MESSAGE = "Choose a start date";
+export const END_REQUIRED_MESSAGE = "Choose an end date, or tick “Ongoing (no end date)”";
+
+/** CREATE / full form save: a start date is required; an end date is
+ * required unless `ongoing` is ticked. Same rule the backend enforces (the
+ * UI is a convenience, never the guarantee). */
+function checkRequiredDates(value: DateFields, ctx: z.RefinementCtx) {
+  if (!value.start_at) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: START_REQUIRED_MESSAGE, path: ["start_at"] });
+  }
+  if (!value.ongoing && !value.end_at) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: END_REQUIRED_MESSAGE, path: ["end_at"] });
+  }
+}
+
+/** PATCH: only the date fields actually present are checked, so a bare
+ * `{ is_active }` toggle (and any edit that doesn't send dates) works on a
+ * legacy deal whose dates are still empty. If `start_at` is sent it must be
+ * a real date; if `end_at` is sent empty it must come with `ongoing: true`. */
+function checkTouchedDates(value: DateFields, ctx: z.RefinementCtx) {
+  if ("start_at" in value && !value.start_at) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: START_REQUIRED_MESSAGE, path: ["start_at"] });
+  }
+  if ("end_at" in value && !value.end_at && !value.ongoing) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: END_REQUIRED_MESSAGE, path: ["end_at"] });
+  }
+}
+
+/** When "Ongoing" is ticked the end date is discarded (the backend rejects
+ * `ongoing: true` together with an `end_at`). */
+function applyOngoing<T extends { end_at?: string | null; ongoing?: boolean }>(value: T): T {
+  return value.ongoing ? { ...value, end_at: null } : value;
+}
+
+export const dealFormSchema = dealFormShape
+  .superRefine(checkRequiredDates)
+  .superRefine(checkDateRange)
+  .transform(applyOngoing);
 
 export type DealFormValues = z.infer<typeof dealFormSchema>;
 
@@ -89,6 +129,10 @@ export type DealFormValues = z.infer<typeof dealFormSchema>;
 // save), so this is really "same shape, optional" rather than a true
 // partial-update UI — kept as `.partial()` anyway so the type matches
 // `UpdateDealInput` exactly.
-export const updateDealFormSchema = dealFormShape.partial().superRefine(checkDateRange);
+export const updateDealFormSchema = dealFormShape
+  .partial()
+  .superRefine(checkTouchedDates)
+  .superRefine(checkDateRange)
+  .transform(applyOngoing);
 
 export type UpdateDealFormValues = z.infer<typeof updateDealFormSchema>;

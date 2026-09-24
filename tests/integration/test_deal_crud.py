@@ -24,6 +24,11 @@ from app.models.deal import Deal
 from factories import create_brand, create_deal, create_location, create_location_manager, create_owner
 
 
+# Every create needs a start date and either an end date or `ongoing: true`
+# (docs/API_CONTRACTS.md "Deals" — required-dates rule, 2026-09-23).
+_DATES = {"start_at": "2027-01-01T00:00:00Z", "end_at": "2027-02-01T00:00:00Z"}
+
+
 @pytest.mark.asyncio
 async def test_owner_can_create_deal_on_own_location(client, db_session, as_user):
     owner = await create_owner(db_session)
@@ -34,7 +39,7 @@ async def test_owner_can_create_deal_on_own_location(client, db_session, as_user
     as_user("owner", sub=owner.cognito_sub, email=owner.email)
     response = await client.post(
         f"/locations/{location.id}/deals",
-        json={"title": "Buy 1 Get 1", "description": "Every Tuesday"},
+        json={**_DATES, "title": "Buy 1 Get 1", "description": "Every Tuesday"},
     )
     assert response.status_code == 201, response.text
     body = response.json()
@@ -55,7 +60,7 @@ async def test_deal_creation_not_gated_on_is_paid(client, db_session, as_user):
 
     as_user("owner", sub=owner.cognito_sub, email=owner.email)
     response = await client.post(
-        f"/locations/{free_location.id}/deals", json={"title": "Free Tier Deal"}
+        f"/locations/{free_location.id}/deals", json={**_DATES, "title": "Free Tier Deal"}
     )
     assert response.status_code == 201, response.text
 
@@ -70,7 +75,7 @@ async def test_assigned_manager_can_create_deal(client, db_session, as_user):
     await db_session.commit()
 
     as_user("manager", sub=manager_sub)
-    response = await client.post(f"/locations/{location.id}/deals", json={"title": "Manager's Deal"})
+    response = await client.post(f"/locations/{location.id}/deals", json={**_DATES, "title": "Manager's Deal"})
     assert response.status_code == 201, response.text
 
 
@@ -86,7 +91,7 @@ async def test_unassigned_manager_cannot_create_deal(client, db_session, as_user
     await db_session.commit()
 
     as_user("manager", sub=manager_sub)
-    response = await client.post(f"/locations/{location.id}/deals", json={"title": "Not Allowed"})
+    response = await client.post(f"/locations/{location.id}/deals", json={**_DATES, "title": "Not Allowed"})
     assert response.status_code == 403, response.text
 
 
@@ -99,7 +104,7 @@ async def test_different_owner_cannot_create_deal(client, db_session, as_user):
     await db_session.commit()
 
     as_user("owner", sub=owner_b.cognito_sub, email=owner_b.email)
-    response = await client.post(f"/locations/{location.id}/deals", json={"title": "Not Yours"})
+    response = await client.post(f"/locations/{location.id}/deals", json={**_DATES, "title": "Not Yours"})
     assert response.status_code == 403, response.text
 
 
@@ -110,7 +115,7 @@ async def test_anonymous_cannot_create_deal(client, db_session, as_anonymous):
     location = await create_location(db_session, brand_id=brand.id)
     await db_session.commit()
 
-    response = await client.post(f"/locations/{location.id}/deals", json={"title": "Anonymous"})
+    response = await client.post(f"/locations/{location.id}/deals", json={**_DATES, "title": "Anonymous"})
     assert response.status_code == 401, response.text
 
 
@@ -125,7 +130,7 @@ async def test_registered_user_cannot_create_deal(client, db_session, as_user):
     await db_session.commit()
 
     as_user("registered_user")
-    response = await client.post(f"/locations/{location.id}/deals", json={"title": "Nope"})
+    response = await client.post(f"/locations/{location.id}/deals", json={**_DATES, "title": "Nope"})
     assert response.status_code == 403, response.text
 
 

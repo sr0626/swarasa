@@ -25,11 +25,18 @@ import {
   updateLocationDealAction,
 } from "@/app/portal/locations/[id]/actions";
 import { PencilIcon, PlusIcon, TagIcon, TrashIcon } from "@/components/ui/icons";
-import { DEAL_DESCRIPTION_MAX_LENGTH, DEAL_TITLE_MAX_LENGTH } from "@/lib/validation/deal";
+import { formatDealDateRange, formatDealDays } from "@/lib/deals/format";
+import {
+  DEAL_DESCRIPTION_MAX_LENGTH,
+  DEAL_TITLE_MAX_LENGTH,
+  dealFormSchema,
+} from "@/lib/validation/deal";
+import { fieldErrorsFromZod, type FieldErrors } from "@/lib/validation/fieldErrors";
 import type { Deal, DealType } from "@/types/deal";
 
 const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const DAY_ABBREVIATIONS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const errorTextClass = "mt-1 text-xs font-medium text-brand-closed";
 
 const inputClass =
   "mt-1.5 w-full rounded-brand-control border border-brand-border bg-white px-3 py-2.5 text-sm text-brand-ink placeholder:text-brand-placeholder focus:border-brand-accent focus:outline-none";
@@ -43,6 +50,8 @@ interface DealFormState {
   /** `<input type="datetime-local">` value ("YYYY-MM-DDTHH:MM") or "". */
   start_at: string;
   end_at: string;
+  /** Explicit "no end date" — required to leave `end_at` empty. */
+  ongoing: boolean;
   is_active: boolean;
 }
 
@@ -53,6 +62,7 @@ const EMPTY_FORM: DealFormState = {
   applicable_days: [],
   start_at: "",
   end_at: "",
+  ongoing: false,
   is_active: true,
 };
 
@@ -69,41 +79,29 @@ function toDateTimeInputValue(iso: string | null): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+/** True for a deal created before start dates were required (start_at NULL). */
+function isLegacyUndated(deal: Deal): boolean {
+  return deal.start_at === null;
+}
+
 function formFromDeal(deal: Deal): DealFormState {
+  // Legacy handling (no migration/backfill): a deal created before start
+  // dates were required has start_at NULL. Editing it must not dead-end on
+  // a blank required field, so the start box is pre-filled with the date the
+  // deal was created (it has effectively been running since then) and the
+  // form shows a short note. A NULL end_at is shown as "Ongoing" ticked,
+  // which is exactly what it already meant.
+  const startIso = deal.start_at ?? deal.created_at;
   return {
     deal_type: deal.deal_type,
     title: deal.title,
     description: deal.description ?? "",
     applicable_days: deal.applicable_days ? [...deal.applicable_days] : [],
-    start_at: toDateTimeInputValue(deal.start_at),
+    start_at: toDateTimeInputValue(startIso),
     end_at: toDateTimeInputValue(deal.end_at),
+    ongoing: deal.end_at === null,
     is_active: deal.is_active,
   };
-}
-
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-function describeDays(days: number[] | null): string {
-  if (!days || days.length === 0) return "Every day";
-  if (days.length === 7) return "Every day";
-  return days.map((d) => DAY_ABBREVIATIONS[d]).join(", ");
-}
-
-function describeWindow(deal: Deal): string | null {
-  if (deal.start_at && deal.end_at) {
-    return `${formatDateTime(deal.start_at)} – ${formatDateTime(deal.end_at)}`;
-  }
-  if (deal.start_at) return `From ${formatDateTime(deal.start_at)}`;
-  if (deal.end_at) return `Until ${formatDateTime(deal.end_at)}`;
-  return null;
 }
 
 export default function LocationDealsManager({
@@ -119,6 +117,11 @@ export default function LocationDealsManager({
   const [form, setForm] = useState<DealFormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  // Inline per-field messages from the client-side check (start/end dates,
+  // title). The server re-validates everything regardless.
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  // Shown when editing a legacy deal whose start date was pre-filled.
+  const [legacyStartNote, setLegacyStartNote] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
   const [pendingId, setPendingId] = useState<number | null>(null);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<number | null>(null);
@@ -126,12 +129,16 @@ export default function LocationDealsManager({
   function openCreate() {
     setForm(EMPTY_FORM);
     setFormError(null);
+    setFieldErrors({});
+    setLegacyStartNote(false);
     setEditing("new");
   }
 
   function openEdit(deal: Deal) {
     setForm(formFromDeal(deal));
     setFormError(null);
+    setFieldErrors({});
+    setLegacyStartNote(isLegacyUndated(deal));
     setListError(null);
     setConfirmingDeleteId(null);
     setEditing(deal.id);
@@ -140,10 +147,23 @@ export default function LocationDealsManager({
   function closeForm() {
     setEditing(null);
     setFormError(null);
+    setFieldErrors({});
+    setLegacyStartNote(false);
   }
 
   function patchForm(patch: Partial<DealFormState>) {
     setForm((prev) => ({ ...prev, ...patch }));
+    // Editing a field clears its own stale inline error.
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      for (const key of Object.keys(patch)) delete next[key];
+      // The two date boxes validate together (end vs start, Ongoing vs end).
+      if ("start_at" in patch || "end_at" in patch || "ongoing" in patch) {
+        delete next.start_at;
+        delete next.end_at;
+      }
+      return next;
+    });
   }
 
   function toggleDay(day: number) {
@@ -158,11 +178,26 @@ export default function LocationDealsManager({
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setFormError(null);
+    // Same rules the server enforces (start required; end required unless
+    // "Ongoing"; end after start) — checked here first so the owner gets
+    // inline messages next to the fields instead of a generic error.
+    const check = dealFormSchema.safeParse(form);
+    if (!check.success) {
+      const errors = fieldErrorsFromZod(check.error);
+      setFieldErrors(errors);
+      const firstKey = ["title", "start_at", "end_at"].find((k) => errors[k]);
+      if (firstKey) {
+        const id = { title: "deal-title", start_at: "deal-start", end_at: "deal-end" }[firstKey];
+        document.getElementById(id as string)?.focus();
+      }
+      return;
+    }
+    setFieldErrors({});
     setSaving(true);
     try {
       // Same payload for create and edit: the form always manages every
-      // field, so an edit is a full replacement (an empty date box clears
-      // start_at/end_at rather than leaving a stale value behind).
+      // field, so an edit is a full replacement. Dates are already known to
+      // be valid here (start set; end set or Ongoing ticked).
       const result =
         editing === "new"
           ? await createLocationDealAction(locationId, form)
@@ -257,6 +292,7 @@ export default function LocationDealsManager({
       {editing !== null && (
         <form
           onSubmit={handleSubmit}
+          noValidate
           className="mt-4 flex flex-col gap-4 rounded-brand-control border border-brand-border bg-brand-bg p-4"
         >
           <h3 className="font-display text-base font-semibold text-brand-ink">
@@ -274,7 +310,7 @@ export default function LocationDealsManager({
               className={`${inputClass} min-h-[44px]`}
             >
               <option value="deal">Deal — time-limited offer</option>
-              <option value="special">Special — ongoing, until you remove it</option>
+              <option value="special">Special — a standing offer (e.g. weekly special)</option>
             </select>
           </div>
 
@@ -286,12 +322,20 @@ export default function LocationDealsManager({
               id="deal-title"
               type="text"
               required
+              aria-required="true"
+              aria-invalid={fieldErrors.title ? true : undefined}
+              aria-describedby={fieldErrors.title ? "deal-title-error" : undefined}
               maxLength={DEAL_TITLE_MAX_LENGTH}
               value={form.title}
               onChange={(e) => patchForm({ title: e.target.value })}
               placeholder="e.g. Lunch buffet $12.99"
               className={inputClass}
             />
+            {fieldErrors.title && (
+              <p id="deal-title-error" role="alert" className={errorTextClass}>
+                {fieldErrors.title}
+              </p>
+            )}
           </div>
 
           <div>
@@ -339,34 +383,76 @@ export default function LocationDealsManager({
             </div>
           </fieldset>
 
+          {legacyStartNote && (
+            <p className="rounded-brand-control bg-brand-chip px-3 py-2.5 text-xs text-brand-ink-muted">
+              This deal was created before start dates were required, so we filled in the day it
+              was created. Change it if that&apos;s not right, then save.
+            </p>
+          )}
+
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label htmlFor="deal-start" className={labelClass}>
-                Starts <span className="font-normal text-brand-ink-subtle">(optional)</span>
+                Starts <span className="font-normal text-brand-ink-subtle">(required)</span>
               </label>
               <input
                 id="deal-start"
                 type="datetime-local"
+                required
+                aria-required="true"
+                aria-invalid={fieldErrors.start_at ? true : undefined}
+                aria-describedby={fieldErrors.start_at ? "deal-start-error" : undefined}
                 value={form.start_at}
                 onChange={(e) => patchForm({ start_at: e.target.value })}
                 className={`${inputClass} min-h-[44px]`}
               />
+              {fieldErrors.start_at && (
+                <p id="deal-start-error" role="alert" className={errorTextClass}>
+                  {fieldErrors.start_at}
+                </p>
+              )}
             </div>
             <div>
               <label htmlFor="deal-end" className={labelClass}>
-                Ends <span className="font-normal text-brand-ink-subtle">(optional)</span>
+                Ends{" "}
+                <span className="font-normal text-brand-ink-subtle">
+                  {form.ongoing ? "(none — ongoing)" : "(required)"}
+                </span>
               </label>
               <input
                 id="deal-end"
                 type="datetime-local"
-                value={form.end_at}
+                required={!form.ongoing}
+                aria-required={!form.ongoing}
+                disabled={form.ongoing}
+                aria-invalid={fieldErrors.end_at ? true : undefined}
+                aria-describedby={fieldErrors.end_at ? "deal-end-error" : undefined}
+                value={form.ongoing ? "" : form.end_at}
                 onChange={(e) => patchForm({ end_at: e.target.value })}
-                className={`${inputClass} min-h-[44px]`}
+                className={`${inputClass} min-h-[44px] disabled:cursor-not-allowed disabled:bg-brand-chip disabled:opacity-60`}
               />
+              {fieldErrors.end_at && (
+                <p id="deal-end-error" role="alert" className={errorTextClass}>
+                  {fieldErrors.end_at}
+                </p>
+              )}
             </div>
           </div>
+
+          <label className="flex min-h-[44px] items-center gap-2 text-sm text-brand-ink">
+            <input
+              type="checkbox"
+              checked={form.ongoing}
+              onChange={(e) =>
+                patchForm(e.target.checked ? { ongoing: true, end_at: "" } : { ongoing: false })
+              }
+              className="h-4 w-4 accent-brand-accent"
+            />
+            Ongoing (no end date) — runs until you turn it off
+          </label>
           <p className="-mt-2 text-xs text-brand-ink-subtle">
-            Times use this device&apos;s timezone. Leave both blank to run until you turn it off.
+            Times use this device&apos;s timezone. For something like &ldquo;every Tuesday&rdquo;,
+            pick the Tuesday chip above, a start date, and tick Ongoing.
           </p>
 
           <label className="flex min-h-[44px] items-center gap-2 text-sm text-brand-ink">
@@ -413,7 +499,6 @@ export default function LocationDealsManager({
       ) : (
         <ul className="mt-4 divide-y divide-brand-border rounded-brand-control border border-brand-border empty:hidden">
           {deals.map((deal) => {
-            const windowLabel = describeWindow(deal);
             const busy = pendingId === deal.id;
             return (
               <li key={deal.id} className="flex flex-col gap-3 p-4">
@@ -441,8 +526,8 @@ export default function LocationDealsManager({
                     </p>
                   )}
                   <p className="mt-1 text-xs text-brand-ink-subtle">
-                    {describeDays(deal.applicable_days)}
-                    {windowLabel ? ` · ${windowLabel}` : ""}
+                    {formatDealDays(deal.applicable_days)} ·{" "}
+                    {formatDealDateRange(deal.start_at, deal.end_at)}
                   </p>
                 </div>
 

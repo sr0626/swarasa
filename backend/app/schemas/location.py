@@ -9,7 +9,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.schemas.deal import DealPublicOut
+from app.schemas.deal import DealPublicOut, DealUpcomingOut
 
 ABOUT_MAX_LENGTH = 1000
 SPECIALTIES_MAX_ITEMS = 8
@@ -145,6 +145,12 @@ class LocationOut(BaseModel):
     # location's own owner/assigned manager. See
     # app/services/deal_service.caller_may_view_deal_content_for_location.
     deals_today: list[DealPublicOut] | None
+    # Added 2026-09-23 (owner feedback): the location's OTHER active deals —
+    # not applicable today (other weekdays / future-dated), not expired —
+    # sorted by next occurrence. Exactly the same content gate as
+    # `deals_today`: `null` (never `[]`, never a count) unless the caller may
+    # view deal content; an array (possibly empty) when they may.
+    upcoming_deals: list[DealUpcomingOut] | None = None
 
 
 class LocationCreate(BaseModel):
