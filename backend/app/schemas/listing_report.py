@@ -14,6 +14,7 @@ ReportCategory = Literal[
     "phone_incorrect",
     "price_incorrect",
     "menu_incorrect",
+    "deal_incorrect",
     "permanently_closed",
     "other",
 ]
@@ -35,6 +36,9 @@ class ReportCreate(BaseModel):
     location_id: int | None = None
     category: ReportCategory
     details: str = Field(min_length=1, max_length=DETAILS_MAX_LENGTH)
+    # Anonymous callers only. For a signed-in caller the service IGNORES
+    # this and uses the verified token's email instead (see
+    # listing_report_service.create_report), so it can't be spoofed.
     reporter_email: str | None = Field(default=None, max_length=EMAIL_MAX_LENGTH)
     # Honeypot — hidden from humans in the UI; a bot that fills every input
     # populates it. Any non-empty value => 201 fake success, nothing stored.

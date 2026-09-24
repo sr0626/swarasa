@@ -28,6 +28,10 @@ interface ReportProblemFormProps {
   /** Used for the "back to listing" link. */
   slug: string;
   locations: LocationSummary[];
+  /** Set (server-side, from the session cookie) when the visitor is signed
+   * in: the email input is replaced by a read-only note and the backend
+   * attributes the report to the verified token's email. */
+  signedInEmail?: string | null;
 }
 
 export default function ReportProblemForm({
@@ -35,6 +39,7 @@ export default function ReportProblemForm({
   brandName,
   slug,
   locations,
+  signedInEmail = null,
 }: ReportProblemFormProps) {
   const [category, setCategory] = useState<ReportCategory | "">("");
   const [details, setDetails] = useState("");
@@ -61,7 +66,8 @@ export default function ReportProblemForm({
       location_id: locationId === "" ? undefined : locationId,
       category,
       details,
-      reporter_email: email,
+      // Signed in: never send an email — the backend uses the token's.
+      reporter_email: signedInEmail ? "" : email,
       website,
     };
 
@@ -190,25 +196,32 @@ export default function ReportProblemForm({
         </p>
       </div>
 
-      <div className="mt-4">
-        <label htmlFor="report_email" className="text-sm font-semibold text-brand-ink">
-          Your email <span className="font-normal text-brand-ink-subtle">(optional)</span>
-        </label>
-        <input
-          id="report_email"
-          type="email"
-          inputMode="email"
-          autoComplete="email"
-          maxLength={254}
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="you@example.com"
-          className="mt-2 w-full rounded-brand-control border border-brand-border bg-white px-3 py-2.5 text-sm text-brand-ink placeholder:text-brand-placeholder focus:border-brand-accent focus:outline-none"
-        />
-        <p className="mt-1 text-xs text-brand-ink-subtle">
+      {signedInEmail ? (
+        <p className="mt-4 text-sm text-brand-ink-muted" data-testid="report-signed-in-note">
+          Reporting as <strong className="break-all text-brand-ink">{signedInEmail}</strong>.
           Only used if we need to ask a follow-up question. Never shown publicly.
         </p>
-      </div>
+      ) : (
+        <div className="mt-4">
+          <label htmlFor="report_email" className="text-sm font-semibold text-brand-ink">
+            Your email <span className="font-normal text-brand-ink-subtle">(optional)</span>
+          </label>
+          <input
+            id="report_email"
+            type="email"
+            inputMode="email"
+            autoComplete="email"
+            maxLength={254}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com"
+            className="mt-2 w-full rounded-brand-control border border-brand-border bg-white px-3 py-2.5 text-sm text-brand-ink placeholder:text-brand-placeholder focus:border-brand-accent focus:outline-none"
+          />
+          <p className="mt-1 text-xs text-brand-ink-subtle">
+            Only used if we need to ask a follow-up question. Never shown publicly.
+          </p>
+        </div>
+      )}
 
       {/* Honeypot — see header comment. Not a real field: hidden from
           sighted users, screen readers, tab order, and autofill. */}

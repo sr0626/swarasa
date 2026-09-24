@@ -59,7 +59,8 @@ class ListingReport(TimestampMixin, Base):
     )
 
     # 'address_incorrect' | 'hours_incorrect' | 'phone_incorrect' |
-    # 'price_incorrect' | 'menu_incorrect' | 'permanently_closed' | 'other'
+    # 'price_incorrect' | 'menu_incorrect' | 'deal_incorrect' |
+    # 'permanently_closed' | 'other'
     # — validated at the API boundary (schemas/listing_report.py), stored
     # as plain text so adding a category never needs a migration.
     category: Mapped[str] = mapped_column(String(32), nullable=False)

@@ -88,7 +88,112 @@ async def test_signed_in_submission_records_reporter_user_id(client, db_session)
     row = (await db_session.execute(select(ListingReport))).scalar_one()
     assert row.reporter_user_id == user.cognito_sub
     assert row.location_id is None
+    # Signed in: the email is the verified token's email, not the body's.
+    assert row.reporter_email == user.email
+
+
+@pytest.mark.asyncio
+async def test_signed_in_body_email_is_ignored_token_email_wins(client, db_session):
+    """A client cannot attribute a report to another address: for an
+    authenticated caller the server discards the body's `reporter_email`."""
+    brand = await create_brand(db_session)
+    await db_session.commit()
+    user = _as_optional_user()
+
+    resp = await client.post(
+        "/reports",
+        json={
+            "brand_id": brand.id,
+            "category": "other",
+            "details": "Spoof attempt.",
+            "reporter_email": "victim@example.com",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+
+    row = (await db_session.execute(select(ListingReport))).scalar_one()
+    assert row.reporter_email == user.email
+    assert row.reporter_email != "victim@example.com"
+    assert row.reporter_user_id == user.cognito_sub
+
+
+@pytest.mark.asyncio
+async def test_signed_in_token_without_email_stores_null_not_body_email(client, db_session):
+    brand = await create_brand(db_session)
+    await db_session.commit()
+    user = _as_optional_user()
+    user.email = None
+
+    resp = await client.post(
+        "/reports",
+        json={
+            "brand_id": brand.id,
+            "category": "other",
+            "details": "No email claim on token.",
+            "reporter_email": "victim@example.com",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+
+    row = (await db_session.execute(select(ListingReport))).scalar_one()
     assert row.reporter_email is None
+    assert row.reporter_user_id == user.cognito_sub
+
+
+@pytest.mark.asyncio
+async def test_deal_incorrect_category_is_accepted_and_stored(client, db_session, as_anonymous):
+    brand = await create_brand(db_session)
+    location = await create_location(db_session, brand_id=brand.id)
+    await db_session.commit()
+
+    resp = await client.post(
+        "/reports",
+        json={
+            "brand_id": brand.id,
+            "location_id": location.id,
+            "category": "deal_incorrect",
+            "details": "The BOGO deal ended last week.",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+
+    row = (await db_session.execute(select(ListingReport))).scalar_one()
+    assert row.category == "deal_incorrect"
+    assert row.location_id == location.id
+
+
+@pytest.mark.asyncio
+async def test_admin_list_returns_deal_incorrect_and_ccpa_export_finds_it(
+    client, db_session, as_user
+):
+    brand = await create_brand(db_session)
+    reporter = _as_optional_user()
+    await db_session.commit()
+
+    resp = await client.post(
+        "/reports",
+        json={"brand_id": brand.id, "category": "deal_incorrect", "details": "Deal is stale."},
+    )
+    assert resp.status_code == 201, resp.text
+
+    # Admin inbox returns the new category (with the token-derived email).
+    app_main.app.dependency_overrides.pop(get_current_user_optional, None)
+    as_user("admin")
+    listed = await client.get("/reports", params={"status": "new"})
+    assert listed.status_code == 200, listed.text
+    results = listed.json()["results"]
+    assert [r["category"] for r in results] == ["deal_incorrect"]
+    assert results[0]["reporter_email"] == reporter.email
+    assert results[0]["reporter_user_id"] == reporter.cognito_sub
+
+    # Attribution by Cognito sub (what CCPA export/erasure key on) is
+    # intact: the reporter's own data export finds the new-category row.
+    as_user("registered_user", sub=reporter.cognito_sub, email=reporter.email)
+    export = await client.get("/auth/me/data-export")
+    assert export.status_code == 200, export.text
+    exported = export.json()["listing_reports"]
+    assert [r["category"] for r in exported] == ["deal_incorrect"]
+    assert exported[0]["reporter_email"] == reporter.email
 
 
 @pytest.mark.asyncio

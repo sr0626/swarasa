@@ -26,6 +26,7 @@ const CATEGORY_LABELS: Record<ReportCategory, string> = {
   phone_incorrect: "Wrong phone",
   price_incorrect: "Wrong prices",
   menu_incorrect: "Wrong menu",
+  deal_incorrect: "Wrong deal",
   permanently_closed: "Permanently closed",
   other: "Other",
 };

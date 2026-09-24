@@ -7,6 +7,7 @@ export type ReportCategory =
   | "phone_incorrect"
   | "price_incorrect"
   | "menu_incorrect"
+  | "deal_incorrect"
   | "permanently_closed"
   | "other";
 
