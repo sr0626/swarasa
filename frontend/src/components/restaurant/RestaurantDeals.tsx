@@ -10,6 +10,7 @@
 // whether that array is present, it never re-derives viewer identity
 // itself (see app/restaurant/[slug]/page.tsx for where the access token is
 // attached to the `getLocationById` call that produces this data).
+import { DEALS_SECTION_ID } from "@/lib/deals/format";
 import DealBadge from "@/components/ui/DealBadge";
 import DealSignInLink from "@/components/ui/DealSignInLink";
 import { TagIcon } from "@/components/ui/icons";
@@ -46,7 +47,7 @@ export default function RestaurantDeals({
     // title/description, no explanation of why (that would itself hint at
     // there being more to see for some viewers and not others).
     return (
-      <section aria-label="Deals">
+      <section id={DEALS_SECTION_ID} aria-label="Deals" className="scroll-mt-20">
         {signInReturnPath ? (
           // Signed-out: a large, prominent banner that IS the sign-in link.
           <DealSignInLink currentPath={signInReturnPath} variant="banner" />
@@ -59,8 +60,9 @@ export default function RestaurantDeals({
 
   return (
     <section
+      id={DEALS_SECTION_ID}
       aria-labelledby="deals-heading"
-      className="rounded-brand-card border border-brand-border bg-white p-5 shadow-brand-card sm:p-6"
+      className="scroll-mt-20 rounded-brand-card border border-brand-border bg-white p-5 shadow-brand-card sm:p-6"
     >
       <h2
         id="deals-heading"

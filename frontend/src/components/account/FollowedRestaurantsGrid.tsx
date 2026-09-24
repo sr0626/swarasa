@@ -9,7 +9,9 @@
 // RestaurantCard. Add the real photo here once the follows contract exposes one.
 import Link from "next/link";
 import TrackedTileLink from "@/components/listing/TrackedTileLink";
+import DealBadge from "@/components/ui/DealBadge";
 import DefaultRestaurantImage from "@/components/ui/DefaultRestaurantImage";
+import { dealPanelLabel, restaurantDealsHref } from "@/lib/deals/format";
 import { SearchIcon } from "@/components/ui/icons";
 import { cardClass, primaryLinkClass } from "@/components/account/accountShared";
 import type { FollowedBrand } from "@/types/follow";
@@ -73,14 +75,20 @@ export default function FollowedRestaurantsGrid({
       {!loadError && follows.length > 0 && (
         <ul className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {follows.map((follow) => (
-            <li key={follow.brand_id}>
+            <li
+              key={follow.brand_id}
+              className="group flex h-full flex-col overflow-hidden rounded-brand-card border border-brand-border bg-white shadow-brand-card transition hover:shadow-brand-card-hover"
+            >
               {/* The favourites grid only ever renders for a registered user
                   (its own "Restaurants you follow" section), so every tile
-                  click is tracked; the route handler/backend re-check role. */}
+                  click is tracked; the route handler/backend re-check role.
+                  The tile is two sibling links (an <a> can't nest in an
+                  <a>): the main one (image/name/date) and, only when the
+                  brand has a deal today, the deal panel beneath it. */}
               <TrackedTileLink
                 href={`/restaurant/${follow.slug}`}
                 track={{ brand_id: follow.brand_id, location_id: null, source: "favourites" }}
-                className="group flex h-full flex-col overflow-hidden rounded-brand-card border border-brand-border bg-white shadow-brand-card transition hover:shadow-brand-card-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent"
+                className="flex flex-1 flex-col focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-accent"
               >
                 <div className="relative h-32 w-full shrink-0 overflow-hidden bg-brand-warm-gradient">
                   <DefaultRestaurantImage />
@@ -99,6 +107,28 @@ export default function FollowedRestaurantsGrid({
                   )}
                 </div>
               </TrackedTileLink>
+
+              {follow.has_deal_today && (
+                // This page is registered-user-only, so deal titles (content)
+                // are allowed here. Links to the restaurant's Today's deals.
+                <TrackedTileLink
+                  href={restaurantDealsHref(follow.slug)}
+                  track={{ brand_id: follow.brand_id, location_id: null, source: "favourites" }}
+                  aria-label={dealPanelLabel(follow.name, follow.deal_titles_today)}
+                  className="flex min-h-11 flex-col justify-center gap-1 border-t border-brand-border bg-brand-accent/5 px-4 py-2.5 transition hover:bg-brand-accent/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-accent"
+                >
+                  <DealBadge className="w-fit" />
+                  {follow.deal_titles_today.length > 0 && (
+                    <ul className="flex flex-col gap-0.5 text-sm text-brand-ink">
+                      {follow.deal_titles_today.map((title, i) => (
+                        <li key={`${i}-${title}`} className="truncate">
+                          {title}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </TrackedTileLink>
+              )}
             </li>
           ))}
         </ul>

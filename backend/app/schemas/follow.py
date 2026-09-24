@@ -33,6 +33,15 @@ class FollowedBrandOut(BaseModel):
     slug: str
     is_claimed: bool
     followed_at: datetime
+    # True when ANY of the brand's active locations has an active deal that
+    # applies today (same predicate as `GET /search`'s per-location flag —
+    # `deal_service.todays_deals_by_brand`).
+    has_deal_today: bool = False
+    # Up to 2 of today's deal titles (title only). Safe to include: this
+    # endpoint is registered_user-only, a role that may view deal content
+    # (`deal_service.caller_may_view_deal_content_for_location`). Empty
+    # whenever `has_deal_today` is false.
+    deal_titles_today: list[str] = []
 
 
 class FollowListResponse(BaseModel):

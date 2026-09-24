@@ -1618,7 +1618,8 @@ Response: `200`, brand summaries only (not the full `RestaurantOut` shape
 ```json
 {
   "results": [
-    { "brand_id": 123, "name": "Spice Garden", "slug": "spice-garden-irving", "is_claimed": true, "followed_at": "2026-09-16T10:00:00Z" }
+    { "brand_id": 123, "name": "Spice Garden", "slug": "spice-garden-irving", "is_claimed": true, "followed_at": "2026-09-16T10:00:00Z",
+      "has_deal_today": true, "deal_titles_today": ["Lunch buffet $9.99", "Kids eat free"] }
   ],
   "page": 1,
   "page_size": 20,
@@ -1626,6 +1627,19 @@ Response: `200`, brand summaries only (not the full `RestaurantOut` shape
 }
 ```
 Ordered most-recently-followed first.
+
+`has_deal_today` / `deal_titles_today` (additive, added 2026-09-23): follows
+are brand-level and deals are per location, so `has_deal_today` is true when
+ANY of the brand's `active` locations (brand not soft-deleted) has an active
+deal that applies today — the exact same `deal_service.deal_matches_today`
+predicate `GET /search` uses (location's own timezone, applicable weekday,
+`start_at`/`end_at` window). `deal_titles_today` carries at most 2 of those
+deals' titles (ordered by location id, then deal id; `[]` when there is no
+deal today). Titles are safe to include here because this endpoint is
+registered_user-only, a role that may view deal content (same gate as
+`GET /locations/{id}` `deals_today`); descriptions are not included — the
+restaurant page has the full text. Computed for the whole page in two extra
+queries (locations, then one bulk deal read), never per brand.
 
 ---
 

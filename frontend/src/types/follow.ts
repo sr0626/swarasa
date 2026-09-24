@@ -9,6 +9,10 @@ export interface FollowedBrand {
   slug: string;
   is_claimed: boolean;
   followed_at: string;
+  /** True when any of the brand's active locations has a deal today. */
+  has_deal_today: boolean;
+  /** Up to 2 of today's deal titles (registered-user-only endpoint). */
+  deal_titles_today: string[];
 }
 
 /** Response for `POST /restaurants/{id}/follow`. */

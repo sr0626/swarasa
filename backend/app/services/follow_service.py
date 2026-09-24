@@ -17,6 +17,10 @@ from app.dependencies.pagination import Pagination
 from app.models.restaurant_brand import RestaurantBrand
 from app.models.user_follow import UserFollow
 from app.schemas.follow import FollowedBrandOut, FollowListResponse, FollowOut
+from app.services import deal_service
+
+# Max deal titles surfaced per followed-brand tile.
+_MAX_DEAL_TITLES = 2
 
 
 async def _get_existing_follow(db: AsyncSession, user_id: str, brand_id: int) -> UserFollow | None:
@@ -142,6 +146,14 @@ async def list_my_follows(
         )
     ).all()
 
+    # Batch (2 queries for the whole page, no per-brand lookups) — see
+    # `deal_service.todays_deals_by_brand`. Follows are brand-level and deals
+    # are per location, so a brand "has a deal today" when any active
+    # location does.
+    deals_by_brand = await deal_service.todays_deals_by_brand(
+        db, [brand.id for _, brand in rows]
+    )
+
     results = [
         FollowedBrandOut(
             brand_id=brand.id,
@@ -149,6 +161,10 @@ async def list_my_follows(
             slug=brand.slug,
             is_claimed=brand.is_claimed,
             followed_at=follow.created_at,
+            has_deal_today=brand.id in deals_by_brand,
+            deal_titles_today=[
+                d.title for d in deals_by_brand.get(brand.id, [])[:_MAX_DEAL_TITLES]
+            ],
         )
         for follow, brand in rows
     ]
