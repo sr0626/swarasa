@@ -189,4 +189,6 @@ async def test_deal_lookup_query_count_is_independent_of_page_size(client, db_se
     assert len(response.json()["results"]) == 6
     assert all(row["has_deal_today"] for row in response.json()["results"])
     assert len([s for s in statements if "FROM deal" in s]) == 1, statements
-    assert len([s for s in statements if "FROM restaurant_location" in s]) == 1, statements
+    # Two location reads per page, both batched over all brands: the
+    # deals-today lookup and the tile-location lookup (favourites tile).
+    assert len([s for s in statements if "FROM restaurant_location" in s]) == 2, statements

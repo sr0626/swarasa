@@ -9,14 +9,23 @@
 // built (`StarIcon`) and used on the "Featured" ribbon instead, so the
 // icon requirement is met without inventing a number.
 //
+// SHARED TILE: used by the homepage's "Popular near you", the search results
+// and the account page's "Restaurants you follow" (FollowedRestaurantsGrid) —
+// one tile, never a fork. `item` is a `RestaurantCardItem`: a followed brand
+// whose locations are all inactive has `nearest_location: null`, and the
+// address / hours / deal badge / Featured ribbon rows are then simply omitted.
+// `distance_mi` is null on the favourites grid (no viewer position), in which
+// case the address line shows no distance.
+//
 // UNIFORM, COMPACT TILE: every card is the same height whatever labels it
-// carries, WITHOUT spacing the text lines apart. The text keeps the original
-// tight rhythm (name, cuisines, address); the card has a shared min-height
-// sized for the maximum bounded content, and the hours row is pinned to the
-// bottom (`mt-auto`), so any slack shows up as ONE gap just above that row,
-// never between text lines. Everything is bounded (name, cuisines and address
-// each 1 line with ellipsis; full text in `title`) so long text can never grow
-// a tile past the shared height.
+// carries. The body is stacked TIGHT from the top — name, cuisines (only when
+// present), address, then the hours pill directly under the address — and the
+// card has a shared min-height sized for the maximum bounded content, so ANY
+// slack falls at the very bottom of the tile, never between the address and the
+// pill and never between text lines. The layout is identical at every width (no
+// breakpoint-specific rearrangement). Everything is bounded (name, cuisines and
+// address each 1 line with ellipsis; full text in `title`) so long text can
+// never grow a tile past the shared height.
 //   - Cover (h-40): Featured ribbon top-left, follow heart top-right, the
 //     "Deal(s) available today" badge bottom-left as an OVERLAY (no body
 //     height; signed-out it is a real sign-in <Link>, a SIBLING of the tile
@@ -24,9 +33,9 @@
 //     note chip bottom-right.
 //   - Body: name (1 line, ellipsis, full name in `title`), cuisines as one
 //     muted line (rendered only when present, so its absence leaves no hole),
-//     address + distance (1 line), then the hours pill row at the bottom.
+//     address + distance (1 line), then the hours pill row right under it.
 //     The phone number lives on the detail page, not the tile.
-import type { SearchResultItem } from "@/types/search";
+import type { RestaurantCardItem } from "@/types/search";
 import type { ActivitySource } from "@/types/userActivity";
 import TrackedTileLink from "@/components/listing/TrackedTileLink";
 import DealBadge from "@/components/ui/DealBadge";
@@ -35,9 +44,10 @@ import DefaultRestaurantImage from "@/components/ui/DefaultRestaurantImage";
 import FollowButton from "@/components/ui/FollowButton";
 import { LocationPinIcon, StarIcon } from "@/components/ui/icons";
 import OpenStatusBadge from "@/components/ui/OpenStatusBadge";
+import { cardSideNote, formatFullAddress, googleMapsSearchUrl } from "@/lib/listing/cardText";
 
 interface RestaurantCardProps {
-  item: SearchResultItem;
+  item: RestaurantCardItem;
   /** See lib/follow/viewerFollowState.ts. `false` for a signed-in
    * owner/manager/admin — root CLAUDE.md's permission model has no follow
    * use case for those roles, so the icon is omitted entirely rather than
@@ -81,15 +91,10 @@ export default function RestaurantCard({
     .map((tag) => tag.display_name)
     .join(" \u00b7 ");
   const coverPhoto = item.cover_photo_thumbnail_url ?? item.cover_photo_url;
-  const fullAddress = `${nearest_location.address_line1}, ${nearest_location.city}, ${nearest_location.state} ${nearest_location.postal_code}`;
+  const fullAddress = nearest_location ? formatFullAddress(nearest_location) : null;
   // Bottom-right cover chip: one short note, Unclaimed taking precedence
-  // over the nearby-locations count.
-  const sideNote = !item.is_claimed
-    ? "Unclaimed"
-    : item.location_count_nearby > 1
-      ? `${item.location_count_nearby} locations`
-      : null;
-  const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddress)}`;
+  // over the locations count.
+  const sideNote = cardSideNote(item.is_claimed, item.location_count_nearby);
 
   return (
     // A plain <div>, not a <Link> — the address line below opens Google
@@ -109,7 +114,7 @@ export default function RestaurantCard({
           isRegisteredUser && clickSource
             ? {
                 brand_id: item.brand_id,
-                location_id: nearest_location.location_id,
+                location_id: nearest_location?.location_id ?? null,
                 source: clickSource,
               }
             : undefined
@@ -128,7 +133,7 @@ export default function RestaurantCard({
           ) : (
             <DefaultRestaurantImage />
           )}
-          {nearest_location.is_paid && (
+          {nearest_location?.is_paid && (
             <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-brand-pill bg-brand-ink/85 px-2.5 py-1 text-xs font-semibold text-brand-bg">
               <StarIcon className="h-3 w-3" />
               Featured
@@ -172,7 +177,7 @@ export default function RestaurantCard({
           sign-in <Link> stays valid HTML. The wrapper is 44px tall so the
           link keeps a 44px touch target; the non-link badge variant is
           pointer-events-none so clicks fall through to the tile link. */}
-      {nearest_location.has_deal_today &&
+      {nearest_location?.has_deal_today &&
         (isSignedOut ? (
           <div className="absolute left-1 top-40 z-10 max-w-[calc(100%-0.5rem)] -translate-y-full">
             <DealSignInLink currentPath={currentPath} variant="badge" overlay />
@@ -183,32 +188,38 @@ export default function RestaurantCard({
           </div>
         ))}
 
-      <div className="px-4 pt-2">
-        <a
-          href={googleMapsUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-start gap-1 text-sm leading-5 text-brand-ink-subtle hover:text-brand-ink hover:underline"
-        >
-          <LocationPinIcon className="mt-0.5 h-4 w-4 shrink-0" />
-          <span className="min-w-0 truncate" title={fullAddress}>
-            {fullAddress}
-            {nearest_location.distance_mi !== null && ` \u00b7 ${nearest_location.distance_mi.toFixed(1)} mi`}
-          </span>
-        </a>
-      </div>
+      {nearest_location && fullAddress && (
+        <div className="px-4 pt-2">
+          <a
+            href={googleMapsSearchUrl(fullAddress)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-start gap-1 text-sm leading-5 text-brand-ink-subtle hover:text-brand-ink hover:underline"
+          >
+            <LocationPinIcon className="mt-0.5 h-4 w-4 shrink-0" />
+            <span className="min-w-0 truncate" title={fullAddress}>
+              {fullAddress}
+              {nearest_location.distance_mi !== null &&
+                ` \u00b7 ${nearest_location.distance_mi.toFixed(1)} mi`}
+            </span>
+          </a>
+        </div>
+      )}
 
-      {/* Pinned to the bottom: any slack in the card appears just above this
-          row. Its height is kept even when hours are unknown (renders
-          nothing) so the row is identical on every tile. */}
-      <div className="mt-auto flex h-7 items-center px-4 pb-3 pt-2 box-content">
-        <OpenStatusBadge
-          isOpenNow={nearest_location.is_open_now}
-          isClosedToday={nearest_location.is_closed}
-          openTime={nearest_location.open_time}
-          closeTime={nearest_location.close_time}
-        />
-      </div>
+      {/* Hours pill: directly under the address (normal small gap), NOT pinned
+          to the bottom — any slack in the card (which has a shared min-height)
+          falls below it. Fixed row height so the pill row is identical on every
+          tile, whether or not hours are known. */}
+      {nearest_location && (
+        <div className="flex h-7 items-center px-4 pb-3 pt-2 box-content">
+          <OpenStatusBadge
+            isOpenNow={nearest_location.is_open_now}
+            isClosedToday={nearest_location.is_closed}
+            openTime={nearest_location.open_time}
+            closeTime={nearest_location.close_time}
+          />
+        </div>
+      )}
     </div>
   );
 }

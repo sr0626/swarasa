@@ -33,6 +33,23 @@ async def get_cover_photo(db: AsyncSession, location_id: int) -> RestaurantPhoto
     return result.scalar_one_or_none()
 
 
+async def get_cover_photos_bulk(
+    db: AsyncSession, location_ids: list[int]
+) -> dict[int, RestaurantPhoto]:
+    """`get_cover_photo` for many locations in ONE query (at most one cover
+    row per location — partial-unique index on `is_cover`). Locations with no
+    cover are simply absent from the result."""
+    if not location_ids:
+        return {}
+    result = await db.execute(
+        select(RestaurantPhoto).where(
+            RestaurantPhoto.location_id.in_(location_ids),
+            RestaurantPhoto.is_cover == True,  # noqa: E712
+        )
+    )
+    return {photo.location_id: photo for photo in result.scalars().all()}
+
+
 async def get_gallery_photos(
     db: AsyncSession, location_id: int, is_paid: bool
 ) -> list[RestaurantPhoto]:

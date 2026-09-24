@@ -16,8 +16,11 @@ from app.core.errors import AppError
 from app.dependencies.pagination import Pagination
 from app.models.restaurant_brand import RestaurantBrand
 from app.models.user_follow import UserFollow
+from app.models.restaurant_location import RestaurantLocation
+from app.schemas.cuisine import CuisineTagOut
 from app.schemas.follow import FollowedBrandOut, FollowListResponse, FollowOut
-from app.services import deal_service
+from app.schemas.search import NearestLocationOut
+from app.services import cuisine_service, deal_service, hours_service, photo_service, s3_service
 
 # Max deal titles surfaced per followed-brand tile.
 _MAX_DEAL_TITLES = 2
@@ -104,6 +107,87 @@ async def unfollow_brand(db: AsyncSession, brand_id: int, current_user) -> None:
     await db.commit()
 
 
+async def _active_locations_by_brand(
+    db: AsyncSession, brand_ids: list[int]
+) -> dict[int, list]:
+    """One batched query: every `active` location of the given brands,
+    ordered by id — so index 0 is the brand's primary display location (the
+    one the detail page shows first, `GET /restaurants/{id}/locations`).
+    Brands are already known not to be soft-deleted (the caller's page
+    query excludes them). Only the columns a search-style tile needs.
+    """
+    if not brand_ids:
+        return {}
+    rows = (
+        await db.execute(
+            select(
+                RestaurantLocation.id,
+                RestaurantLocation.brand_id,
+                RestaurantLocation.address_line1,
+                RestaurantLocation.city,
+                RestaurantLocation.state,
+                RestaurantLocation.postal_code,
+                RestaurantLocation.phone,
+                RestaurantLocation.is_verified,
+                RestaurantLocation.is_paid,
+                RestaurantLocation.timezone,
+            )
+            .where(
+                RestaurantLocation.brand_id.in_(brand_ids),
+                RestaurantLocation.status == RestaurantLocation.STATUS_ACTIVE,
+            )
+            .order_by(RestaurantLocation.id)
+        )
+    ).all()
+    by_brand: dict[int, list] = {}
+    for row in rows:
+        by_brand.setdefault(row.brand_id, []).append(row)
+    return by_brand
+
+
+def _choose_location(locations: list, deals: list):
+    """The location a brand's tile represents. Deals are per location and
+    same-name restaurants run different location-based deals, so when the
+    brand has a deal today the tile must show THE DEAL'S location: the first
+    (lowest id — `todays_deals_by_brand` orders deals by location id) active
+    location with a deal today. Otherwise the primary location — the first
+    active location, same rule as the restaurant detail page. None when the
+    brand has no active location.
+    """
+    if not locations:
+        return None
+    if deals:
+        by_id = {row.id: row for row in locations}
+        deal_location = by_id.get(deals[0].location_id)
+        if deal_location is not None:
+            return deal_location
+    return locations[0]
+
+
+def _nearest_location_out(row, has_deal_today: bool, hours_rows: list) -> NearestLocationOut:
+    """`NearestLocationOut` for a followed brand's chosen location — the same
+    shape/semantics `/search` builds, minus distance (no viewer position)."""
+    today = hours_service.today_weekday(row.timezone)
+    today_row = next((h for h in hours_rows if h.day_of_week == today), None)
+    status = hours_service.compute_today_status(today_row, row.timezone)
+    return NearestLocationOut(
+        location_id=row.id,
+        distance_mi=None,
+        address_line1=row.address_line1,
+        city=row.city,
+        state=row.state,
+        postal_code=row.postal_code,
+        phone=row.phone,
+        is_verified=row.is_verified,
+        is_paid=row.is_paid,
+        is_open_now=status.is_open_now,
+        open_time=status.open_time,
+        close_time=status.close_time,
+        is_closed=status.is_closed,
+        has_deal_today=has_deal_today,
+    )
+
+
 async def list_my_follows(
     db: AsyncSession, current_user, pagination: Pagination
 ) -> FollowListResponse:
@@ -154,20 +238,56 @@ async def list_my_follows(
         db, [brand.id for _, brand in rows]
     )
 
-    results = [
-        FollowedBrandOut(
-            brand_id=brand.id,
-            name=brand.name,
-            slug=brand.slug,
-            is_claimed=brand.is_claimed,
-            followed_at=follow.created_at,
-            has_deal_today=brand.id in deals_by_brand,
-            deal_titles_today=[
-                d.title for d in deals_by_brand.get(brand.id, [])[:_MAX_DEAL_TITLES]
-            ],
+    # Follows are brand-level, but a tile represents ONE location (see
+    # `_choose_location`). Everything below is batched over the whole page —
+    # one query each for locations, cuisine tags, hours and cover photos — so
+    # the total query count is constant, independent of page size.
+    brand_ids = [brand.id for _, brand in rows]
+    locations_by_brand = await _active_locations_by_brand(db, brand_ids)
+    chosen_by_brand = {
+        brand.id: _choose_location(
+            locations_by_brand.get(brand.id, []), deals_by_brand.get(brand.id, [])
         )
-        for follow, brand in rows
-    ]
+        for _, brand in rows
+    }
+    chosen_ids = [loc.id for loc in chosen_by_brand.values() if loc is not None]
+    tags_by_brand = await cuisine_service.get_brand_cuisine_tags_bulk(db, brand_ids)
+    hours_by_location = await hours_service.get_hours_map_for_locations(db, chosen_ids)
+    covers_by_location = await photo_service.get_cover_photos_bulk(db, chosen_ids)
+
+    results: list[FollowedBrandOut] = []
+    for follow, brand in rows:
+        chosen = chosen_by_brand[brand.id]
+        deals = deals_by_brand.get(brand.id, [])
+        cover = covers_by_location.get(chosen.id) if chosen is not None else None
+        results.append(
+            FollowedBrandOut(
+                brand_id=brand.id,
+                name=brand.name,
+                slug=brand.slug,
+                is_claimed=brand.is_claimed,
+                followed_at=follow.created_at,
+                cuisine_tags=[
+                    CuisineTagOut.model_validate(t) for t in tags_by_brand.get(brand.id, [])
+                ],
+                nearest_location=(
+                    _nearest_location_out(
+                        chosen, bool(deals), hours_by_location.get(chosen.id, [])
+                    )
+                    if chosen is not None
+                    else None
+                ),
+                location_count_nearby=len(locations_by_brand.get(brand.id, [])),
+                cover_photo_url=s3_service.resolve_media_url(cover.s3_key) if cover else None,
+                cover_photo_thumbnail_url=(
+                    s3_service.resolve_media_url(cover.thumbnail_s3_key or cover.s3_key)
+                    if cover
+                    else None
+                ),
+                has_deal_today=bool(deals),
+                deal_titles_today=[d.title for d in deals[:_MAX_DEAL_TITLES]],
+            )
+        )
     return FollowListResponse(
         results=results, page=pagination.page, page_size=pagination.page_size, total=total
     )
