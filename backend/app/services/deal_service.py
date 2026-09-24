@@ -293,6 +293,53 @@ async def deals_today_for_location(
     return [d for d in by_location.get(location_id, []) if deal_matches_today(d, tz_name)]
 
 
+async def todays_deals_by_brand(
+    db: AsyncSession, brand_ids: list[int], *, now: datetime | None = None
+) -> dict[int, list[Deal]]:
+    """Brand-level "deals applicable today", for surfaces that list brands
+    rather than one location (`GET /auth/me/follows`).
+
+    A brand has a deal today when ANY of its `active` locations (brand not
+    soft-deleted) has an active deal for which `deal_matches_today` is true
+    in THAT location's own timezone — the same predicate `/search` uses for
+    its per-location `has_deal_today`, not a reimplementation. Two queries
+    total (locations, then one `get_active_deals_map` over all of them)
+    regardless of how many brands are passed, so no N+1. Brands with no
+    matching deal are simply absent from the result. Deals are ordered by
+    (location id, deal id) so callers get a stable "first N".
+    """
+    if not brand_ids:
+        return {}
+    loc_rows = (
+        await db.execute(
+            select(
+                RestaurantLocation.id,
+                RestaurantLocation.brand_id,
+                RestaurantLocation.timezone,
+            )
+            .join(RestaurantBrand, RestaurantBrand.id == RestaurantLocation.brand_id)
+            .where(
+                RestaurantLocation.brand_id.in_(brand_ids),
+                RestaurantLocation.is_active == True,  # noqa: E712
+                RestaurantBrand.deleted_at.is_(None),
+            )
+            .order_by(RestaurantLocation.id)
+        )
+    ).all()
+    deals_by_location = await get_active_deals_map(db, [row.id for row in loc_rows])
+    now = now or datetime.now(timezone.utc)
+    result: dict[int, list[Deal]] = {}
+    for row in loc_rows:
+        matching = [
+            d
+            for d in sorted(deals_by_location.get(row.id, []), key=lambda d: d.id)
+            if deal_matches_today(d, row.timezone, now=now)
+        ]
+        if matching:
+            result.setdefault(row.brand_id, []).extend(matching)
+    return result
+
+
 def next_occurrence_date(
     deal: Deal, tz_name: str, *, now: datetime | None = None
 ) -> date | None:

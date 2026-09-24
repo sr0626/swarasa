@@ -2,7 +2,25 @@
 //   cd frontend && npm run test:unit
 import assert from "node:assert/strict";
 import test from "node:test";
-import { formatDealDateRange, formatDealDays, formatNextOccurrence } from "./format.ts";
+import {
+  dealPanelLabel,
+  formatDealDateRange,
+  formatDealDays,
+  formatNextOccurrence,
+  restaurantDealsHref,
+} from "./format.ts";
+
+test("restaurantDealsHref points at the deals anchor on the restaurant page", () => {
+  assert.equal(restaurantDealsHref("spice-garden-irving"), "/restaurant/spice-garden-irving#deals");
+});
+
+test("dealPanelLabel names the restaurant and lists titles, skipping blanks", () => {
+  assert.equal(dealPanelLabel("Spice Garden", []), "Deal(s) available today at Spice Garden");
+  assert.equal(
+    dealPanelLabel("Spice Garden", ["Lunch buffet", "  ", "Kids eat free"]),
+    "Deal(s) available today at Spice Garden: Lunch buffet, Kids eat free"
+  );
+});
 
 test("formatDealDays: every day for null, empty and all seven", () => {
   assert.equal(formatDealDays(null), "Every day");

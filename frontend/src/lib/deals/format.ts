@@ -145,6 +145,25 @@ export function formatDealDateRange(
   return "Ongoing";
 }
 
+/** Restaurant page anchor of the "Today's deals" section (RestaurantDeals). */
+export const DEALS_SECTION_ID = "deals";
+
+/** `/restaurant/{slug}#deals` — where a deal badge on a followed-restaurant tile goes. */
+export function restaurantDealsHref(slug: string): string {
+  return `/restaurant/${slug}#${DEALS_SECTION_ID}`;
+}
+
+/**
+ * Accessible name for the favourites-tile deal panel link, e.g.
+ * "Deal(s) available today at Spice Garden: Lunch buffet, Kids eat free".
+ * Blank titles are ignored.
+ */
+export function dealPanelLabel(name: string, titles: readonly string[]): string {
+  const clean = titles.map((t) => t.trim()).filter((t) => t.length > 0);
+  const base = `Deal(s) available today at ${name}`;
+  return clean.length > 0 ? `${base}: ${clean.join(", ")}` : base;
+}
+
 /**
  * "YYYY-MM-DD" (a calendar date in the location's timezone, as sent in
  * `next_occurrence`) -> "Today" / "Tomorrow" / "Tue, Sep 29". `now` and
