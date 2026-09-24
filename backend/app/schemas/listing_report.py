@@ -82,6 +82,8 @@ class ReportOut(BaseModel):
     brand_name: str
     brand_slug: str
     location_id: int | None = None
+    # The reported location's own page slug (null when no location was picked).
+    location_slug: str | None = None
     location_address: str | None = None
     category: str
     details: str

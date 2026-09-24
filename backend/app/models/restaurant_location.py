@@ -74,6 +74,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -88,6 +89,11 @@ if TYPE_CHECKING:
 
 class RestaurantLocation(TimestampMixin, Base):
     __tablename__ = "restaurant_location"
+    # One slug per location, unique within its brand (not globally) — the
+    # public location page is /restaurant/{brand_slug}/{location_slug}.
+    __table_args__ = (
+        UniqueConstraint("brand_id", "slug", name="uq_restaurant_location_brand_slug"),
+    )
 
     # Status values — see module docstring "Location status lifecycle".
     STATUS_ACTIVE = "active"
@@ -120,6 +126,14 @@ class RestaurantLocation(TimestampMixin, Base):
         nullable=False,
         index=True,
     )
+
+    # URL slug of this location's own public page,
+    # /restaurant/{brand_slug}/{slug} (migration 0014, docs/DECISIONS.md
+    # "Location pages"). Generated ONCE at create time by
+    # `app.services.location_slug.assign_location_slug` (city, else city +
+    # street, else + "-2"...) and FIXED afterwards — an address edit never
+    # changes it, so shared links keep working. Unique per brand.
+    slug: Mapped[str] = mapped_column(String(100), nullable=False)
 
     # Optional override of the brand name for this specific location
     # (e.g. "Spice Route - Plano"). NULL means display the brand name.

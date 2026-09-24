@@ -56,6 +56,10 @@ class ManagedLocationOut(BaseModel):
     # so a manager with locations under different restaurants saw address
     # rows with no restaurant identity at all. Found live 2026-09-23.
     brand_name: str
+    # Public-page URL parts (/restaurant/{brand_slug}/{slug}) so the manager
+    # console's "View public page" can link to THIS location's page.
+    slug: str
+    brand_slug: str
     location_name: str | None
     address_line1: str
     city: str

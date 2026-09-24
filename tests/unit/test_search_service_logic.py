@@ -65,6 +65,7 @@ def _row(**overrides) -> "search_service._CandidateRow":
     defaults = dict(
         location_id=1,
         brand_id=1,
+        slug="plano",
         address_line1="123 Main St",
         city="Plano",
         state="TX",
@@ -157,6 +158,8 @@ async def test_multiple_locations_same_brand_roll_up_with_nearest_and_count(
     assert total == 1
     assert results[0].location_count_nearby == 3
     assert results[0].nearest_location.location_id == 2
+    # The tile links to the nearest location's own page (migration 0014).
+    assert results[0].nearest_location.slug == "plano"
     assert results[0].nearest_location.distance_mi == 3.0
     # Real gap found live 2026-09-18: search cards had no way to show a
     # full address (only city/state) or link out to Google Maps.

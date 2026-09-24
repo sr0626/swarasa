@@ -37,6 +37,8 @@ export interface GalleryPhoto {
 /** Summary shape from GET /restaurants/{id}/locations. */
 export interface LocationSummary {
   id: number;
+  /** The location's own public-page slug (`/restaurant/{brand_slug}/{slug}`), unique per brand. */
+  slug: string;
   location_name: string | null;
   address_line1: string;
   city: string;
@@ -102,6 +104,9 @@ export interface LocationDetail {
   // it fell back to the raw street address instead. See
   // backend/app/schemas/location.py LocationOut.brand_name.
   brand_name: string;
+  /** Public-page URL parts: `/restaurant/{brand_slug}/{slug}`. `slug` is fixed at create time. */
+  slug: string;
+  brand_slug: string;
   location_name: string | null;
   address_line1: string;
   address_line2: string | null;
@@ -301,6 +306,9 @@ export interface ManagedLocation {
    * Added so a manager with locations under different restaurants can
    * tell them apart. Found live 2026-09-23. */
   brand_name: string;
+  /** Public-page URL parts: `/restaurant/{brand_slug}/{slug}`. */
+  slug: string;
+  brand_slug: string;
   location_name: string | null;
   address_line1: string;
   city: string;

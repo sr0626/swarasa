@@ -26,6 +26,7 @@ from app.routers import (
     locations,
     restaurants,
     search,
+    sitemap,
 )
 
 app = FastAPI(title="Restaurant Discovery Platform API")
@@ -34,6 +35,7 @@ register_exception_handlers(app)
 
 app.include_router(health.router)
 app.include_router(search.router)
+app.include_router(sitemap.router)
 app.include_router(activity.router)
 app.include_router(restaurants.router)
 app.include_router(locations.router)

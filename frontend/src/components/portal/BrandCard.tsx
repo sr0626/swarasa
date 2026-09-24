@@ -19,6 +19,7 @@ import LocationStatusBadge from "@/components/portal/LocationStatusBadge";
 import LocationManagersSummary from "@/components/portal/LocationManagersSummary";
 import type { LocationWithManagers } from "@/types/location";
 import type { RestaurantBrand } from "@/types/restaurant";
+import { brandHref } from "@/lib/restaurant/urls";
 
 export default function BrandCard({
   brand,
@@ -42,7 +43,7 @@ export default function BrandCard({
               <p className="mt-0.5 max-w-lg text-sm text-brand-ink-muted">{brand.description}</p>
             )}
             {/* Dashboard-only stat (backend RestaurantOut.follower_count) —
-                never shown on the public /restaurant/[slug] page or search
+                never shown on the public /restaurant/[brandSlug] pages or search
                 tiles, only here on the owner's own /account business page. */}
             {brand.follower_count !== null && (
               <p className="mt-1.5 flex items-center gap-1.5 text-xs text-brand-ink-subtle">
@@ -71,7 +72,7 @@ export default function BrandCard({
             </span>
           )}
           <Link
-            href={`/restaurant/${brand.slug}`}
+            href={brandHref(brand.slug)}
             aria-label={`View public page for ${brand.name}`}
             className={secondaryLinkClass}
           >

@@ -96,7 +96,7 @@ from app.models.restaurant_brand import RestaurantBrand
 from app.models.restaurant_cuisine import RestaurantCuisine
 from app.models.restaurant_location import RestaurantLocation
 from app.schemas.restaurant_bulk_import import RestaurantBasicDetailIn, RestaurantCsvRowIn
-from app.services import audit_service
+from app.services import audit_service, location_slug
 from app.services.restaurant_service import slugify
 
 _MAX_ROWS_PER_BATCH = 500  # sanity cap -- generous for a manual admin batch
@@ -259,6 +259,9 @@ async def _find_or_create_location(
 
     location = RestaurantLocation(
         brand_id=brand_id,
+        slug=await location_slug.assign_location_slug(
+            db, brand_id, row.city, row.address_line1
+        ),
         address_line1=row.address_line1,
         address_line2=row.address_line2,
         city=row.city,

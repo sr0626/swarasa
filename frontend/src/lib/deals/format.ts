@@ -148,9 +148,10 @@ export function formatDealDateRange(
 /** Restaurant page anchor of the "Today's deals" section (RestaurantDeals). */
 export const DEALS_SECTION_ID = "deals";
 
-/** `/restaurant/{slug}#deals` — where a deal badge on a followed-restaurant tile goes. */
-export function restaurantDealsHref(slug: string): string {
-  return `/restaurant/${slug}#${DEALS_SECTION_ID}`;
+/** `/restaurant/{brandSlug}/{locationSlug}#deals` — where a deal badge on a tile goes: the
+ * deals section of THAT location's page (deals are per location). */
+export function restaurantDealsHref(brandSlug: string, locationSlug: string): string {
+  return `/restaurant/${brandSlug}/${locationSlug}#${DEALS_SECTION_ID}`;
 }
 
 /**

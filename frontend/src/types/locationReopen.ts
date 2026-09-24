@@ -29,6 +29,8 @@ export interface ReopenRequestQueueItem {
   brand_id: number;
   brand_name: string;
   brand_slug: string;
+  /** The location's own page slug (`/restaurant/{brand_slug}/{location_slug}`). */
+  location_slug: string;
   location_address: string;
   requested_by_user_id: string;
   /** null when no owner_account row matches the requester. */

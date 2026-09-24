@@ -413,6 +413,8 @@ async def list_managed_locations(db: AsyncSession, current_user, pagination):
             ManagedLocationOut(
                 id=row.id,
                 brand_name=brand.name if brand else "",
+                slug=row.slug,
+                brand_slug=brand.slug if brand else "",
                 location_name=row.location_name,
                 address_line1=row.address_line1,
                 city=row.city,

@@ -39,6 +39,8 @@ export interface ListingReport {
   brand_name: string;
   brand_slug: string;
   location_id: number | null;
+  /** The reported location's own page slug; null when no location was picked. */
+  location_slug: string | null;
   location_address: string | null;
   category: ReportCategory;
   details: string;

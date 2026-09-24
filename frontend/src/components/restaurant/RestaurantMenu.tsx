@@ -83,7 +83,7 @@ export default function RestaurantMenu({ menu }: { menu: MenuResponse | null | u
     <section
       id="menu"
       aria-labelledby="menu-heading"
-      className="rounded-brand-card border border-brand-border bg-white p-5 shadow-brand-card sm:p-6"
+      className="scroll-mt-24 rounded-brand-card border border-brand-border bg-white p-5 shadow-brand-card sm:p-6"
     >
       <h2
         id="menu-heading"

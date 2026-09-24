@@ -8,7 +8,7 @@
 // `deal_service.caller_may_view_deal_content_for_location`
 // (backend/app/services/deal_service.py) — this component only branches on
 // whether that array is present, it never re-derives viewer identity
-// itself (see app/restaurant/[slug]/page.tsx for where the access token is
+// itself (see the restaurant page routes for where the access token is
 // attached to the `getLocationById` call that produces this data).
 import { DEALS_SECTION_ID, dealTypeLabel } from "@/lib/deals/format";
 import DealBadge from "@/components/ui/DealBadge";
@@ -42,7 +42,7 @@ export default function RestaurantDeals({
     // title/description, no explanation of why (that would itself hint at
     // there being more to see for some viewers and not others).
     return (
-      <section id={DEALS_SECTION_ID} aria-label="Deals" className="scroll-mt-20">
+      <section id={DEALS_SECTION_ID} aria-label="Deals" className="scroll-mt-24">
         {signInReturnPath ? (
           // Signed-out: a large, prominent banner that IS the sign-in link.
           <DealSignInLink currentPath={signInReturnPath} variant="banner" />
@@ -57,7 +57,7 @@ export default function RestaurantDeals({
     <section
       id={DEALS_SECTION_ID}
       aria-labelledby="deals-heading"
-      className="scroll-mt-20 rounded-brand-card border border-brand-border bg-white p-5 shadow-brand-card sm:p-6"
+      className="scroll-mt-24 rounded-brand-card border border-brand-border bg-white p-5 shadow-brand-card sm:p-6"
     >
       <h2
         id="deals-heading"

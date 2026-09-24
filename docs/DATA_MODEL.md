@@ -7,6 +7,20 @@
 > the migrations in `backend/migrations/versions/`. Backfilling the other
 > entities is a separate docs task.
 
+## restaurant_location.slug
+
+Migration `0014_location_slug`. Model: `backend/app/models/restaurant_location.py`.
+`slug varchar(100) NOT NULL`, **unique per brand** —
+`uq_restaurant_location_brand_slug (brand_id, slug)` (not globally: two brands
+may both have an `irving` location). Public page: `/restaurant/{brand_slug}/{slug}`.
+Generated once at create time by `app/services/location_slug.py` (city, else
+city + street, else `-2`/`-3`; reserved words excluded) and **fixed** afterwards
+(an address edit never changes it). The migration adds the column nullable,
+backfills existing rows in `(brand_id, id)` order with a frozen copy of the same
+rule (a unit test asserts the copy matches the app helper), then sets NOT NULL
+and adds the constraint. Hard-deleting a location frees its slug within the
+brand; a brand soft delete keeps every slug.
+
 ## menu_section
 
 An optional, owner-named group of menu items on a location ("Appetizers",
