@@ -50,6 +50,9 @@ class ReopenRequestQueueItem(BaseModel):
     brand_id: int
     brand_name: str
     brand_slug: str
+    # The location's own page slug — the admin "view listing" link goes to the
+    # specific location under review.
+    location_slug: str
     location_address: str
     requested_by_user_id: str
     # None when no owner_account row matches the requester — same

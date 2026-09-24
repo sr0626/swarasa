@@ -18,13 +18,29 @@ from app.models.restaurant_brand import RestaurantBrand
 from app.models.restaurant_location import RestaurantLocation
 from app.models.user_follow import UserFollow
 from app.schemas.cuisine import CuisineTagOut
+from app.schemas.location import LocationOut
 from app.schemas.restaurant import (
+    BrandLocationCardOut,
+    LocationPageOut,
+    PublicLocationIndexItem,
+    PublicLocationIndexResponse,
     RestaurantCreate,
     RestaurantListResponse,
     RestaurantOut,
+    RestaurantPublicOut,
     RestaurantUpdate,
 )
-from app.services import audit_service, auth_service, cuisine_service, follow_service
+from app.services import (
+    audit_service,
+    auth_service,
+    cuisine_service,
+    deal_service,
+    follow_service,
+    hours_service,
+    location_service,
+    photo_service,
+    s3_service,
+)
 
 
 # `GET /restaurants?status=deleted` pseudo-status — see `list_restaurants`.
@@ -139,6 +155,164 @@ async def get_restaurant(db: AsyncSession, id_or_slug: str) -> RestaurantOut:
     if brand is None or brand.deleted_at is not None:
         raise AppError(404, "Restaurant not found", "not_found")
     return await _brand_to_out(db, brand)
+
+
+async def _brand_by_slug(db: AsyncSession, brand_slug: str) -> RestaurantBrand | None:
+    result = await db.execute(select(RestaurantBrand).where(RestaurantBrand.slug == brand_slug))
+    return result.scalar_one_or_none()
+
+
+async def _active_location_cards(db: AsyncSession, brand_id: int) -> list[BrandLocationCardOut]:
+    """The brand's ACTIVE locations as landing-page cards, ordered by city
+    (case-insensitive) then id — a stable order that does not depend on when a
+    location was added. Batched: one query each for the locations, hours,
+    cover photos and deals, regardless of how many locations the brand has (no
+    N+1). `has_deal_today` uses `deal_service.deal_matches_today` in each
+    location's own timezone — the same predicate as `/search`."""
+    rows = (
+        (
+            await db.execute(
+                select(RestaurantLocation)
+                .where(
+                    RestaurantLocation.brand_id == brand_id,
+                    RestaurantLocation.status == RestaurantLocation.STATUS_ACTIVE,
+                )
+                .order_by(func.lower(RestaurantLocation.city), RestaurantLocation.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    ids = [row.id for row in rows]
+    hours_by_location = await hours_service.get_hours_map_for_locations(db, ids)
+    covers = await photo_service.get_cover_photos_bulk(db, ids)
+    deals_by_location = await deal_service.get_active_deals_map(db, ids)
+
+    cards: list[BrandLocationCardOut] = []
+    for row in rows:
+        today = hours_service.today_weekday(row.timezone)
+        today_row = next(
+            (h for h in hours_by_location.get(row.id, []) if h.day_of_week == today), None
+        )
+        status = hours_service.compute_today_status(today_row, row.timezone)
+        cover = covers.get(row.id)
+        cards.append(
+            BrandLocationCardOut(
+                location_id=row.id,
+                slug=row.slug,
+                location_name=row.location_name,
+                distance_mi=None,
+                address_line1=row.address_line1,
+                city=row.city,
+                state=row.state,
+                postal_code=row.postal_code,
+                phone=row.phone,
+                is_verified=row.is_verified,
+                is_paid=row.is_paid,
+                is_open_now=status.is_open_now,
+                open_time=status.open_time,
+                close_time=status.close_time,
+                is_closed=status.is_closed,
+                has_deal_today=any(
+                    deal_service.deal_matches_today(d, row.timezone)
+                    for d in deals_by_location.get(row.id, [])
+                ),
+                cover_photo_url=s3_service.resolve_media_url(cover.s3_key) if cover else None,
+                cover_photo_thumbnail_url=(
+                    s3_service.resolve_media_url(cover.thumbnail_s3_key or cover.s3_key)
+                    if cover
+                    else None
+                ),
+            )
+        )
+    return cards
+
+
+async def get_public_restaurant_by_slug(db: AsyncSession, brand_slug: str) -> RestaurantPublicOut:
+    """`GET /restaurants/by-slug/{brand_slug}` — public. The brand plus its
+    ACTIVE locations (one round trip for the public brand page). A
+    nonexistent or soft-deleted brand is a 404 for everyone, admin included
+    (same as `get_restaurant`); a brand with no active location is still
+    returned, with `locations: []`."""
+    brand = await _brand_by_slug(db, brand_slug)
+    if brand is None or brand.deleted_at is not None:
+        raise AppError(404, "Restaurant not found", "not_found")
+    base = await _brand_to_out(db, brand)
+    return RestaurantPublicOut(
+        **base.model_dump(), locations=await _active_location_cards(db, brand.id)
+    )
+
+
+async def get_location_page_by_slugs(
+    db: AsyncSession, brand_slug: str, location_slug: str, current_user=None
+) -> LocationPageOut:
+    """`GET /restaurants/by-slug/{brand_slug}/locations/{location_slug}` —
+    public, viewer-aware. Resolves (brand slug, location slug) to a location
+    id, then applies EXACTLY the visibility gate of `GET /locations/{id}`
+    (`location_service.get_location`): 404 for an unknown pair, a soft-deleted
+    brand (admin excepted), or a hidden location the caller has no access to
+    (owner/admin/assigned manager may preview it) — never a 403, so a caller
+    can't tell "hidden" from "doesn't exist"."""
+    brand = await _brand_by_slug(db, brand_slug)
+    if brand is None:
+        raise AppError(404, "Location not found", "not_found")
+    location_id = (
+        await db.execute(
+            select(RestaurantLocation.id).where(
+                RestaurantLocation.brand_id == brand.id, RestaurantLocation.slug == location_slug
+            )
+        )
+    ).scalar_one_or_none()
+    if location_id is None:
+        raise AppError(404, "Location not found", "not_found")
+    location: LocationOut = await location_service.get_location(db, location_id, current_user)
+    return LocationPageOut(restaurant=await _brand_to_out(db, brand), location=location)
+
+
+async def list_public_location_index(
+    db: AsyncSession, pagination: Pagination
+) -> PublicLocationIndexResponse:
+    """`GET /sitemap/locations` — every ACTIVE location of every live brand,
+    one row each, in (brand id, location id) order, with the brand's
+    active-location count (a window count over the filtered rows, so it is
+    right even when a brand straddles a page boundary)."""
+    live_brands = select(RestaurantBrand.id).where(RestaurantBrand.deleted_at.is_(None))
+    filters = (
+        RestaurantLocation.status == RestaurantLocation.STATUS_ACTIVE,
+        RestaurantLocation.brand_id.in_(live_brands),
+    )
+    total = (
+        await db.execute(select(func.count()).select_from(RestaurantLocation).where(*filters))
+    ).scalar_one()
+    rows = (
+        await db.execute(
+            select(
+                RestaurantBrand.slug,
+                RestaurantLocation.slug,
+                func.count().over(partition_by=RestaurantLocation.brand_id),
+                RestaurantLocation.updated_at,
+            )
+            .join(RestaurantBrand, RestaurantBrand.id == RestaurantLocation.brand_id)
+            .where(*filters)
+            .order_by(RestaurantLocation.brand_id, RestaurantLocation.id)
+            .offset(pagination.offset)
+            .limit(pagination.page_size)
+        )
+    ).all()
+    return PublicLocationIndexResponse(
+        results=[
+            PublicLocationIndexItem(
+                brand_slug=brand_slug,
+                location_slug=location_slug,
+                active_location_count=count,
+                updated_at=updated_at,
+            )
+            for brand_slug, location_slug, count, updated_at in rows
+        ],
+        page=pagination.page,
+        page_size=pagination.page_size,
+        total=total,
+    )
 
 
 async def get_brand_or_404(

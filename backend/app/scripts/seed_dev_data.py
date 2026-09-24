@@ -125,7 +125,7 @@ from app.models.restaurant_brand import RestaurantBrand
 from app.models.restaurant_cuisine import RestaurantCuisine
 from app.models.restaurant_location import RestaurantLocation
 from app.schemas.hours import HourEntryIn
-from app.services import audit_service, auth_service, cognito_service, hours_service
+from app.services import audit_service, auth_service, cognito_service, hours_service, location_slug
 from app.services.location_manager_service import assert_can_add_active_manager
 
 logger = logging.getLogger("app.scripts.seed_dev_data")
@@ -385,7 +385,12 @@ async def ensure_location(
     lat, lng = fields.get("latitude"), fields.get("longitude")
     model_fields = {**fields, "latitude": _to_decimal(lat), "longitude": _to_decimal(lng)}
 
-    location = RestaurantLocation(brand_id=brand_id, address_line1=address_line1, **model_fields)
+    slug = await location_slug.assign_location_slug(
+        db, brand_id, str(fields.get("city") or ""), address_line1
+    )
+    location = RestaurantLocation(
+        brand_id=brand_id, address_line1=address_line1, slug=slug, **model_fields
+    )
     db.add(location)
     await db.flush()
 

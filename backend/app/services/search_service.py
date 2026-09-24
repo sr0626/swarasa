@@ -59,6 +59,7 @@ def _distance_key(distance_mi: float | None) -> float:
 class _CandidateRow:
     location_id: int
     brand_id: int
+    slug: str
     address_line1: str
     city: str
     state: str
@@ -90,6 +91,7 @@ async def _fetch_candidates(
         select(
             RestaurantLocation.id.label("location_id"),
             RestaurantLocation.brand_id,
+            RestaurantLocation.slug,
             RestaurantLocation.address_line1,
             RestaurantLocation.city,
             RestaurantLocation.state,
@@ -281,6 +283,7 @@ async def search(
                 ],
                 nearest_location=NearestLocationOut(
                     location_id=nearest.location_id,
+                    slug=nearest.slug,
                     distance_mi=round(nearest.distance_mi, 2) if nearest.distance_mi is not None else None,
                     address_line1=nearest.address_line1,
                     city=nearest.city,

@@ -91,6 +91,11 @@ class LocationOut(BaseModel):
     # set a distinct label (every CSV-imported restaurant, found live
     # 2026-09-18 on /portal/locations/{id}).
     brand_name: str
+    # Public-page URL parts (migration 0014): the location's own page is
+    # /restaurant/{brand_slug}/{slug}. `slug` is fixed at create time and never
+    # changes on an address edit; `brand_slug` is the parent brand's slug.
+    slug: str
+    brand_slug: str
     location_name: str | None
     address_line1: str
     address_line2: str | None
