@@ -93,7 +93,7 @@ async def test_registered_user_and_admin_get_array(client, db_session, role):
     deal = body["upcoming_deals"][0]
     assert deal["description"] == "Bottomless chai"
     assert deal["applicable_days"] == [_other_weekday()]
-    assert deal["deal_type"] == "deal"
+    assert deal["deal_type"] == "special"  # end_at NULL -> derived special
     assert deal["next_occurrence"]  # ISO date
     assert "start_at" in deal and "end_at" in deal
     # Not a management view: no is_active / location_id leak.

@@ -189,3 +189,36 @@ export function formatNextOccurrence(
   const weekday = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "UTC" }).format(date);
   return `${weekday}, ${MONTHS[date.getUTCMonth()]} ${date.getUTCDate()}`;
 }
+
+// ---- Deal vs Special: derived from the end date ---------------------------
+//
+// The label is NOT chosen by the owner (2026-09-24 decision): no end date
+// (ongoing) -> "special", has an end date -> "deal". The API's `deal_type`
+// always reflects this (backend `effective_deal_type`); these helpers only
+// present it, and drive the owner form's live "Will show as" hint.
+
+/** Badge text for an API `deal_type` ("Deal" / "Special"). Unknown values
+ * fall back to "Deal" rather than leaking the raw string. */
+export function dealTypeLabel(dealType: string | null | undefined): string {
+  return dealType === "special" ? "Special" : "Deal";
+}
+
+/**
+ * Live owner-form hint. `endLocal` is the `<input type="datetime-local">`
+ * value ("YYYY-MM-DDTHH:MM", browser-local, or ""); `ongoing` is the
+ * "Ongoing (no end date)" checkbox.
+ *   ongoing                     -> "Will show as: Special (ongoing)"
+ *   not ongoing, valid end date -> "Will show as: Deal (ends Oct 31, 2026)"
+ *   not ongoing, no end yet     -> "Will show as: Deal (once you set an end date)"
+ */
+export function dealTypeHint(ongoing: boolean, endLocal: string | null | undefined): string {
+  if (ongoing) return "Will show as: Special (ongoing)";
+  if (endLocal) {
+    const parsed = new Date(endLocal);
+    if (!Number.isNaN(parsed.getTime())) {
+      const end = formatBoundary(parsed.toISOString(), "end", undefined, true);
+      if (end) return `Will show as: Deal (ends ${end})`;
+    }
+  }
+  return "Will show as: Deal (once you set an end date)";
+}

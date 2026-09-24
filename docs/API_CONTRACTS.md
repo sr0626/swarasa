@@ -621,7 +621,8 @@ location (see `frontend/src/lib/api/locations.ts` `getLocationById`'s
     `registered_user`, `admin`, or this location's own `owner`/an
     actively-assigned `manager`. Each entry is
     `{ id, deal_type, title, description }` — `deal_type` is `"deal"` or
-    `"special"` (`docs/DATA_MODEL.md` "deal"). Distinguish "no deals
+    `"special"`, derived from `end_at` (no end date -> `"special"`, else
+    `"deal"`; see "Deals (`deal`)" below). Distinguish "no deals
     today" (`[]`) from "content withheld" (`null`) — show the
     registration/sign-in prompt only for the `null` case when
     `has_deal_today` is `true`.
@@ -1051,9 +1052,22 @@ PUBLIC, content-gated read of a location's deals lives on `GET
 /locations/{id}` (`has_deal_today`/`deals_today`) and `GET /search`
 (`has_deal_today` badge only), not here — see those sections above.
 
-`deal_type` is `"deal"` or `"special"` (`docs/DATA_MODEL.md` "deal" —
-pre-existing `docs/DECISIONS.md` "deal type ENUM" decision; display
-metadata only, doesn't affect matching/expiry). `applicable_days` is a
+`deal_type` is `"deal"` or `"special"` and is **derived from `end_at`, never
+chosen by the owner** (user decision 2026-09-24, refining the pre-existing
+`docs/DECISIONS.md` "deal type ENUM" decision): no end date (ongoing) ->
+`"special"`; has an end date -> `"deal"`. It flips automatically when an
+end date is added or removed. Every response that carries a deal —
+management `DealOut`, `deals_today`, `upcoming_deals` — returns the derived
+value, computed at read time from `end_at` (single helper
+`effective_deal_type` in `app/models/deal.py`), so a legacy row whose stored
+`deal_type` column was hand-picked and disagrees with its `end_at` still
+reads back correctly with no migration or backfill; the stored column is
+re-synced from `end_at` on every create/update. `deal_type` is
+**read-only**: a `deal_type` sent in a POST/PATCH body is accepted and
+ignored (backward compatibility for older clients — never a 4xx). It is
+display metadata only; it doesn't affect matching/expiry (`end_at` does).
+The audit log's `deal_type` old/new values record the effective type.
+`applicable_days` is a
 list of int, 0=Monday..6=Sunday (matches `restaurant_hours.day_of_week`
 exactly) — `null`/omitted means every day; an empty list is rejected
 (422). `start_at`/`end_at` are ISO 8601 timestamps (not dates) —
@@ -1100,9 +1114,9 @@ are small enough that pagination would be premature (same reasoning as
 
 Auth: same as `GET /locations/{id}/deals` above.
 
-Body: `{ deal_type?, title, description?, applicable_days?, start_at,
-end_at?, ongoing?, is_active? }` — `deal_type` defaults to `"deal"`,
-`is_active` defaults to `true`. `title` required (1-255 chars).
+Body: `{ title, description?, applicable_days?, start_at,
+end_at?, ongoing?, is_active? }` — `is_active` defaults to `true`. (A legacy
+`deal_type` key is ignored — the type is derived from `end_at`, see above.) `title` required (1-255 chars).
 
 **Required dates (added 2026-09-23):** `start_at` is required; `end_at` is
 required UNLESS the request explicitly sends `ongoing: true` (an "every
@@ -1125,7 +1139,9 @@ Auth: same as above. Partial update, `exclude_unset` semantics matching
 `PATCH /locations/{id}` — an omitted field leaves the stored value
 untouched; an explicit `null` on a nullable field (`description`,
 `applicable_days`, `start_at`, `end_at`) clears it; an explicit `null`
-on `deal_type`/`title`/`is_active` (non-nullable) is a `400`. Used to
+on `title`/`is_active` (non-nullable) is a `400`. `deal_type` is not writable
+(ignored); adding an `end_at` makes the deal a `"deal"`, clearing it
+(`ongoing: true`) makes it a `"special"`. Used to
 toggle `is_active` (owner/manager "pause" control) as well as edit
 content.
 

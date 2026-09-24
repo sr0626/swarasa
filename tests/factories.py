@@ -29,7 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.claim_request import ClaimRequest
 from app.models.cuisine_tag import CuisineTag
 from app.models.data_deletion_request import DataDeletionRequest
-from app.models.deal import Deal
+from app.models.deal import Deal, effective_deal_type
 from app.models.listing_report import ListingReport
 from app.models.location_manager import LocationManager
 from app.models.menu_item import MenuItem
@@ -213,7 +213,9 @@ class DealFactory(factory.Factory):
         model = Deal
 
     location_id = factory.Sequence(lambda n: n + 1)
-    deal_type = "deal"
+    # Derived from end_at, like the service does on every write. Pass
+    # `deal_type=` explicitly to seed a stale/legacy mismatched row.
+    deal_type = factory.LazyAttribute(lambda o: effective_deal_type(o.end_at))
     title = FactoryFaker("catch_phrase")
     description = None
     applicable_days = None

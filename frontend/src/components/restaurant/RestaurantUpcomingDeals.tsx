@@ -9,13 +9,8 @@
 // null/undefined/empty list renders NOTHING (no heading, no count, no hint
 // for signed-out viewers; the sign-in CTA lives in RestaurantDeals).
 import { TagIcon } from "@/components/ui/icons";
-import { formatDealDays } from "@/lib/deals/format";
+import { dealTypeLabel, formatDealDays } from "@/lib/deals/format";
 import type { DealUpcoming } from "@/types/deal";
-
-const DEAL_TYPE_LABEL: Record<string, string> = {
-  deal: "Deal",
-  special: "Special",
-};
 
 interface RestaurantUpcomingDealsProps {
   upcomingDeals: DealUpcoming[] | null | undefined;
@@ -49,7 +44,7 @@ export default function RestaurantUpcomingDeals({
           >
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-brand-pill bg-brand-accent/10 px-2 py-0.5 text-xs font-semibold text-brand-accent">
-                {DEAL_TYPE_LABEL[deal.deal_type] ?? deal.deal_type}
+                {dealTypeLabel(deal.deal_type)}
               </span>
               <h3 className="min-w-0 break-words font-display text-base font-semibold text-brand-ink">
                 {deal.title}
