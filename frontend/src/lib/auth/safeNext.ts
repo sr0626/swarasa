@@ -43,11 +43,14 @@ export function dealSignInHref(currentPath: string): string {
  * link meant for owners lands on the normal homepage instead of being
  * bounced by the destination's own guard straight back to /login. Mirrors
  * the `requireSession([...])` guards: /portal/brands/new is owner-only,
+ * /portal/locations/new is owner/admin,
  * other /portal/* is owner/manager, /admin/* is admin; everything else
  * (e.g. /claim) is open to any signed-in role.
  */
 export function pathAllowedForRole(path: string, role: UserRole): boolean {
   if (path.startsWith("/portal/brands/new")) return role === "owner";
+  // "Add location": owner (of the brand) or admin -- never a manager.
+  if (path.startsWith("/portal/locations/new")) return role === "owner" || role === "admin";
   if (path.startsWith("/portal")) return role === "owner" || role === "manager";
   if (path.startsWith("/admin")) return role === "admin";
   return true;

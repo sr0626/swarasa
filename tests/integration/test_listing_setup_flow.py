@@ -213,6 +213,21 @@ async def test_setup_missing_shrinks_as_hours_are_entered(client, db_session, as
     assert after["setup_missing"] == []
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["active", "owner_deactivated", "closed_pending_reopen"])
+async def test_setup_missing_is_empty_outside_setup(client, db_session, as_user, status):
+    """A live/hidden listing (even one with unknown hours, like every seeded
+    row) never advertises gaps — `setup_missing` only applies in `coming_soon`."""
+    owner, brand = await _owned_brand(db_session)
+    location = await create_location(db_session, brand_id=brand.id, status=status, phone=None)
+    await db_session.commit()
+    as_user("owner", sub=owner.cognito_sub)
+
+    response = await client.patch(f"/locations/{location.id}", json={"city": "Frisco"})
+    assert response.status_code == 200, response.text
+    assert response.json()["setup_missing"] == []
+
+
 # ---------------------------------------------------------------------------
 # Activation is server-gated
 # ---------------------------------------------------------------------------

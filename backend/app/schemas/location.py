@@ -99,7 +99,8 @@ class LocationOut(BaseModel):
     is_active: bool
     # What is still missing before this listing can be activated (moved out of
     # `coming_soon`): any of "name", "address", "phone", "hours" (see
-    # app/services/listing_readiness.py). Empty when the listing is ready.
+    # app/services/listing_readiness.py). Empty when the listing is ready AND
+    # for every status other than `coming_soon` (not in setup).
     # Computed on every read from data already loaded there (no extra query);
     # the SERVER re-checks on the transition itself, so this is display-only.
     setup_missing: list[str]

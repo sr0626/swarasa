@@ -114,7 +114,13 @@ async def _location_to_out(
         paid_until=location.paid_until,
         status=location.status,
         is_active=location.is_active,
-        setup_missing=listing_readiness.missing_for_activation(location, brand.name, hours_rows),
+        # Only meaningful while the listing is in setup; empty for every other
+        # status so a live/hidden listing never advertises gaps to the public.
+        setup_missing=(
+            listing_readiness.missing_for_activation(location, brand.name, hours_rows)
+            if location.status == RestaurantLocation.STATUS_COMING_SOON
+            else []
+        ),
         is_open_now=is_open_now,
         hours=[
             HoursOut(

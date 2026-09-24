@@ -666,8 +666,10 @@ Notes:
 - `setup_missing` (added 2026-09-24 — "New manual listings start in setup"):
   `string[]`, what is still missing before this listing can be moved from
   `coming_soon` to `active` — any of `"name"` | `"address"` | `"phone"` |
-  `"hours"`, in that order; `[]` when it's ready. Always present, computed
-  from data already loaded (no extra query). Display-only: the same rules
+  `"hours"`, in that order; `[]` when it's ready, and always `[]` for any
+  status other than `coming_soon` (a listing not in setup never advertises
+  gaps). Always present, computed from data already loaded (no extra
+  query). Display-only: the same rules
   are re-checked by `POST /locations/{id}/status` (below), which is the
   enforcement. Rules (`backend/app/services/listing_readiness.py`): `name`
   = the brand has a non-blank name; `address` = street, city, state and ZIP

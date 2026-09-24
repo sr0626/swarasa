@@ -56,11 +56,12 @@ export default function ListingSetupBanner({
         router.refresh();
       } else {
         setError(result.error);
-        setActivating(false);
+        // Re-read the list: the refusal may mean it changed under us.
         router.refresh();
       }
     } catch {
       setError("Something went wrong activating this listing. Please try again.");
+    } finally {
       setActivating(false);
     }
   }
