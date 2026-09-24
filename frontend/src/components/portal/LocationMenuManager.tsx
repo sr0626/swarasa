@@ -1207,7 +1207,7 @@ export default function LocationMenuManager({
 
       {/* Whole-menu switch. Hidden state is loud so an owner never wonders why
           nothing shows publicly; nothing is deleted either way. */}
-      {!isEmpty && (
+      {(!isEmpty || menu.menu_hidden) && (
         <SectionVisibilityBar
           hidden={menu.menu_hidden}
           visibleText={
