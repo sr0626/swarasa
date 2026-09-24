@@ -196,8 +196,8 @@ export default function LocationDealsManager({
     setSaving(true);
     try {
       // Same payload for create and edit: the form always manages every
-      // field, so an edit is a full replacement (an empty date box clears
-      // start_at/end_at rather than leaving a stale value behind).
+      // field, so an edit is a full replacement. Dates are already known to
+      // be valid here (start set; end set or Ongoing ticked).
       const result =
         editing === "new"
           ? await createLocationDealAction(locationId, form)
