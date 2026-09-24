@@ -29,6 +29,10 @@ export interface MenuItem {
   /** Always null while the photo flag is off, and for an item with no photo. */
   photo_url: string | null;
   photo_thumbnail_url: string | null;
+  /** Owner-set "hide this dish" switch (e.g. sold out). Always false on the
+   * public read (hidden items aren't returned there); meaningful on the
+   * management read (`GET …/menu/manage`). */
+  is_hidden: boolean;
 }
 
 /** Response of the section create/update endpoints (no items). */
@@ -38,6 +42,7 @@ export interface MenuSection {
   name: string;
   description: string | null;
   display_order: number;
+  is_hidden: boolean;
 }
 
 export interface MenuSectionWithItems {
@@ -46,12 +51,17 @@ export interface MenuSectionWithItems {
   description: string | null;
   display_order: number;
   items: MenuItem[];
+  /** Hides the whole group AND its items publicly (items keep their own flag). */
+  is_hidden: boolean;
 }
 
 /** GET /locations/{id}/menu — the whole structured menu. */
 export interface MenuResponse {
   location_id: number;
   menu_photos_enabled: boolean;
+  /** The location's ENTIRE menu is hidden. The public read then returns empty
+   * lists; the management read returns everything so the editor can show it. */
+  menu_hidden: boolean;
   /** Items with no group — render first, under no heading. */
   ungrouped_items: MenuItem[];
   sections: MenuSectionWithItems[];
@@ -64,7 +74,13 @@ export interface CreateMenuSectionInput {
 }
 
 /** Body for PATCH /locations/{id}/menu/sections/{id}. */
-export type UpdateMenuSectionInput = Partial<CreateMenuSectionInput>;
+export type UpdateMenuSectionInput = Partial<CreateMenuSectionInput> & { is_hidden?: boolean };
+
+/** PUT /locations/{id}/menu/visibility (and the deals twin) — response. */
+export interface VisibilityResponse {
+  location_id: number;
+  is_hidden: boolean;
+}
 
 /** Body for POST /locations/{id}/menu/items — exactly one of `price` /
  * `sizes` must be set. */
@@ -78,4 +94,4 @@ export interface CreateMenuItemInput {
 
 /** Body for PATCH /locations/{id}/menu/items/{id}. Send only the new pricing
  * form's field (`price` or `sizes`) — the server clears the other. */
-export type UpdateMenuItemInput = Partial<CreateMenuItemInput>;
+export type UpdateMenuItemInput = Partial<CreateMenuItemInput> & { is_hidden?: boolean };

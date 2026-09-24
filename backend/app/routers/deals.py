@@ -24,7 +24,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies.auth import CurrentUser, require_location_write_access
 from app.dependencies.db import get_db
-from app.schemas.deal import DealCreate, DealListResponse, DealOut, DealUpdate
+from app.schemas.deal import (
+    DealCreate,
+    DealListResponse,
+    DealOut,
+    DealUpdate,
+    DealVisibilityIn,
+    DealVisibilityOut,
+)
 from app.services import deal_service
 
 router = APIRouter(prefix="/locations", tags=["deals"])
@@ -39,7 +46,22 @@ async def list_location_deals(
     """Management view — owner/manager/admin sees every deal for this
     location, active or not (used by the deal editor)."""
     results = await deal_service.list_deals_for_location(db, location_id)
-    return DealListResponse(results=results)
+    return DealListResponse(
+        results=results,
+        deals_hidden=await deal_service.deals_hidden_for_location(db, location_id),
+    )
+
+
+@router.put("/{location_id}/deals/visibility", response_model=DealVisibilityOut)
+async def set_location_deals_visibility(
+    location_id: int,
+    body: DealVisibilityIn,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_location_write_access),
+) -> DealVisibilityOut:
+    """"Hide all deals" / "Show all deals" — location-level, non-destructive;
+    independent of each deal's own `is_active`. Idempotent."""
+    return await deal_service.set_deals_hidden(db, location_id, body.is_hidden, current_user)
 
 
 @router.post(

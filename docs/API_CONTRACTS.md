@@ -1191,10 +1191,35 @@ Response:
   ]
 }
 ```
+`deals_hidden` (added 2026-09-24) is the location's "Hide all deals" switch
+state (see `PUT …/deals/visibility` below); the response otherwise carries
+`{"results": [...], "deals_hidden": false}`.
+
 Every deal for this location, active or not (used by the deal editor),
 newest-created first. Not paginated — Phase 2 per-location deal counts
 are small enough that pagination would be premature (same reasoning as
 `GET /locations/{id}/managers`).
+
+### PUT /locations/{id}/deals/visibility
+
+Added 2026-09-24 — "Hide all deals" / "Show all deals" for one location.
+Auth: same as `GET /locations/{id}/deals`. Body `{ "is_hidden": true }`
+(required boolean; `422` otherwise). Response `200`
+`{ "location_id": 456, "is_hidden": true }`. `404` for an unknown location.
+
+Non-destructive: no deal row is touched and each deal's own `is_active`
+(the per-deal Hide/Show, "Hidden from diners" in the owner UI) stays
+independent — hiding all then showing all never resurrects a deal that was
+individually hidden. While `deals_hidden` is true, EVERY public deal surface
+behaves as if the location had no deals — content AND the public "deal(s)
+available today" signal: `GET /locations/{id}` (`has_deal_today` false,
+`deals_today`/`upcoming_deals` empty), `GET /search` (`has_deal_today` badge
+and the `has_deals_today` filter), `GET /auth/me/follows` (`has_deal_today`,
+`deal_titles_today`) and everything derived from them (tile badges, landing
+cards). Implemented once, in `deal_service.get_active_deals_map`. The
+management list (`GET …/deals`) still returns every deal. Idempotent;
+audited as a `restaurant_location` `update` row (`{"deals_hidden": old}` ->
+`{"deals_hidden": new}`), none when the value doesn't change.
 
 ### POST /locations/{id}/deals
 
@@ -1339,11 +1364,43 @@ including `price`, `sizes`, `section_id`, `display_order` and the photo
 keys). A reorder writes one `update` row per row whose `display_order`
 actually changed.
 
+### Hide / show (added 2026-09-24)
+
+Nothing is deleted to hide it. Three independent switches: `menu_item.is_hidden`
+(one dish, e.g. sold out), `menu_section.is_hidden` (a group AND its items;
+the items' own flags are untouched so showing the group restores exactly what
+was visible before) and `restaurant_location.menu_hidden` (the ENTIRE menu).
+Hidden content is excluded from `GET /locations/{id}/menu` for EVERYONE
+(the owner previewing their public page sees what diners see) and from
+everything derived from it (the page's Menu section, JSON-LD `hasMenu`);
+when nothing is visible the public page renders no Menu section. The editor
+reads `GET /locations/{id}/menu/manage` (below), which returns everything with
+each row's `is_hidden` flag. Toggling = `PATCH …/items/{id}` or
+`PATCH …/sections/{id}` with `{ "is_hidden": true|false }` (`null` is `400`,
+non-boolean `422`; may be combined with other fields), and
+`PUT /locations/{id}/menu/visibility` with `{ "is_hidden": true|false }` for
+the whole menu (`200` `{ "location_id", "is_hidden" }`, idempotent). Same
+`require_location_write_access` auth as every menu write. Audit: item/group
+toggles are ordinary `menu_item`/`menu_section` `update` rows (old/new
+snapshots now include `is_hidden`); the whole-menu switch is a
+`restaurant_location` `update` row (`{"menu_hidden": old}` -> `{"menu_hidden":
+new}`), none when unchanged.
+
+### GET /locations/{id}/menu/manage
+
+Auth: owner / assigned manager / admin (`require_location_write_access`;
+`401`/`403`/`404` as the other menu writes). Same response shape as the
+public read but with EVERYTHING: hidden groups and items included, each
+carrying `is_hidden: true`, and `menu_hidden` reflecting the whole-menu
+switch. The reorder endpoints return this management view too.
+
 ### GET /locations/{id}/menu
 
 Auth: none (public) — optional bearer token only matters for the hidden-
-location rule below (and it's also the editor's read: there are no
-management-only fields). Applies the same visibility gate as `GET
+location rule below. NEVER returns hidden content (see "Hide / show" above):
+hidden items, hidden groups with their items, and — when `menu_hidden` — the
+whole menu (`200` with `"menu_hidden": true` and empty lists). Every item/
+group object carries `is_hidden` (always `false` here). Applies the same visibility gate as `GET
 /locations/{id}`: `404` for a missing location, a soft-deleted brand's
 location (admin excepted), or a non-`active` location the caller can't
 manage (owner / admin / assigned manager can still read it).
@@ -1489,7 +1546,15 @@ validation `frontend/src/lib/validation/menu.ts` (mirrors the rules above).
   default — or "delete items too"). The photo control renders ONLY when
   `menu_photos_enabled` is true. The editor re-reads the whole menu after
   every write so it can't drift from the server. No `is_paid` check
-  anywhere.
+  anywhere. **Hide / show (2026-09-24):** the editor reads
+  `GET …/menu/manage`; every item and group has a one-click instant
+  Hide/Show (`aria-pressed`, 44px target) with a "Hidden" chip and dimmed
+  row (items inside a hidden group read "Hidden with its group"); a
+  section-level bar states whether diners can see the menu and offers
+  "Hide entire menu" / "Show menu". The Deals section mirrors it: per-deal
+  Hide/Show ("Hidden from diners" / "Visible to diners" — the API field is
+  still `is_active`) and a "Hide all deals" / "Show all deals" bar.
+  Toggles are optimistic and revert with an error message on failure.
 - **Public restaurant page** — SSR `RestaurantMenu` between "About" and the
   report box: ungrouped items first, then groups with their descriptions;
   item name / description / price, or sizes as "Personal $10 · Double $15 ·

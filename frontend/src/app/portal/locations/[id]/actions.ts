@@ -27,18 +27,24 @@ import {
   updateLocationStatus,
 } from "@/lib/api/locations";
 import { submitReopenRequest } from "@/lib/api/locationReopen";
-import { createLocationDeal, deleteLocationDeal, updateLocationDeal } from "@/lib/api/deals";
+import {
+  createLocationDeal,
+  deleteLocationDeal,
+  setDealsVisibility,
+  updateLocationDeal,
+} from "@/lib/api/deals";
 import {
   createMenuItem,
   createMenuSection,
   deleteMenuItem,
   deleteMenuSection,
-  getLocationMenu,
+  getLocationMenuForManagement,
   getMenuPhotoUploadUrl,
   removeMenuItemPhoto,
   reorderMenuItems,
   reorderMenuSections,
   setMenuItemPhoto,
+  setMenuVisibility,
   updateMenuItem,
   updateMenuSection,
 } from "@/lib/api/menu";
@@ -70,6 +76,7 @@ import type {
   MenuResponse,
   MenuSection,
   UpdateMenuItemInput,
+  VisibilityResponse,
 } from "@/types/menu";
 import type { CreateDealInput, Deal, UpdateDealInput } from "@/types/deal";
 import type {
@@ -606,6 +613,23 @@ export async function updateLocationDealAction(
   }
 }
 
+/** PUT /locations/{id}/deals/visibility — "Hide all deals" / "Show all deals". */
+export async function setDealsHiddenAction(
+  locationId: number,
+  isHidden: boolean
+): Promise<ActionResult<VisibilityResponse>> {
+  const auth = await requireLocationSession();
+  if (!auth.ok) return auth;
+
+  try {
+    const result = await setDealsVisibility(locationId, isHidden === true, auth.accessToken);
+    revalidateDealPaths(locationId);
+    return { ok: true, data: result };
+  } catch (error) {
+    return { ok: false, error: messageFor(error, "Could not change deal visibility.") };
+  }
+}
+
 /** DELETE /locations/{id}/deals/{deal_id} — hard delete. */
 export async function deleteLocationDealAction(
   locationId: number,
@@ -652,7 +676,7 @@ export async function getLocationMenuAction(
   if (!auth.ok) return auth;
 
   try {
-    const menu = await getLocationMenu(locationId, auth.accessToken);
+    const menu = await getLocationMenuForManagement(locationId, auth.accessToken);
     return { ok: true, data: menu };
   } catch (error) {
     return { ok: false, error: messageFor(error, "Could not refresh the menu.") };
@@ -699,6 +723,69 @@ export async function updateMenuSectionAction(
     return { ok: true, data: section };
   } catch (error) {
     return { ok: false, error: messageFor(error, "Could not update this group.") };
+  }
+}
+
+/** PUT /locations/{id}/menu/visibility — hide/show the ENTIRE menu. */
+export async function setMenuHiddenAction(
+  locationId: number,
+  isHidden: boolean
+): Promise<ActionResult<VisibilityResponse>> {
+  const auth = await requireLocationSession();
+  if (!auth.ok) return auth;
+
+  try {
+    const result = await setMenuVisibility(locationId, isHidden === true, auth.accessToken);
+    revalidateMenuPaths(locationId);
+    return { ok: true, data: result };
+  } catch (error) {
+    return { ok: false, error: messageFor(error, "Could not change menu visibility.") };
+  }
+}
+
+/** PATCH /locations/{id}/menu/sections/{section_id} with only `is_hidden`. */
+export async function setMenuSectionHiddenAction(
+  locationId: number,
+  sectionId: number,
+  isHidden: boolean
+): Promise<ActionResult<MenuSection>> {
+  const auth = await requireLocationSession();
+  if (!auth.ok) return auth;
+
+  try {
+    const section = await updateMenuSection(
+      locationId,
+      sectionId,
+      { is_hidden: isHidden === true },
+      auth.accessToken
+    );
+    revalidateMenuPaths(locationId);
+    return { ok: true, data: section };
+  } catch (error) {
+    return { ok: false, error: messageFor(error, "Could not change this group's visibility.") };
+  }
+}
+
+/** PATCH /locations/{id}/menu/items/{item_id} with only `is_hidden`. */
+export async function setMenuItemHiddenAction(
+  locationId: number,
+  itemId: number,
+  isHidden: boolean
+): Promise<ActionResult<MenuItem>> {
+  const auth = await requireLocationSession();
+  if (!auth.ok) return auth;
+
+  try {
+    const item = await updateMenuItem(
+      locationId,
+      itemId,
+      { is_hidden: isHidden === true },
+      auth.accessToken
+    );
+    revalidateMenuPaths(locationId);
+    return { ok: true, data: item };
+  } catch (error) {
+    return { ok: false, error: messageFor(error, "Could not change this item's visibility.") };
   }
 }
 

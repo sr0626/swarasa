@@ -34,6 +34,8 @@ from app.schemas.menu import (
     MenuSectionOrder,
     MenuSectionOut,
     MenuSectionUpdate,
+    MenuVisibilityIn,
+    MenuVisibilityOut,
 )
 from app.schemas.photo import UploadUrlResponse
 from app.services import menu_service
@@ -52,6 +54,30 @@ async def get_location_menu(
     assigned manager can still open their own non-active location's menu,
     exactly like `GET /locations/{id}`)."""
     return await menu_service.get_menu(db, location_id, current_user)
+
+
+@router.get("/{location_id}/menu/manage", response_model=MenuOut)
+async def get_location_menu_for_management(
+    location_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_location_write_access),
+) -> MenuOut:
+    """Management read (owner / assigned manager / admin) — the FULL menu,
+    hidden groups/items included and flagged `is_hidden`, plus `menu_hidden`.
+    The public `GET /locations/{id}/menu` never returns hidden content, even
+    to the owner."""
+    return await menu_service.get_menu_for_management(db, location_id)
+
+
+@router.put("/{location_id}/menu/visibility", response_model=MenuVisibilityOut)
+async def set_location_menu_visibility(
+    location_id: int,
+    body: MenuVisibilityIn,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_location_write_access),
+) -> MenuVisibilityOut:
+    """Hide/show the ENTIRE menu (nothing is deleted). Idempotent."""
+    return await menu_service.set_menu_hidden(db, location_id, body.is_hidden, current_user)
 
 
 # -- sections ---------------------------------------------------------------

@@ -35,7 +35,14 @@ from app.models.deal import Deal, effective_deal_type
 from app.models.location_manager import LocationManager
 from app.models.restaurant_brand import RestaurantBrand
 from app.models.restaurant_location import RestaurantLocation
-from app.schemas.deal import DealCreate, DealOut, DealPublicOut, DealUpcomingOut, DealUpdate
+from app.schemas.deal import (
+    DealCreate,
+    DealOut,
+    DealPublicOut,
+    DealUpcomingOut,
+    DealUpdate,
+    DealVisibilityOut,
+)
 from app.services import audit_service, auth_service, hours_service
 
 _AUDITED_FIELDS = (
@@ -129,6 +136,41 @@ async def list_deals_for_location(db: AsyncSession, location_id: int) -> list[De
         select(Deal).where(Deal.location_id == location_id).order_by(Deal.created_at.desc())
     )
     return [_deal_to_out(d) for d in result.scalars().all()]
+
+
+async def deals_hidden_for_location(db: AsyncSession, location_id: int) -> bool:
+    location = await db.get(RestaurantLocation, location_id)
+    return bool(location is not None and location.deals_hidden)
+
+
+async def set_deals_hidden(
+    db: AsyncSession, location_id: int, is_hidden: bool, current_user
+) -> DealVisibilityOut:
+    """`PUT /locations/{id}/deals/visibility` — the location-level "Hide all
+    deals" switch (`restaurant_location.deals_hidden`). Non-destructive: no
+    deal row is touched, and each deal's own `is_active` toggle is
+    independent. Idempotent (same value -> no change, no audit row); a real
+    change is audited on `restaurant_location` with old/new `deals_hidden`.
+    Public suppression lives in ONE place — `get_active_deals_map` below."""
+    location = await db.get(RestaurantLocation, location_id)
+    if location is None:
+        raise AppError(404, "Location not found", "not_found")
+    old_hidden = bool(location.deals_hidden)
+    if old_hidden != is_hidden:
+        location.deals_hidden = is_hidden
+        await db.flush()
+        await audit_service.log(
+            db,
+            table_name="restaurant_location",
+            record_id=location.id,
+            action="update",
+            actor_id=current_user.cognito_sub,
+            actor_role=current_user.role,
+            old_val={"deals_hidden": old_hidden},
+            new_val={"deals_hidden": is_hidden},
+        )
+        await db.commit()
+    return DealVisibilityOut(location_id=location_id, is_hidden=is_hidden)
 
 
 async def create_deal(
@@ -288,11 +330,26 @@ async def get_active_deals_map(
     matters is per-location, so callers apply `deal_matches_today`
     themselves with each location's own tz). Same two-step shape as
     `hours_service.get_hours_map_for_locations` + `compute_today_status`.
+
+    THE single choke point for every PUBLIC deal surface (search badge +
+    `has_deals_today` filter, follow list, location detail
+    `deals_today`/`upcoming_deals`, tile/landing badges — all derive from
+    this map). A location whose owner/manager hit "Hide all deals"
+    (`restaurant_location.deals_hidden`) is left with an empty list here, so
+    it behaves exactly as if it had no deals anywhere — content and the
+    "deal(s) available today" signal alike. The management list
+    (`list_deals_for_location`) deliberately does not go through this.
     """
     if not location_ids:
         return {}
     result = await db.execute(
-        select(Deal).where(Deal.location_id.in_(location_ids), Deal.is_active == True)  # noqa: E712
+        select(Deal)
+        .join(RestaurantLocation, RestaurantLocation.id == Deal.location_id)
+        .where(
+            Deal.location_id.in_(location_ids),
+            Deal.is_active == True,  # noqa: E712
+            RestaurantLocation.deals_hidden == False,  # noqa: E712
+        )
     )
     by_location: dict[int, list[Deal]] = {lid: [] for lid in location_ids}
     for row in result.scalars().all():

@@ -23,6 +23,10 @@ Design notes
   DB level (`menu_item.section_id` is `ON DELETE SET NULL`); the service
   layer decides explicitly whether to ungroup or delete them so it can audit
   each affected item.
+* `is_hidden` (added 2026-09-24, migration 0014): hides the whole group AND
+  its items from the public menu without touching the items' own
+  `is_hidden` (so un-hiding the group restores exactly what was visible
+  before). Default false, no backfill.
 * No ORM `relationship()` to items/location on purpose: every access path
   is an explicit query in `app/services/menu_service.py`, and skipping
   relationships means an ORM `session.delete(section)` can never try to
@@ -31,7 +35,7 @@ Design notes
 """
 from __future__ import annotations
 
-from sqlalchemy import BigInteger, ForeignKey, Index, Integer, String
+from sqlalchemy import BigInteger, Boolean, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin
@@ -59,6 +63,10 @@ class MenuSection(TimestampMixin, Base):
 
     display_order: Mapped[int] = mapped_column(
         Integer, default=0, server_default="0", nullable=False
+    )
+
+    is_hidden: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
     )
 
     def __repr__(self) -> str:  # pragma: no cover

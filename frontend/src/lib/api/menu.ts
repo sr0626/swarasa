@@ -11,6 +11,7 @@ import type {
   MenuSection,
   UpdateMenuItemInput,
   UpdateMenuSectionInput,
+  VisibilityResponse,
 } from "@/types/menu";
 import type { PhotoUploadUrlResponse } from "@/types/location";
 
@@ -28,6 +29,37 @@ export async function getLocationMenu(
     `/locations/${locationId}/menu`,
     { method: "GET" },
     { accessToken, revalidateSeconds: accessToken ? undefined : 60 }
+  );
+}
+
+/**
+ * GET /locations/{id}/menu/manage — owner/assigned-manager/admin. The FULL
+ * menu for the editor: hidden groups/items included (flagged `is_hidden`)
+ * plus `menu_hidden`. The public GET above never returns hidden content,
+ * even to the owner. Always uncached.
+ */
+export async function getLocationMenuForManagement(
+  locationId: number,
+  accessToken: string
+): Promise<MenuResponse> {
+  return apiFetch<MenuResponse>(
+    `/locations/${locationId}/menu/manage`,
+    { method: "GET" },
+    { accessToken }
+  );
+}
+
+/** PUT /locations/{id}/menu/visibility — hide/show the ENTIRE menu (nothing
+ * is deleted). */
+export async function setMenuVisibility(
+  locationId: number,
+  isHidden: boolean,
+  accessToken: string
+): Promise<VisibilityResponse> {
+  return apiFetch<VisibilityResponse>(
+    `/locations/${locationId}/menu/visibility`,
+    { method: "PUT", body: JSON.stringify({ is_hidden: isHidden }) },
+    { accessToken }
   );
 }
 

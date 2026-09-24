@@ -17,7 +17,7 @@ import { requireSession } from "@/lib/auth/guards";
 import TopBar from "@/components/home/TopBar";
 import { getLocationById, getLocationManagers } from "@/lib/api/locations";
 import { getLocationDeals } from "@/lib/api/deals";
-import { getLocationMenu } from "@/lib/api/menu";
+import { getLocationMenuForManagement } from "@/lib/api/menu";
 import LocationInfoForm from "@/components/portal/LocationInfoForm";
 import LocationAboutForm from "@/components/portal/LocationAboutForm";
 import LocationHoursEditor from "@/components/portal/LocationHoursEditor";
@@ -124,8 +124,11 @@ export default async function PortalLocationPage({ params, searchParams }: Locat
   // of the editor rather than an empty list, so an owner never mistakes
   // "couldn't load" for "no deals" (and double-adds).
   let deals: Deal[] | null = null;
+  let dealsHidden = false;
   try {
-    deals = (await getLocationDeals(locationId, session.accessToken)).results;
+    const dealList = await getLocationDeals(locationId, session.accessToken);
+    deals = dealList.results;
+    dealsHidden = dealList.deals_hidden === true;
   } catch {
     deals = null;
   }
@@ -135,7 +138,7 @@ export default async function PortalLocationPage({ params, searchParams }: Locat
   // mistake for "no menu yet" (and re-enter everything).
   let menu: MenuResponse | null = null;
   try {
-    menu = await getLocationMenu(locationId, session.accessToken);
+    menu = await getLocationMenuForManagement(locationId, session.accessToken);
   } catch {
     menu = null;
   }
@@ -162,7 +165,11 @@ export default async function PortalLocationPage({ params, searchParams }: Locat
   const sectionById = (id: EditorSection["id"]) => sections.find((x) => x.id === id) as EditorSection;
   const panels: Partial<Record<EditorSection["id"], ReactNode>> = {
     deals: deals ? (
-      <LocationDealsManager locationId={location.id} initialDeals={deals} />
+      <LocationDealsManager
+        locationId={location.id}
+        initialDeals={deals}
+        initialDealsHidden={dealsHidden}
+      />
     ) : (
       anchored(
         sectionById("deals"),

@@ -205,6 +205,24 @@ class RestaurantLocation(TimestampMixin, Base):
         String(24), default=STATUS_ACTIVE, server_default=STATUS_ACTIVE, nullable=False, index=True
     )
 
+    # Location-level visibility switches (added 2026-09-24, migration 0014,
+    # docs/DECISIONS.md "Hide menu / hide deals"). Two plain booleans on the
+    # location rather than a per-location settings table: they're read on
+    # every public menu/deal path, default visible (server_default false, so
+    # existing rows need no backfill), and hiding is non-destructive — the
+    # menu/deal rows are untouched, they just stop being returned publicly.
+    #   menu_hidden  -> the ENTIRE menu is excluded from the public menu read.
+    #   deals_hidden -> every deal surface (search filter/badge, follow list,
+    #                   location detail deals_today/upcoming_deals) behaves as
+    #                   if the location had no deals. The per-deal
+    #                   `deal.is_active` toggle is independent of this.
+    menu_hidden: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    deals_hidden: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+
     @hybrid_property
     def is_active(self) -> bool:
         """Backward-compat read: True only when `status == 'active'` — the
