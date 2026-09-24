@@ -6,6 +6,7 @@ import {
   buildSearchHref,
   countFilters,
   EMPTY_FILTERS,
+  hasSearchCriteria,
   parseFilters,
   toggleDealsToday,
 } from "./filters.ts";
