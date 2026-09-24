@@ -18,16 +18,18 @@ export interface SetupItem {
   label: string;
   /** Imperative phrase for the "To go live: …" sentence. */
   todo: string;
+  /** Short form for the sticky Go-live bar ("add hours"). */
+  short: string;
   /** Editor section id (lib/portal/editorSections.ts) that fixes it. */
   sectionId: "hours" | "info";
 }
 
 /** In checklist order (matches the backend's `setup_missing` order). */
 export const SETUP_ITEMS: readonly SetupItem[] = [
-  { key: "name", label: "Restaurant name", todo: "add the restaurant name", sectionId: "info" },
-  { key: "address", label: "Street address", todo: "add the full street address", sectionId: "info" },
-  { key: "phone", label: "US phone number", todo: "add a valid US phone number", sectionId: "info" },
-  { key: "hours", label: "Opening hours for all 7 days", todo: "add your opening hours", sectionId: "hours" },
+  { key: "name", label: "Restaurant name", todo: "add the restaurant name", short: "add name", sectionId: "info" },
+  { key: "address", label: "Street address", todo: "add the full street address", short: "add address", sectionId: "info" },
+  { key: "phone", label: "US phone number", todo: "add a valid US phone number", short: "add phone", sectionId: "info" },
+  { key: "hours", label: "Opening hours for all 7 days", todo: "add your opening hours", short: "add hours", sectionId: "hours" },
 ];
 
 const KNOWN_KEYS = new Set<string>(SETUP_ITEMS.map((item) => item.key));
@@ -80,4 +82,65 @@ export function setupChecklist(
   setupMissing: readonly string[]
 ): Array<SetupItem & { done: boolean }> {
   return SETUP_ITEMS.map((item) => ({ ...item, done: !setupMissing.includes(item.key) }));
+}
+
+/**
+ * Label of the console row's "Finish setup" call to action: "Finish setup" plus
+ * how many checklist items are left when known ("Finish setup · 2 left"), or
+ * "Finish setup & go live" once nothing is left.
+ */
+export function finishSetupLabel(setupMissing: readonly string[] | null): string {
+  if (setupMissing === null) return "Finish setup";
+  if (setupMissing.length === 0) return "Finish setup & go live";
+  return `Finish setup · ${setupMissing.length} left`;
+}
+
+/** What the sticky "Go live" bar shows for a listing in setup. */
+export interface GoLiveState {
+  kind: "missing" | "ready";
+  /** "2 things left: add hours, add phone" / "All set — ready to go live". */
+  headline: string;
+  /** Why the Activate button is disabled (the full sentence); `null` when ready. */
+  reason: string | null;
+  /** How many things are left, unknown keys included ("2 things left"). */
+  count: number;
+  /** The known items still missing (each can link to the section that fixes it). */
+  items: SetupItem[];
+  /** Whether a key this UI has no row for is also still missing. */
+  hasUnknown: boolean;
+}
+
+/**
+ * State of the sticky Go-live bar, or `null` when the bar doesn't apply (the
+ * listing is not in setup). Presentational only: the activation itself is still
+ * checked by the server (422 `listing_incomplete`).
+ */
+export function goLiveBarState(
+  status: LocationStatus,
+  setupMissing: readonly string[]
+): GoLiveState | null {
+  if (!isInSetup(status)) return null;
+  if (canActivate(status, setupMissing)) {
+    return {
+      kind: "ready",
+      headline: "All set — ready to go live",
+      reason: null,
+      count: 0,
+      items: [],
+      hasUnknown: false,
+    };
+  }
+  const known = SETUP_ITEMS.filter((item) => setupMissing.includes(item.key));
+  const unknownCount = setupMissing.filter((key) => !KNOWN_KEYS.has(key)).length;
+  const count = known.length + unknownCount;
+  const phrases = known.map((item) => item.short);
+  if (unknownCount > 0) phrases.push("finish the remaining details");
+  return {
+    kind: "missing",
+    headline: `${count} thing${count === 1 ? "" : "s"} left: ${phrases.join(", ")}`,
+    reason: setupSummary(setupMissing) ?? "Finish setting up this listing first.",
+    count,
+    items: known,
+    hasUnknown: unknownCount > 0,
+  };
 }

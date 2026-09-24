@@ -135,10 +135,18 @@ export async function getLocationPageBySlugs(
   );
 }
 
-/** GET /restaurants/{id}/locations — public, summary shape only. */
+/**
+ * GET /restaurants/{id}/locations — public, summary shape only. Anonymous
+ * callers get the ACTIVE locations only; pass the caller's `accessToken` and
+ * the owning owner / an admin additionally get the brand's non-active ones
+ * (coming_soon, hidden, closed) — which the owner console needs, or a listing
+ * still in setup vanishes from the owner's own card. An authenticated read is
+ * never Next-cached (`apiFetch`), so no `revalidateSeconds` alongside a token.
+ */
 export async function getRestaurantLocations(
   id: number,
-  params: PaginationParams = {}
+  params: PaginationParams = {},
+  accessToken?: string
 ): Promise<PaginatedResponse<LocationSummary>> {
   const query = toQueryString({
     page: params.page,
@@ -148,7 +156,7 @@ export async function getRestaurantLocations(
   return apiFetch<PaginatedResponse<LocationSummary>>(
     `/restaurants/${id}/locations${query}`,
     { method: "GET" },
-    { revalidateSeconds: 60 }
+    { accessToken, revalidateSeconds: accessToken ? undefined : 60 }
   );
 }
 

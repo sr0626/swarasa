@@ -75,7 +75,10 @@ export default function EditorSectionNav({
     if (targets.length === 0 || typeof IntersectionObserver === "undefined") return;
 
     const headerH = document.querySelector("header")?.getBoundingClientRect().height ?? 73;
-    const topOffset = Math.round(headerH + NAV_HEIGHT_PX + 8);
+    // The Go-live bar (setup only) is server-rendered, so it's already in the
+    // DOM here; it stacks under this row and shifts the band down by its height.
+    const goLiveH = document.querySelector<HTMLElement>("[data-go-live-bar]")?.offsetHeight ?? 0;
+    const topOffset = Math.round(headerH + NAV_HEIGHT_PX + goLiveH + 8);
     const visible = new Set<string>();
     const pick = () => {
       if (pinnedRef.current) return;

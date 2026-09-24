@@ -25,6 +25,8 @@ import LocationDealsManager from "@/components/portal/LocationDealsManager";
 import LocationMenuManager from "@/components/portal/LocationMenuManager";
 import LocationPhotoManager from "@/components/portal/LocationPhotoManager";
 import LocationManagerAssignment from "@/components/portal/LocationManagerAssignment";
+import GoLiveBar from "@/components/portal/GoLiveBar";
+import ListingLiveNotice, { parseLiveParam } from "@/components/portal/ListingLiveNotice";
 import ListingSetupBanner from "@/components/portal/ListingSetupBanner";
 import LocationStatusMenu from "@/components/portal/LocationStatusMenu";
 import EditorSectionNav from "@/components/portal/EditorSectionNav";
@@ -42,7 +44,7 @@ export const metadata: Metadata = {
 
 interface LocationPageProps {
   params: { id: string };
-  searchParams?: { new?: string | string[] };
+  searchParams?: { new?: string | string[]; live?: string | string[] };
 }
 
 /** Where "back" goes depends on the role: an owner's home is their single
@@ -150,6 +152,9 @@ export default async function PortalLocationPage({ params, searchParams }: Locat
   // Owners and admins create listings (Add restaurant / Add location); ignore
   // the flag for anyone else.
   const newListing = isOwner || isAdmin ? parseNewListingParam(searchParams?.new) : null;
+  // `?live=1` is set by the Activate button right after a successful go-live.
+  const justActivated =
+    (isOwner || isAdmin) && location.status === "active" && parseLiveParam(searchParams?.live);
 
   // Each panel, keyed by section id. Order and visibility come from
   // editorSectionsForRole (Deals, Hours, Menu, Photos, About, Info, then the
@@ -181,7 +186,16 @@ export default async function PortalLocationPage({ params, searchParams }: Locat
         />
       )
     ),
-    hours: anchored(sectionById("hours"), <LocationHoursEditor locationId={location.id} hours={location.hours} />),
+    hours: anchored(
+      sectionById("hours"),
+      <LocationHoursEditor
+        locationId={location.id}
+        hours={location.hours}
+        status={location.status}
+        setupMissing={location.setup_missing}
+        role={session.role}
+      />
+    ),
     menu: menu ? (
       <LocationMenuManager locationId={location.id} initialMenu={menu} />
     ) : (
@@ -206,7 +220,7 @@ export default async function PortalLocationPage({ params, searchParams }: Locat
       sectionById("about"),
       <LocationAboutForm locationId={location.id} about={location.about} specialties={location.specialties} />
     ),
-    info: anchored(sectionById("info"), <LocationInfoForm location={location} />),
+    info: anchored(sectionById("info"), <LocationInfoForm location={location} role={session.role} />),
     managers: isOwner
       ? anchored(
           sectionById("managers"),
@@ -226,6 +240,14 @@ export default async function PortalLocationPage({ params, searchParams }: Locat
           backHref={back.href}
           backLabel={back.label}
           backShortLabel={back.short}
+        />
+        {/* Sticky "Go live" bar (only while the listing is in setup): what's
+            left + the Activate button, always in view under the nav above. */}
+        <GoLiveBar
+          locationId={location.id}
+          status={location.status}
+          setupMissing={location.setup_missing}
+          role={session.role}
         />
         {/* Heading row: the name, with the listing-status label right next to
             it. For owner/admin the label is a small menu holding the status
@@ -249,11 +271,14 @@ export default async function PortalLocationPage({ params, searchParams }: Locat
         <p className="mt-1 text-sm text-brand-ink-muted">
           {location.address_line1}, {location.city}, {location.state} {location.postal_code}
         </p>
-        {newListing && <NewListingNotice mapPosition={newListing} />}
+        {newListing && location.status === "coming_soon" && <NewListingNotice mapPosition={newListing} />}
+        {justActivated && (
+          <ListingLiveNotice brandSlug={location.brand_slug} locationSlug={location.slug} />
+        )}
         {/* A listing in setup (coming_soon, right after Add restaurant/Add
-            location) says it's not live and shows the checklist + Activate. */}
+            location) says it's not live and shows the readable checklist; the
+            Activate button is in the sticky Go-live bar under the nav. */}
         <ListingSetupBanner
-          locationId={location.id}
           status={location.status}
           setupMissing={location.setup_missing}
           role={session.role}

@@ -93,6 +93,13 @@ export interface LocationWithManagers {
   managers: LocationManager[];
   managersError: string | null;
   todayStatus: ConsoleTodayStatus;
+  /**
+   * What's still missing before a listing in setup (`coming_soon`) can go live
+   * (`LocationDetail.setup_missing`), for the "Finish setup" call to action on
+   * the console row. `null` when unknown (not in setup, or the detail read
+   * failed) — the CTA then just omits the count.
+   */
+  setupMissing: string[] | null;
 }
 
 /** Full detail shape from GET /locations/{id}. */

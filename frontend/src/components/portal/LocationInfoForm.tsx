@@ -16,7 +16,9 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { updateLocationInfoAction } from "@/app/portal/locations/[id]/actions";
+import SetupReadyPrompt from "@/components/portal/SetupReadyPrompt";
 import { PencilIcon } from "@/components/ui/icons";
+import { canActivate } from "@/lib/portal/listingSetup";
 import { formatPhone } from "@/lib/formatPhone";
 import { phoneFieldError } from "@/lib/phone";
 import type { LocationDetail } from "@/types/location";
@@ -65,8 +67,17 @@ const inputClass =
   "mt-1.5 w-full rounded-brand-control border border-brand-border bg-white px-3 py-2.5 text-sm text-brand-ink placeholder:text-brand-placeholder focus:border-brand-accent focus:outline-none";
 const labelClass = "text-sm font-semibold text-brand-ink";
 
-export default function LocationInfoForm({ location }: { location: LocationDetail }) {
+export default function LocationInfoForm({
+  location,
+  role,
+}: {
+  location: LocationDetail;
+  /** Session role: only an owner/admin sees the inline "Activate listing" prompt. */
+  role: string;
+}) {
   const router = useRouter();
+  const readyPromptShown =
+    (role === "owner" || role === "admin") && canActivate(location.status, location.setup_missing);
   const [form, setForm] = useState<FormState>(toFormState(location));
   // Last-saved values: what "did the owner change the address / type new
   // coordinates" is measured against.
@@ -306,7 +317,7 @@ export default function LocationInfoForm({ location }: { location: LocationDetai
             {error}
           </p>
         )}
-        {saved && !error && !notice && (
+        {saved && !error && !notice && !readyPromptShown && (
           <p className="sm:col-span-2 rounded-brand-control bg-brand-success-bg px-3 py-2.5 text-sm text-brand-success">
             Saved.
           </p>
@@ -317,7 +328,7 @@ export default function LocationInfoForm({ location }: { location: LocationDetai
           </p>
         )}
 
-        <div className="sm:col-span-2">
+        <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
           <button
             type="submit"
             disabled={saving}
@@ -325,6 +336,17 @@ export default function LocationInfoForm({ location }: { location: LocationDetai
           >
             {saving ? "Saving..." : "Save details"}
           </button>
+          {/* This save just completed the setup checklist: offer Activate here. */}
+          {!error && (
+            <SetupReadyPrompt
+              locationId={location.id}
+              status={location.status}
+              setupMissing={location.setup_missing}
+              role={role}
+              saved={saved}
+              savedLabel="Details saved."
+            />
+          )}
         </div>
       </form>
     </section>
