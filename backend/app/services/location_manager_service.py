@@ -23,6 +23,7 @@ Extended 2026-09-22 (docs/DECISIONS.md "Symmetric manager-location cap",
 """
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 
 from sqlalchemy import func, select
@@ -40,6 +41,8 @@ from app.services import (
     hours_service,
     platform_config_service,
 )
+
+logger = logging.getLogger(__name__)
 
 # Fallback defaults / seed values only — see module docstring. The live
 # cap numbers are read from `platform_config` on every check.
@@ -229,10 +232,21 @@ async def assert_manager_belongs_to_same_owner(
         .limit(1)
     )
     if result.scalar_one_or_none() is not None:
+        # The precise reason stays server-side (logs; the machine-readable
+        # `code` below is for admin tooling). The caller is an OWNER, and
+        # telling them "this person already manages for another owner's
+        # account" would disclose another tenant's relationship. Product
+        # decision 2026-09-25: owners/managers get a generic message.
+        logger.warning(
+            "manager_different_owner: assignment blocked (owner_id=%s, manager_sub=%s): "
+            "manager already holds an active assignment under a different owner",
+            owner_id,
+            manager_sub,
+        )
         raise AppError(
             409,
-            "This person is already an active manager for a different restaurant owner's "
-            "account. A manager can only be assigned within one owner's account at a time.",
+            "We couldn't assign this person as a manager. Please check the email address, "
+            "or contact support if you think this is a mistake.",
             "manager_different_owner",
         )
 
