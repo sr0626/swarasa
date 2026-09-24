@@ -81,6 +81,17 @@ export interface SearchResultItem {
   cover_photo_thumbnail_url: string | null;
 }
 
+/**
+ * What the shared restaurant tile (components/listing/RestaurantCard.tsx)
+ * renders. A `SearchResultItem` satisfies it as-is; the only difference is
+ * that `nearest_location` may be null — a followed brand whose locations are
+ * all inactive (`GET /auth/me/follows`) has no address/hours/deal to show,
+ * and the tile then simply omits those rows.
+ */
+export type RestaurantCardItem = Omit<SearchResultItem, "nearest_location"> & {
+  nearest_location: SearchNearestLocation | null;
+};
+
 export interface SearchResponse {
   results: SearchResultItem[];
   page: number;

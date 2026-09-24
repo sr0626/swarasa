@@ -1831,6 +1831,15 @@ Response: `200`, brand summaries only (not the full `RestaurantOut` shape
 {
   "results": [
     { "brand_id": 123, "name": "Spice Garden", "slug": "spice-garden-irving", "is_claimed": true, "followed_at": "2026-09-16T10:00:00Z",
+      "cuisine_tags": [ { "id": 4, "name": "hyderabadi", "display_name": "Hyderabadi", "category": "regional" } ],
+      "nearest_location": {
+        "location_id": 456, "distance_mi": null,
+        "address_line1": "123 Main St", "city": "Irving", "state": "TX", "postal_code": "75038",
+        "phone": "9725550100", "is_verified": true, "is_paid": false,
+        "is_open_now": true, "open_time": "10:00:00", "close_time": "22:00:00", "is_closed": false,
+        "has_deal_today": true },
+      "location_count_nearby": 2,
+      "cover_photo_url": "https://cdn.example.com/...jpg", "cover_photo_thumbnail_url": "https://cdn.example.com/...-thumb.jpg",
       "has_deal_today": true, "deal_titles_today": ["Lunch buffet $9.99", "Kids eat free"] }
   ],
   "page": 1,
@@ -1852,6 +1861,36 @@ registered_user-only, a role that may view deal content (same gate as
 `GET /locations/{id}` `deals_today`); descriptions are not included — the
 restaurant page has the full text. Computed for the whole page in two extra
 queries (locations, then one bulk deal read), never per brand.
+
+Search-result-shaped items (additive, added 2026-09-24): each item also carries
+`cuisine_tags`, `nearest_location`, `location_count_nearby`, `cover_photo_url`
+and `cover_photo_thumbnail_url`, with the same field shapes as `GET /search`
+(`SearchResultOut` / `NearestLocationOut`), so the favourites grid renders the
+exact same tile component as the search results and the homepage (address as a
+Google Maps link, today's hours pill, cuisines, cover photo, Featured ribbon,
+deal badge, "N locations"). `followed_at`, `has_deal_today` and
+`deal_titles_today` are unchanged.
+
+Follows are brand-level but deals (and addresses/hours/cover photos) are per
+location, and same-name restaurants at different locations run different
+deals. So `nearest_location` is the ONE location the tile represents:
+- when the brand has a deal today at one or more `active` locations (brand not
+  soft-deleted): the first of them in stable order (lowest location id), so the
+  tile's address, hours and map link belong to the location that runs the deal
+  (`nearest_location.has_deal_today` is then true);
+- otherwise the brand's primary display location: its first `active` location
+  by id — the same one the restaurant detail page shows first
+  (`GET /restaurants/{id}/locations` orders by id);
+- `null` when the brand has no `active` location (the tile then omits the
+  address/hours/badge rows).
+
+`nearest_location.distance_mi` is always `null` here (there is no viewer
+position). `location_count_nearby` is the brand's total number of `active`
+locations (`0` when none), used for the tile's "N locations" chip. Only public
+listing data is added (no new privacy surface). Everything is batched for the
+whole page — one query each for locations, cuisine tags, today's hours and cover
+photos on top of the follows and deals queries — so the query count is constant
+regardless of page size.
 
 ---
 

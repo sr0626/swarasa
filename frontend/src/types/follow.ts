@@ -1,17 +1,24 @@
 // Types for `user_follow` — docs/API_CONTRACTS.md "Follows (`user_follow`)".
-// No frontend consumer existed before this page (checked: no other file in
-// frontend/src referenced follows) despite the backend (PR #66) being Done.
 
-/** One row of `GET /auth/me/follows` — a brand summary, not a full listing. */
-export interface FollowedBrand {
-  brand_id: number;
-  name: string;
-  slug: string;
-  is_claimed: boolean;
+import type { RestaurantCardItem } from "./search";
+
+/**
+ * One row of `GET /auth/me/follows`. Search-result-shaped on purpose
+ * (`RestaurantCardItem`) so the favourites grid renders the very same tile
+ * as `/search` (components/listing/RestaurantCard.tsx).
+ *
+ * `nearest_location` is the ONE location the tile represents: the first
+ * active location with a deal today, else the first active location (the one
+ * the restaurant page shows first); `distance_mi` is always null (no viewer
+ * position); null when the brand has no active location.
+ * `location_count_nearby` is the brand's total number of active locations.
+ */
+export interface FollowedBrand extends RestaurantCardItem {
   followed_at: string;
   /** True when any of the brand's active locations has a deal today. */
   has_deal_today: boolean;
-  /** Up to 2 of today's deal titles (registered-user-only endpoint). */
+  /** Up to 2 of today's deal titles (registered-user-only endpoint). The
+   * tile shows only the badge, so nothing renders these today. */
   deal_titles_today: string[];
 }
 
