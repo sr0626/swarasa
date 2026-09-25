@@ -130,6 +130,17 @@ Notes:
   card's "Open today 11am–9pm" / "Closed today" label. All `null` =
   hours unknown for today (the card shows no label). `is_closed: true`
   => `open_time`/`close_time` are `null`. Times are `HH:MM:SS`.
+- `nearest_location.opens_later_today` (added 2026-09-24, additive) —
+  server-computed in the location's timezone: `true` when `is_open_now` is
+  `false` and "now" is BEFORE today's opening time, `false` when already past
+  closing, `null` when open now / closed all day / hours unknown. With
+  `is_open_now` + `open_time`/`close_time`/`is_closed` it drives the shared
+  pill copy: "Open now · until 10pm" / "Closed now · opens 10am" /
+  "Closed now" / "Closed today" (**only** when `is_closed` is true, i.e.
+  closed the entire day). The browser clock is never used; results are
+  cached at most 60s (`revalidate: 60`), so the label can lag a boundary
+  by up to a minute. Also on the follow-list `nearest_location` and the
+  brand-landing cards (`BrandLocationCardOut`).
 - Default sort: `is_paid` desc, then `is_verified` desc, then
   `distance_mi` asc, then `name` asc (DECISIONS.md "Search default sort").
   Paid results carry `nearest_location.is_paid: true`, which the client
@@ -715,6 +726,13 @@ location (see `frontend/src/lib/api/locations.ts` `getLocationById`'s
   frontend should treat the same as `is_closed: null`).
 - `is_open_now` is the computed display status (see `/search` notes) —
   `null` when the current day's `is_closed` is `null` (hours unknown).
+- `today_open_time` / `today_close_time` / `today_is_closed` /
+  `opens_later_today` (added 2026-09-24, additive) — today's hours in the
+  location's own timezone, computed server-side with the same rules as
+  `is_open_now` and the `/search` card (see `nearest_location.
+  opens_later_today`): they feed the "Open now · until 10pm" / "Closed now ·
+  opens 10am" / "Closed now" / "Closed today" pill on the Details card. All
+  `null` = unknown; `today_is_closed: true` = closed the whole day.
 - The menu is **not** in this response — read it from the separate public
   `GET /locations/{id}/menu` (see "Menu (`menu_section`, `menu_item`)").
 - `cover_photo_url` — the `restaurant_photo` row for this location with
@@ -881,6 +899,18 @@ null` and `specialties: string[] | null`. Does **not** accept `is_paid`, `paid_u
 `stripe_sub_item_id` — those are Stripe-webhook/admin-only writes
 (root CLAUDE.md "Stripe webhook sets is_paid... on payment
 success/failure"; not a field an owner or manager can set directly).
+
+**`latitude` / `longitude` are auto-generated (2026-09-24).** They are
+derived from the address (geocoded in the frontend's Next server action —
+the API Lambda has no internet — on every address change) and are never
+hand-edited in the UI. Accordingly, an **owner or manager** may send
+`latitude`/`longitude` on this route only **together with the full address
+block** (`address_line1`, `city`, `state`, `postal_code` all present and
+non-empty — the shape that server action sends after re-geocoding); a bare
+coordinate edit is rejected `422` with `code: "coordinates_not_editable"`.
+An **admin** may still set coordinates directly. If geocoding fails the
+action sends the address without coordinates, so the stored position is
+kept and the owner sees a gentle notice.
 
 Response: `200`, same shape as `GET /locations/{id}`.
 
@@ -2677,7 +2707,14 @@ Response: `200`
       "actor_label": "manager@example.com",
       "actor_resolved": true,
       "summary": "Location phone number updated",
-      "created_at": "2026-09-22T14:03:11Z"
+      "created_at": "2026-09-22T14:03:11Z",
+      "brand_id": 12, "restaurant_name": "Spice Route",
+      "location_id": 31, "location_name": "Plano",
+      "timezone": "America/Chicago",
+      "actor_email": "manager@example.com", "actor_role_label": "Manager",
+      "changes": [
+        { "field": "phone", "label": "Phone", "old": "(972) 555-0142", "new": "(972) 555-0199" }
+      ]
     },
     {
       "id": 9099,
@@ -2696,6 +2733,36 @@ Response: `200`
 }
 ```
 Most-recent-first (`created_at desc`, `id desc` tiebreak).
+
+**Detail fields (added 2026-09-24, all additive — nothing above changed).**
+The console renders each event as a table (cards on a phone): When /
+Restaurant & location / What changed / Previous / New / Updated by.
+- Where: `brand_id`, `restaurant_name`, `location_id`, `location_name` (the
+  location's own name, else "street, city"), each `null` when the entity no
+  longer exists (a permanently deleted location falls back to the audit
+  snapshot's address). `timezone` — the IANA zone `created_at` should be
+  displayed in (the location's; brand-level events use `America/Chicago`).
+- Who: `actor_email` (also set for "You"; `null` when unresolvable),
+  `actor_role_label` (`"Owner"` | `"Manager"` | `"Platform admin"`).
+  `actor_label` keeps its meaning (`"You"`, the email, or — when no email can
+  be resolved — a role fallback such as `"a manager"` / `"a platform admin"`;
+  it is **no longer** a role + truncated id). Emails resolve in one batched
+  `owner_account` query, then best-effort Cognito once per distinct sub.
+- What: `changes[]` — one entry per changed thing, `{ field, label, old,
+  new }`, values already friendly (`status`: `active` -> "Live",
+  `owner_deactivated` -> "Hidden", `coming_soon` -> "Coming soon",
+  `closed_pending_reopen` -> "Closed"; booleans "Yes"/"No"; phones
+  `(972) 555-0142`; lists comma-joined). Grouping: the address columns ->
+  one "Address" change; latitude+longitude -> one "Map position"; hours ->
+  one "Hours (Monday)" change per differing day; manager assignment ->
+  "Manager access (email)" Assigned/Revoked. `old`/`new` `null` = no value.
+  Empty `[]` for a create/delete (or an unchanged save): show `summary`.
+  Derived from `audit_log.old_val/new_val` by `app/services/audit_diff.py`.
+  `PUT /locations/{id}/hours` now audits per-day `hours` snapshots
+  (`"HH:MM-HH:MM" | "closed" | "unknown"`) alongside `hours_updated_days`;
+  older hours rows only know which days were saved ("Hours: Updated: Mon").
+- All per-page lookups are batched (a fixed number of queries regardless of
+  page size). Role scoping is unchanged.
 
 **Scoping** (see `backend/app/services/audit_query_service.py` module
 docstring for the full reasoning): for an **owner**, a row is included
