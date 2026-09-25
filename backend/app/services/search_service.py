@@ -25,12 +25,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from geoalchemy2.functions import ST_DWithin, ST_Distance, ST_MakePoint, ST_SetSRID
-from sqlalchemy import func, or_, select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.restaurant_brand import RestaurantBrand
-from app.models.restaurant_cuisine import RestaurantCuisine
-from app.models.cuisine_tag import CuisineTag
 from app.models.restaurant_location import RestaurantLocation
 from app.schemas.cuisine import CuisineTagOut
 from app.schemas.search import NearestLocationOut, SearchResultOut
@@ -131,20 +129,12 @@ async def _fetch_candidates(
         matching_brands = select(RestaurantBrand.id).where(
             RestaurantBrand.name.ilike(pattern, escape="\\")
         )
-        matching_tag_brands = (
-            select(RestaurantCuisine.brand_id)
-            .join(CuisineTag, CuisineTag.id == RestaurantCuisine.cuisine_tag_id)
-            .where(
-                or_(
-                    func.lower(CuisineTag.display_name) == needle.lower(),
-                    func.lower(CuisineTag.name) == needle.lower(),
-                )
-            )
-        )
+        # A name hit keeps every location of the brand; a TAG hit matches only
+        # the locations that carry the tag (tags are per location).
         stmt = stmt.where(
             or_(
                 RestaurantLocation.brand_id.in_(matching_brands),
-                RestaurantLocation.brand_id.in_(matching_tag_brands),
+                cuisine_service.location_has_tag_named(needle),
             )
         )
     else:
@@ -154,18 +144,15 @@ async def _fetch_candidates(
 
     # cuisine[]/dietary[]/type[] are independent facets — AND across
     # provided facets, OR within a facet's own tag list (docs/API_CONTRACTS.md
-    # "GET /search" query params). All join through the brand-level
-    # restaurant_cuisine table (tags are brand-level, not per-location —
-    # docs/DATA_MODEL.md "restaurant_cuisine" judgment call).
+    # "GET /search" query params). Tags are PER LOCATION (`location_cuisine`),
+    # so the filter is evaluated on each CANDIDATE LOCATION: a location only
+    # survives if it itself carries a matching tag per facet. A sibling branch
+    # of the same brand with different tags is not a candidate — so it is
+    # neither the card's `nearest_location` nor counted in
+    # `location_count_nearby` for that filter.
     for names in (cuisine, dietary, type_):
         if names:
-            stmt = stmt.where(
-                RestaurantLocation.brand_id.in_(
-                    select(RestaurantCuisine.brand_id)
-                    .join(CuisineTag, CuisineTag.id == RestaurantCuisine.cuisine_tag_id)
-                    .where(CuisineTag.name.in_(names))
-                )
-            )
+            stmt = stmt.where(cuisine_service.location_has_any_tag(names))
 
     result = await db.execute(stmt)
     return [_CandidateRow(**row._mapping) for row in result.all()]
@@ -261,8 +248,9 @@ async def search(
     end = start + pagination.page_size
     page_cards = cards[start:end]
 
-    tags_by_brand = await cuisine_service.get_brand_cuisine_tags_bulk(
-        db, [c.brand.id for c in page_cards]
+    # Each card's tags are its NEAREST location's own tags (not the brand's).
+    tags_by_location = await cuisine_service.get_location_cuisine_tags_bulk(
+        db, [c.nearest.location_id for c in page_cards]
     )
 
     results: list[SearchResultOut] = []
@@ -279,7 +267,8 @@ async def search(
                 slug=card.brand.slug,
                 is_claimed=card.brand.is_claimed,
                 cuisine_tags=[
-                    CuisineTagOut.model_validate(t) for t in tags_by_brand.get(card.brand.id, [])
+                    CuisineTagOut.model_validate(t)
+                    for t in tags_by_location.get(nearest.location_id, [])
                 ],
                 nearest_location=NearestLocationOut(
                     location_id=nearest.location_id,

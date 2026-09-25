@@ -10,8 +10,10 @@ import Link from "next/link";
 import TopBar from "@/components/home/TopBar";
 import AddLocationForm from "@/components/portal/AddLocationForm";
 import InfoPanel from "@/components/ui/InfoPanel";
-import { getRestaurantById } from "@/lib/api/restaurants";
+import { getCuisineTags } from "@/lib/api/cuisine";
+import { getRestaurantById, getRestaurantLocations } from "@/lib/api/restaurants";
 import { requireSession } from "@/lib/auth/guards";
+import type { CuisineTag } from "@/types/cuisine";
 import type { RestaurantBrand } from "@/types/restaurant";
 
 export const metadata: Metadata = {
@@ -48,6 +50,27 @@ export default async function AddLocationPage({ searchParams }: AddLocationPageP
     }
   }
 
+  // Tags are per location: the picker is pre-filled with the tags of the brand's FIRST
+  // location (lowest id — the same one the backend copies from), so the owner doesn't retype
+  // them. Best-effort: on any failure the picker is simply hidden and the backend still
+  // copies the first location's tags itself.
+  let cuisineTags: CuisineTag[] = [];
+  let initialTagIds: number[] = [];
+  if (brand !== null) {
+    try {
+      const [all, locations] = await Promise.all([
+        getCuisineTags(),
+        getRestaurantLocations(brand.id, { page_size: 100 }, session.accessToken),
+      ]);
+      cuisineTags = all;
+      const first = [...locations.results].sort((a, b) => a.id - b.id)[0];
+      initialTagIds = first ? first.cuisine_tags.map((tag) => tag.id) : [];
+    } catch {
+      cuisineTags = [];
+      initialTagIds = [];
+    }
+  }
+
   return (
     <main className="min-h-screen bg-brand-bg">
       <TopBar />
@@ -72,10 +95,16 @@ export default async function AddLocationPage({ searchParams }: AddLocationPageP
             </h1>
             <p className="mt-1 text-sm text-brand-ink-muted">
               A second branch, food truck or new address of the same restaurant — it shares this
-              restaurant&rsquo;s name, cuisine and owner.
+              restaurant&rsquo;s name and owner; its cuisine tags can differ.
             </p>
             <div className="mt-6 rounded-brand-card border border-brand-border bg-white p-5 shadow-brand-card sm:p-6">
-              <AddLocationForm brandId={brand.id} brandName={brand.name} cancelHref={home.href} />
+              <AddLocationForm
+                brandId={brand.id}
+                brandName={brand.name}
+                cancelHref={home.href}
+                cuisineTags={cuisineTags}
+                initialTagIds={initialTagIds}
+              />
             </div>
           </>
         )}

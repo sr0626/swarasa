@@ -6,12 +6,14 @@ import type {
   AssignLocationManagerInput,
   CreateLocationInput,
   CreatePhotoInput,
+  LocationCuisineTagsResponse,
   LocationDetail,
   LocationManager,
   LocationManagersResponse,
   Photo,
   PhotoUploadUrlInput,
   PhotoUploadUrlResponse,
+  UpdateLocationCuisineTagsInput,
   UpdateLocationHoursInput,
   UpdateLocationHoursResponse,
   UpdateLocationInput,
@@ -86,6 +88,23 @@ export async function updateLocation(
   return apiFetch<LocationDetail>(
     `/locations/${id}`,
     { method: "PATCH", body: JSON.stringify(input) },
+    { accessToken }
+  );
+}
+
+/**
+ * PUT /locations/{id}/cuisine-tags — auth: owner (owns parent brand), assigned
+ * manager, or admin. Full replace of THIS location's cuisine/dietary tags
+ * (tags are per location; docs/API_CONTRACTS.md "PUT /locations/{id}/cuisine-tags").
+ */
+export async function replaceLocationCuisineTags(
+  id: number,
+  input: UpdateLocationCuisineTagsInput,
+  accessToken: string
+): Promise<LocationCuisineTagsResponse> {
+  return apiFetch<LocationCuisineTagsResponse>(
+    `/locations/${id}/cuisine-tags`,
+    { method: "PUT", body: JSON.stringify(input) },
     { accessToken }
   );
 }

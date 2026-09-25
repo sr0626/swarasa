@@ -7,6 +7,42 @@
 > the migrations in `backend/migrations/versions/`. Backfilling the other
 > entities is a separate docs task.
 
+## location_cuisine (migration `0016_location_cuisine`) — tags are per location
+
+Model: `backend/app/models/location_cuisine.py`. Join table
+`restaurant_location` <-> `cuisine_tag`:
+`(location_id bigint FK ON DELETE CASCADE, cuisine_tag_id bigint FK ON DELETE
+CASCADE, created_at)`, **composite primary key** `(location_id, cuisine_tag_id)`,
+plus `ix_location_cuisine_cuisine_tag_id` for the tag -> locations direction
+`GET /search` filters on.
+
+Why: branches of one restaurant differ — a vegetarian branch, a nut-free
+kitchen, regional menus, one branch without breakfast — so the Nut Free /
+Andhra / Breakfast Menu style tags belong to the **location**, not the brand
+(`docs/DECISIONS.md` "Cuisine/dietary tags are per location"). A brand has no
+tags of its own: where a brand-level summary is still shown (the brand payload,
+admin listings, JSON-LD) its `cuisine_tags` is the **union** of its locations'
+tags (public: active locations only; owner/admin views: all locations).
+
+Migration: creates the table and **backfills** it in one transaction —
+every existing location (every status, soft-deleted brands included) gets its
+brand's tags via an idempotent `INSERT ... SELECT ... ON CONFLICT DO NOTHING`
+(self-contained SQL in the migration, exercised by
+`tests/unit/test_location_cuisine_migration.py`). Downgrade folds the union of
+the per-location tags back into `restaurant_cuisine` and drops the new table.
+
+New locations: `POST /locations` starts a new location with a **copy of the tags
+of the brand's first existing location** (lowest id; empty for a brand's first
+location) unless the request sends `cuisine_tag_ids` explicitly.
+
+## restaurant_cuisine — DEPRECATED (superseded by `location_cuisine`)
+
+The old brand-level join `(brand_id, cuisine_tag_id)`. **Kept in place, unread
+and unwritten** by any application code after migration 0016 (so the migration
+is safely reversible and an app rollback still finds its data); the API never
+reads from it. A later "contract" migration will drop it once the per-location
+rollout has soaked. Do not add new usages.
+
 ## restaurant_location.slug
 
 Migration `0014_location_slug`. Model: `backend/app/models/restaurant_location.py`.

@@ -36,6 +36,8 @@ export const optionalWebsiteSchema = z
     return withScheme;
   });
 
+// `cuisine_tag_ids` is a FORM field of the combined Add-restaurant flow only: the tags
+// belong to the first LOCATION (POST /locations), not the brand (POST /restaurants).
 export const createRestaurantSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(200),
   description: z.string().trim().min(1, "Description is required").max(2000),
@@ -70,6 +72,9 @@ export const addRestaurantSchema = createRestaurantSchema.extend({
 export const addLocationSchema = z.object({
   ...locationAddressShape,
   phone: requiredPhoneSchema,
+  // Tags for the new branch (pre-filled with the first location's; empty allowed).
+  // Omitted -> the backend copies the brand's first location's tags itself.
+  cuisine_tag_ids: z.array(z.number().int().positive()).optional(),
 });
 
 export type AddLocationFormInput = z.input<typeof addLocationSchema>;

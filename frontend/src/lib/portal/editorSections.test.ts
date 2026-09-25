@@ -7,13 +7,13 @@ import { statusMenuActions } from "./locationStatusActions.ts";
 
 test("owner sees every section, Deals then Hours first, Managers last", () => {
   const ids = editorSectionsForRole("owner").map((s) => s.id);
-  assert.deepEqual(ids, ["deals", "hours", "menu", "photos", "about", "info", "managers"]);
+  assert.deepEqual(ids, ["deals", "hours", "menu", "photos", "about", "tags", "info", "managers"]);
 });
 
 test("admin and manager do not get the owner-only Managers link", () => {
   for (const role of ["admin", "manager"]) {
     const ids = editorSectionsForRole(role).map((s) => s.id);
-    assert.deepEqual(ids, ["deals", "hours", "menu", "photos", "about", "info"]);
+    assert.deepEqual(ids, ["deals", "hours", "menu", "photos", "about", "tags", "info"]);
   }
 });
 

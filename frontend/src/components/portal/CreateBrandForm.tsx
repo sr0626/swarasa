@@ -1,7 +1,8 @@
 "use client";
 
 // "Add your restaurant" form — creates the restaurant brand AND its first
-// location in one submit (POST /restaurants then POST /locations, chained
+// location in one submit (the cuisine tags picked here belong to that first
+// LOCATION, not the brand) (POST /restaurants then POST /locations, chained
 // in app/portal/brands/new/actions.ts, which also geocodes the address
 // server-side so the listing is visible to geo search).
 // Backs app/portal/brands/new/page.tsx, the landing spot for the site
@@ -22,36 +23,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { addRestaurantAction } from "@/app/portal/brands/new/actions";
+import CuisineTagPicker from "@/components/portal/CuisineTagPicker";
 import { Field, LocationFields, labelClass } from "@/components/portal/formFields";
 import { fieldErrorsFromZod, type FieldErrors } from "@/lib/validation/fieldErrors";
 import { addRestaurantSchema } from "@/lib/validation/restaurant";
-import type { CuisineCategory, CuisineTag } from "@/types/cuisine";
-
-const CATEGORY_LABEL: Record<CuisineCategory, string> = {
-  regional: "Regional cuisine",
-  dietary: "Dietary",
-  type: "Restaurant type",
-  signature: "Signature dishes",
-  dining_time: "Dining time",
-};
-
-const CATEGORY_ORDER: CuisineCategory[] = [
-  "regional",
-  "type",
-  "dietary",
-  "signature",
-  "dining_time",
-];
-
-function groupByCategory(tags: CuisineTag[]): Map<CuisineCategory, CuisineTag[]> {
-  const groups = new Map<CuisineCategory, CuisineTag[]>();
-  for (const tag of tags) {
-    const list = groups.get(tag.category) ?? [];
-    list.push(tag);
-    groups.set(tag.category, list);
-  }
-  return groups;
-}
+import type { CuisineTag } from "@/types/cuisine";
 
 interface FormValues {
   name: string;
@@ -87,7 +63,6 @@ export default function CreateBrandForm({ cuisineTags }: { cuisineTags: CuisineT
   // Set once the brand exists but its location doesn't yet (partial failure).
   const [createdBrandId, setCreatedBrandId] = useState<number | null>(null);
 
-  const groups = groupByCategory(cuisineTags);
   const brandLocked = createdBrandId !== null;
 
   function set<K extends keyof FormValues>(key: K, value: FormValues[K]) {
@@ -246,42 +221,23 @@ export default function CreateBrandForm({ cuisineTags }: { cuisineTags: CuisineT
 
         <div>
           <p id="cuisine-tags-heading" tabIndex={-1} className={`${labelClass} focus:outline-none`}>
-            Cuisine tags
+            Cuisine &amp; dietary tags
+          </p>
+          <p className="mt-1 text-xs text-brand-ink-subtle">
+            These describe this first location. Other branches you add later can have their own.
           </p>
           {cuisineTags.length === 0 ? (
             <p className="mt-1.5 text-sm text-brand-ink-muted">
-              Cuisine tags aren&rsquo;t available right now — you can add them later from your business account.
+              Cuisine tags aren&rsquo;t available right now — you can add them later from the location&rsquo;s page.
             </p>
           ) : (
-            <div className="mt-2 flex flex-col gap-4">
-              {CATEGORY_ORDER.filter((category) => groups.has(category)).map((category) => (
-                <div key={category}>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-brand-ink-subtle">
-                    {CATEGORY_LABEL[category]}
-                  </p>
-                  <div className="mt-1.5 flex flex-wrap gap-2">
-                    {groups.get(category)!.map((tag) => {
-                      const selected = selectedTagIds.has(tag.id);
-                      return (
-                        <button
-                          key={tag.id}
-                          type="button"
-                          aria-pressed={selected}
-                          disabled={brandLocked}
-                          onClick={() => toggleTag(tag.id)}
-                          className={`min-h-[44px] rounded-brand-pill px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed ${
-                            selected
-                              ? "bg-brand-accent text-white"
-                              : "bg-brand-chip text-brand-chip-ink hover:bg-brand-border"
-                          } ${brandLocked && !selected ? "opacity-50" : ""}`}
-                        >
-                          {tag.display_name}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
+            <div className="mt-2">
+              <CuisineTagPicker
+                tags={cuisineTags}
+                selectedIds={selectedTagIds}
+                onToggle={toggleTag}
+                disabled={brandLocked}
+              />
             </div>
           )}
           {fieldErrors.cuisine_tag_ids && (

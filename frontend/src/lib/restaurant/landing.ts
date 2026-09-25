@@ -20,7 +20,7 @@ export function landingTitle(
 }
 
 export function cardItemForLocation(
-  restaurant: Pick<RestaurantPublic, "id" | "name" | "slug" | "is_claimed" | "cuisine_tags">,
+  restaurant: Pick<RestaurantPublic, "id" | "name" | "slug" | "is_claimed">,
   card: BrandLocationCard
 ): RestaurantCardItem {
   return {
@@ -28,7 +28,8 @@ export function cardItemForLocation(
     name: landingTitle(restaurant.name, card),
     slug: restaurant.slug,
     is_claimed: restaurant.is_claimed,
-    cuisine_tags: restaurant.cuisine_tags,
+    // Each branch shows ITS OWN tags (tags are per location), not the brand's union.
+    cuisine_tags: card.cuisine_tags ?? [],
     nearest_location: card,
     location_count_nearby: 1,
     cover_photo_url: card.cover_photo_url,

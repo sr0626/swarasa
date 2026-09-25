@@ -23,6 +23,12 @@ export interface RestaurantBrand {
   has_pending_claim: boolean;
   /** null for unclaimed listings — frontend renders a "Claim this listing" CTA. */
   owner_id: number | null;
+  /**
+   * DERIVED summary — tags are per LOCATION (docs/DECISIONS.md "Cuisine/dietary tags
+   * are per location"); a brand has none of its own. This is the union of its locations'
+   * tags (public: active locations only; owner/admin lists: all). For a specific branch
+   * use that location's own `cuisine_tags`.
+   */
   cuisine_tags: CuisineTag[];
   location_count: number;
   /**
@@ -50,7 +56,8 @@ export interface CreateRestaurantInput {
   name: string;
   description: string;
   website?: string | null;
-  cuisine_tag_ids: number[];
+  // (No `cuisine_tag_ids`: tags are per location — send them on POST /locations or
+  // PUT /locations/{id}/cuisine-tags.)
 }
 
 /** Body for PATCH /restaurants/{id}. Any subset of the create fields. */
@@ -67,6 +74,8 @@ export interface BrandLocationCard extends SearchNearestLocation {
   location_name: string | null;
   cover_photo_url: string | null;
   cover_photo_thumbnail_url: string | null;
+  /** THIS location's own cuisine/dietary tags (each branch shows its own). */
+  cuisine_tags: CuisineTag[];
 }
 
 /** Response of `GET /restaurants/by-slug/{brand_slug}`: the brand + its ACTIVE locations

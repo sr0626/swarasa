@@ -16,11 +16,13 @@ from app.models.location_manager import LocationManager
 from app.models.location_reopen_request import LocationReopenRequest
 from app.models.restaurant_brand import RestaurantBrand
 from app.models.restaurant_location import RestaurantLocation
+from app.schemas.cuisine import CuisineTagOut
 from app.schemas.hours import HourEntryIn, HoursResponse
 from app.schemas.location import (
     GalleryPhotoOut,
     HoursOut,
     LocationCreate,
+    LocationCuisineTagsResponse,
     LocationOut,
     LocationUpdate,
 )
@@ -29,6 +31,7 @@ from app.schemas.restaurant import LocationListResponse, LocationSummaryOut
 from app.services import (
     audit_service,
     auth_service,
+    cuisine_service,
     deal_service,
     hours_service,
     listing_readiness,
@@ -70,6 +73,7 @@ async def _location_to_out(
 
     cover = await photo_service.get_cover_photo(db, location.id)
     gallery = await photo_service.get_gallery_photos(db, location.id, location.is_paid)
+    tags = await cuisine_service.get_location_cuisine_tags(db, location.id)
 
     # Deals — public "fact" (has_deal_today) vs content-gated "detail"
     # (deals_today). See app/services/deal_service.py module docstring and
@@ -121,6 +125,7 @@ async def _location_to_out(
             if location.status == RestaurantLocation.STATUS_COMING_SOON
             else []
         ),
+        cuisine_tags=[CuisineTagOut.model_validate(t) for t in tags],
         is_open_now=is_open_now,
         hours=[
             HoursOut(
@@ -303,6 +308,19 @@ async def create_location(db: AsyncSession, body: LocationCreate, current_user) 
     if body.latitude is not None and body.longitude is not None:
         await _sync_geom(db, location.id, body.latitude, body.longitude)
 
+    # Tags are per location. Explicit ids win (`[]` = none); omitted/null =
+    # start from a copy of the brand's first existing location's tags (empty
+    # for the brand's first location) so an owner adding a branch doesn't
+    # retype them.
+    if body.cuisine_tag_ids is None:
+        tag_names = await cuisine_service.copy_first_location_tags(
+            db, body.brand_id, location.id
+        )
+    else:
+        _, tag_names = await cuisine_service.set_location_cuisine_tags(
+            db, location.id, body.cuisine_tag_ids
+        )
+
     await audit_service.log(
         db,
         table_name="restaurant_location",
@@ -317,6 +335,7 @@ async def create_location(db: AsyncSession, body: LocationCreate, current_user) 
             "city": location.city,
             "state": location.state,
             "status": location.status,
+            "cuisine_tags": tag_names,
         },
     )
     await db.commit()
@@ -400,6 +419,34 @@ async def update_location(
     # make `get_location`'s own visibility check 404 its own successful
     # write's response.
     return await get_location(db, location.id, current_user)
+
+
+async def replace_location_cuisine_tags(
+    db: AsyncSession, location_id: int, tag_ids: list[int], current_user
+) -> LocationCuisineTagsResponse:
+    """`PUT /locations/{id}/cuisine-tags` — full replace of THIS location's
+    tags only (never its siblings'). Permission is enforced by the route's
+    `require_location_write_access` (owner of the brand / assigned manager /
+    admin). Audited as a `restaurant_location` update with the before/after
+    tag slugs. Works on a hidden (setup) location too — the owner fills tags
+    in while finishing setup."""
+    location = await get_location_or_404(db, location_id)
+    old_names, new_names = await cuisine_service.set_location_cuisine_tags(
+        db, location.id, tag_ids
+    )
+    await audit_service.log(
+        db,
+        table_name="restaurant_location",
+        record_id=location.id,
+        action="update",
+        actor_id=current_user.cognito_sub,
+        actor_role=current_user.role,
+        old_val={"cuisine_tags": old_names},
+        new_val={"cuisine_tags": new_names},
+    )
+    await db.commit()
+    tags = await cuisine_service.get_location_cuisine_tags(db, location.id)
+    return LocationCuisineTagsResponse(results=[CuisineTagOut.model_validate(t) for t in tags])
 
 
 async def delete_location(db: AsyncSession, location_id: int, current_user) -> None:
@@ -705,6 +752,9 @@ async def list_locations_for_brand(
         )
     ).scalars().all()
 
+    tags_by_location = await cuisine_service.get_location_cuisine_tags_bulk(
+        db, [row.id for row in rows]
+    )
     results = []
     for row in rows:
         is_open_now = await hours_service.is_open_now_for_location(db, row.id, row.timezone)
@@ -724,6 +774,9 @@ async def list_locations_for_brand(
                 status=row.status,
                 is_active=row.is_active,
                 is_open_now=is_open_now,
+                cuisine_tags=[
+                    CuisineTagOut.model_validate(t) for t in tags_by_location.get(row.id, [])
+                ],
             )
         )
 

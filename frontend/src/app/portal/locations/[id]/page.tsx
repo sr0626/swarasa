@@ -15,11 +15,13 @@ import { Fragment, type ReactNode } from "react";
 import Link from "next/link";
 import { requireSession } from "@/lib/auth/guards";
 import TopBar from "@/components/home/TopBar";
+import { getCuisineTags } from "@/lib/api/cuisine";
 import { getLocationById, getLocationManagers } from "@/lib/api/locations";
 import { getLocationDeals } from "@/lib/api/deals";
 import { getLocationMenuForManagement } from "@/lib/api/menu";
 import LocationInfoForm from "@/components/portal/LocationInfoForm";
 import LocationAboutForm from "@/components/portal/LocationAboutForm";
+import LocationCuisineTagsForm from "@/components/portal/LocationCuisineTagsForm";
 import LocationHoursEditor from "@/components/portal/LocationHoursEditor";
 import LocationDealsManager from "@/components/portal/LocationDealsManager";
 import LocationMenuManager from "@/components/portal/LocationMenuManager";
@@ -34,6 +36,7 @@ import { SECTION_ANCHOR_CLASS } from "@/components/portal/editorSectionAnchor";
 import { editorSectionsForRole, type EditorSection } from "@/lib/portal/editorSections";
 import NewListingNotice, { parseNewListingParam } from "@/components/portal/NewListingNotice";
 import InfoPanel from "@/components/ui/InfoPanel";
+import type { CuisineTag } from "@/types/cuisine";
 import type { Deal } from "@/types/deal";
 import type { LocationDetail, LocationManager } from "@/types/location";
 import type { MenuResponse } from "@/types/menu";
@@ -146,6 +149,15 @@ export default async function PortalLocationPage({ params, searchParams }: Locat
     menu = null;
   }
 
+  // The tag taxonomy for this location's "Cuisine & dietary tags" panel. A load failure
+  // shows the panel's own "try again" note rather than hiding the section.
+  let allTags: CuisineTag[] = [];
+  try {
+    allTags = await getCuisineTags();
+  } catch {
+    allTags = [];
+  }
+
   const isOwner = session.role === "owner";
   const isAdmin = session.role === "admin";
   const back = backTarget(session.role);
@@ -157,7 +169,7 @@ export default async function PortalLocationPage({ params, searchParams }: Locat
     (isOwner || isAdmin) && location.status === "active" && parseLiveParam(searchParams?.live);
 
   // Each panel, keyed by section id. Order and visibility come from
-  // editorSectionsForRole (Deals, Hours, Menu, Photos, About, Info, then the
+  // editorSectionsForRole (Deals, Hours, Menu, Photos, About, Tags, Info, then the
   // owner-only Managers), so the jump-link row and the page share one source.
   // Panels are independent forms with their own state -- nothing depends on
   // DOM order. `deals`/`menu` carry their own ids (also the /deals and /menu
@@ -219,6 +231,14 @@ export default async function PortalLocationPage({ params, searchParams }: Locat
     about: anchored(
       sectionById("about"),
       <LocationAboutForm locationId={location.id} about={location.about} specialties={location.specialties} />
+    ),
+    tags: anchored(
+      sectionById("tags"),
+      <LocationCuisineTagsForm
+        locationId={location.id}
+        allTags={allTags}
+        initialTags={location.cuisine_tags ?? []}
+      />
     ),
     info: anchored(sectionById("info"), <LocationInfoForm location={location} role={session.role} />),
     managers: isOwner

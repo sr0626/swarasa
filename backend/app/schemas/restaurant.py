@@ -43,6 +43,10 @@ class RestaurantOut(BaseModel):
     # admins a "Claim pending" marker.
     has_pending_claim: bool = False
     owner_id: int | None
+    # A brand has no tags of its own: this is the distinct UNION of its
+    # locations' tags (public callers: ACTIVE locations only; the
+    # owner-scoped/admin list and the owner's own write responses: every
+    # location). For a per-branch view use the location's own `cuisine_tags`.
     cuisine_tags: list[CuisineTagOut]
     location_count: int
     # Dashboard-only stat, never public (docs/API_CONTRACTS.md "GET
@@ -67,14 +71,15 @@ class RestaurantCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     description: str | None = None
     website: str | None = Field(default=None, max_length=500)
-    cuisine_tag_ids: list[int] = Field(default_factory=list)
+    # (`cuisine_tag_ids` used to live here; tags are per location now — send
+    # them on `POST /locations` / `PUT /locations/{id}/cuisine-tags`. An old
+    # client still sending the key is harmlessly ignored.)
 
 
 class RestaurantUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = None
     website: str | None = Field(default=None, max_length=500)
-    cuisine_tag_ids: list[int] | None = None
 
 
 class LocationSummaryOut(BaseModel):
@@ -104,6 +109,8 @@ class LocationSummaryOut(BaseModel):
     status: LocationStatusValue
     is_active: bool
     is_open_now: bool | None
+    # This location's own tags (additive) — one batched query for the page.
+    cuisine_tags: list[CuisineTagOut] = []
 
 
 class LocationListResponse(BaseModel):
@@ -138,6 +145,8 @@ class BrandLocationCardOut(NearestLocationOut):
     location_name: str | None = None
     cover_photo_url: str | None = None
     cover_photo_thumbnail_url: str | None = None
+    # This location's own tags (each branch shows its own on the landing page).
+    cuisine_tags: list[CuisineTagOut] = []
 
 
 class RestaurantPublicOut(RestaurantOut):

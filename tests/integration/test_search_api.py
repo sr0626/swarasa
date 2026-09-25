@@ -161,3 +161,45 @@ async def test_search_excludes_locations_of_a_soft_deleted_brand(pg_client, pg_d
     text = await pg_client.get("/search", params={"q": "Deleted Listing"})
     assert text.status_code == 200
     assert loc.id not in [r["nearest_location"]["location_id"] for r in text.json()["results"]]
+
+
+@pytest.mark.asyncio
+async def test_search_tag_filter_matches_only_the_branch_that_has_the_tag(pg_client, pg_db_session):
+    """Tags are per location (`location_cuisine`, migration 0016). Two branches
+    of one brand: the NEARER one (Irving) has no Breakfast Menu tag, the
+    farther one (Plano) does. The `cuisine[]` facet is evaluated per location,
+    so a Breakfast Menu filter returns the tag-carrying branch as the tile's
+    nearest location — never the nearer branch's address — with that branch's
+    own tags; a text search on the tag name behaves the same."""
+    from app.models.location_cuisine import LocationCuisine
+    from factories import create_cuisine_tag
+
+    breakfast = await create_cuisine_tag(
+        pg_db_session, name="breakfast_menu", display_name="Breakfast Menu", category="dining_time"
+    )
+    brand = await create_brand(pg_db_session, is_claimed=True, name="Two Branch Kitchen")
+    irving = await create_location(pg_db_session, brand_id=brand.id, is_active=True, slug="irving")
+    plano = await create_location(pg_db_session, brand_id=brand.id, is_active=True, slug="plano")
+    pg_db_session.add(LocationCuisine(location_id=plano.id, cuisine_tag_id=breakfast.id))
+    await pg_db_session.commit()
+    await _set_geom(pg_db_session, irving.id, IRVING_LAT + 0.02, IRVING_LNG)  # ~1.4 mi
+    await _set_geom(pg_db_session, plano.id, IRVING_LAT + 0.10, IRVING_LNG)  # ~7 mi
+
+    for params in (
+        {"lat": IRVING_LAT, "lng": IRVING_LNG, "radius": 15, "cuisine[]": ["breakfast_menu"]},
+        {"lat": IRVING_LAT, "lng": IRVING_LNG, "radius": 15, "q": "Breakfast Menu"},
+    ):
+        response = await pg_client.get("/search", params=params)
+        assert response.status_code == 200, response.text
+        results = response.json()["results"]
+        assert len(results) == 1
+        tile = results[0]
+        assert tile["nearest_location"]["location_id"] == plano.id
+        assert tile["location_count_nearby"] == 1
+        assert [t["name"] for t in tile["cuisine_tags"]] == ["breakfast_menu"]
+
+    unfiltered = (
+        await pg_client.get("/search", params={"lat": IRVING_LAT, "lng": IRVING_LNG, "radius": 15})
+    ).json()["results"]
+    assert unfiltered[0]["nearest_location"]["location_id"] == irving.id
+    assert unfiltered[0]["cuisine_tags"] == []

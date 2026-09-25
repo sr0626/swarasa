@@ -55,10 +55,10 @@ Query params:
 | lat | float, optional | Omit + `lng` omit -> falls back to the admin-configured DFW city bounding box (DECISIONS.md "Default search radius") |
 | lng | float, optional | |
 | radius | float, optional, default 15 | Miles |
-| cuisine[] | string[], optional | `cuisine_tag.name` values, category=`regional` (also usable for `signature`/`dining_time` slugs) |
+| cuisine[] | string[], optional | `cuisine_tag.name` values, category=`regional` (also usable for `signature`/`dining_time` slugs). **Tags are per location** (2026-09-24): every `cuisine[]`/`dietary[]`/`type[]` facet is evaluated against each candidate LOCATION's own tags — only locations that themselves carry a matching tag are candidates, so a sibling branch without the tag is never the card's `nearest_location` (nor counted in `location_count_nearby`) for that filter. |
 | dietary[] | string[], optional | `cuisine_tag.name` values, category=`dietary` |
 | type[] | string[], optional | `cuisine_tag.name` values, category=`type` |
-| q | string, optional, max 100 | Free-text search: case-insensitive substring match on the restaurant (brand) **name**, or a cuisine tag whose name/display name **exactly** equals the text (case-insensitive; never a tag substring, to keep results precise). **Added 2026-09-19** (user request: search should match restaurant names). When `q` is present the radius and coordinates are NOT required -- a name search finds the restaurant wherever it is, including locations that failed geocoding; those come back with `nearest_location.distance_mi: null` and sort after located results. Still combinable with `cuisine[]`/`dietary[]`/`type[]` (AND). |
+| q | string, optional, max 100 | Free-text search: case-insensitive substring match on the restaurant (brand) **name** (all of that brand's locations match), or a cuisine tag whose name/display name **exactly** equals the text (only the LOCATIONS carrying that tag match) (case-insensitive; never a tag substring, to keep results precise). **Added 2026-09-19** (user request: search should match restaurant names). When `q` is present the radius and coordinates are NOT required -- a name search finds the restaurant wherever it is, including locations that failed geocoding; those come back with `nearest_location.distance_mi: null` and sort after located results. Still combinable with `cuisine[]`/`dietary[]`/`type[]` (AND). |
 | page | int, optional, default 1 | |
 | page_size | int, optional, default 20, max 100 | |
 | loc | string, optional | **Added 2026-09-23** (activity tracking). The location text the user typed (city/ZIP), used ONLY for a signed-in `registered_user`'s search-history entry (clipped to 100 chars there); never affects results (`lat`/`lng` do). Deliberately no `max_length` — an over-long value is truncated when recorded rather than turning a public search into a 422. |
@@ -86,6 +86,7 @@ Response:
       "name": "Spice Route",
       "slug": "spice-route",
       "is_claimed": true,
+      // The NEAREST location's own tags (tags are per location, 2026-09-24).
       "cuisine_tags": [
         { "id": 7, "name": "hyderabadi", "display_name": "Hyderabadi", "category": "regional" }
       ],
@@ -170,8 +171,8 @@ drift from the real `cuisine_tag` table (`docs/DATA_MODEL.md`
 `/restaurants` or `/search` — `cuisine_tag` isn't owned by a brand or
 location, it's a standalone admin-seeded taxonomy table that both
 `/search`'s `cuisine[]`/`dietary[]`/`type[]` params and the owner
-portal's tag picker (`POST`/`PATCH /restaurants` `cuisine_tag_ids`)
-need to resolve against.
+portal's tag pickers (`POST /locations` `cuisine_tag_ids`,
+`PUT /locations/{id}/cuisine-tags`) need to resolve against.
 
 Query params:
 | Param | Type | Notes |
@@ -188,7 +189,7 @@ Response:
 ```
 `is_active=true` rows only — a deactivated tag (admin can deactivate
 without deleting, per `docs/DATA_MODEL.md`) drops out of this list but
-stays intact for any brand still linked to it via `restaurant_cuisine`.
+stays intact for any location still linked to it via `location_cuisine`.
 
 No `page`/`page_size`/`total` — same reasoning as
 `GET /locations/{id}/managers` above: `cuisine_tag` is a small,
@@ -334,6 +335,15 @@ Response:
   "follower_count": null
 }
 ```
+**`cuisine_tags` is a derived summary (2026-09-24 — tags are per location):** a
+brand has no tags of its own; this is the distinct UNION of its locations'
+tags. Public callers (`GET /restaurants/{id}`, `/by-slug/{slug}`, the location
+page's `restaurant`) see the union over ACTIVE locations only — a hidden or
+still-in-setup branch never advertises its tags; the owner-scoped and admin
+`GET /restaurants` list and the owner's own create/update responses take the
+union over ALL the brand's locations. For a specific branch use that location's
+own `cuisine_tags` (`GET /locations/{id}`, the by-slug landing cards,
+`GET /restaurants/{id}/locations`).
 `website` is `null` when not set -- added alongside the CSV bulk-import
 feature (docs/DATA_MODEL.md "restaurant_brand" judgment call: brand-level,
 not location-level). `owner_id` is `null` for unclaimed listings (still visible, per
@@ -391,12 +401,14 @@ Response: every `GET /restaurants/{id}` field (`follower_count` always `null`;
       "phone": "+19725550142", "is_verified": true, "is_paid": false,
       "is_open_now": true, "open_time": "11:00:00", "close_time": "22:00:00", "is_closed": false,
       "has_deal_today": true,
-      "cover_photo_url": "https://.../c.jpg", "cover_photo_thumbnail_url": "https://.../t.jpg"
+      "cover_photo_url": "https://.../c.jpg", "cover_photo_thumbnail_url": "https://.../t.jpg",
+      "cuisine_tags": [ { "id": 7, "name": "hyderabadi", "display_name": "Hyderabadi", "category": "regional" } ]
     }
   ]
 }
 ```
-Each card is the `/search` `nearest_location` shape (today's hours inputs in
+`cuisine_tags` (additive, 2026-09-24) is THAT location's own tags — each branch
+shows its own on the landing page. Each card is the `/search` `nearest_location` shape (today's hours inputs in
 the location's own timezone, `has_deal_today` from the same predicate as
 `/search` — boolean only, no deal titles) plus `location_name` and the cover
 photo. Hidden locations (any non-`active` status) never appear. Ordered by
@@ -504,11 +516,12 @@ Body:
 {
   "name": "Spice Route",
   "description": "Hyderabadi biryani specialists since 2010.",
-  "website": "https://spiceroute.example.com",
-  "cuisine_tag_ids": [7, 12]
+  "website": "https://spiceroute.example.com"
 }
 ```
-`website` is optional. Creates a brand owned by the authenticated owner (`is_claimed=true`,
+`website` is optional. (`cuisine_tag_ids` was removed 2026-09-24: tags are per
+location — set them on `POST /locations` / `PUT /locations/{id}/cuisine-tags`.
+A client still sending the key is ignored, not rejected.) Creates a brand owned by the authenticated owner (`is_claimed=true`,
 `owner_id=<self>`, `slug` server-generated from `name`). This is
 distinct from the claim flow, which attaches an *existing*,
 admin-seeded, unclaimed brand to an owner instead of creating a new
@@ -527,7 +540,8 @@ Audit: writes an `audit_log` row (`table_name="restaurant_brand"`,
 
 Auth: owner (must own the brand) or admin
 
-Body: any subset of `{ name, description, website, cuisine_tag_ids }`.
+Body: any subset of `{ name, description, website }` (`cuisine_tag_ids` removed
+2026-09-24 — tags are per location; see `PUT /locations/{id}/cuisine-tags`).
 
 Response: `200`, same shape as `GET /restaurants/{id}` — same
 `follower_count` exception as `POST /restaurants` above: a real count,
@@ -638,6 +652,9 @@ Response:
   "paid_until": "2027-03-01T00:00:00Z",
   "status": "active",
   "is_active": true,
+  "cuisine_tags": [
+    { "id": 7, "name": "hyderabadi", "display_name": "Hyderabadi", "category": "regional" }
+  ],
   "is_open_now": true,
   "hours": [
     { "day_of_week": 0, "open_time": "11:00:00", "close_time": "22:00:00", "is_closed": false },
@@ -778,9 +795,17 @@ Body:
   "phone": "+14695551234",
   "timezone": "America/Chicago",
   "latitude": 33.0198,
-  "longitude": -96.6989
+  "longitude": -96.6989,
+  "cuisine_tag_ids": [7, 12]
 }
 ```
+`cuisine_tag_ids` (optional, added 2026-09-24 — tags are per location):
+omitted/`null` -> the new location starts with a **copy of the tags of the
+brand's first existing location** (lowest id; empty when it is the brand's
+first location) so an owner adding a branch doesn't retype them; `[]` -> no
+tags; a list -> exactly those (unknown/inactive ids ignored). The tag names go
+into the create audit row's `new_val.cuisine_tags`.
+
 New locations start `is_paid=false`, `is_verified=false` and — changed
 2026-09-24, `docs/DECISIONS.md` "New manual listings start in setup" —
 **`status="coming_soon"`** (hidden from the public everywhere; only
@@ -877,6 +902,30 @@ Audit: `audit_log` row (`table_name="restaurant_location"`,
 `record_id=<location_id>`, `action="update"`) — hours changes are
 tracked against the location, not a separate audited table, since
 `restaurant_hours` is not in the root CLAUDE.md audit-required list.
+
+### PUT /locations/{id}/cuisine-tags
+
+Auth: owner (owns parent brand), manager with an active assignment for this
+location, or admin (`require_location_write_access`, re-validated server-side).
+Anonymous `401`; another owner / an unassigned manager / a registered user
+`403`; unknown location `404`.
+
+Added 2026-09-24 — cuisine/dietary/type/signature/dining-time tags are **per
+location** (`docs/DECISIONS.md` "Cuisine/dietary tags are per location"). Full
+replace of THIS location's tag set only; its siblings are untouched:
+```json
+{ "cuisine_tag_ids": [7, 12] }
+```
+Unknown or inactive ids are ignored, duplicates collapse, `[]` clears.
+Works on a hidden (setup) location too. Response `200`:
+```json
+{ "results": [ { "id": 7, "name": "hyderabadi", "display_name": "Hyderabadi", "category": "regional" } ] }
+```
+Audit: one `restaurant_location` `update` row with
+`old_val: {"cuisine_tags": [...slugs]}` / `new_val: {"cuisine_tags": [...slugs]}`.
+
+`GET /restaurants/{id}/locations` items also carry `cuisine_tags` (that
+location's own tags, one batched query for the page).
 
 ### Photos (`restaurant_photo`, sub-resource of `/locations/{id}`)
 
@@ -2110,7 +2159,7 @@ deals. So `nearest_location` is the ONE location the tile represents:
 position). `location_count_nearby` is the brand's total number of `active`
 locations (`0` when none), used for the tile's "N locations" chip. Only public
 listing data is added (no new privacy surface). Everything is batched for the
-whole page — one query each for locations, cuisine tags, today's hours and cover
+whole page — one query each for locations, the chosen locations' cuisine tags, today's hours and cover
 photos on top of the follows and deals queries — so the query count is constant
 regardless of page size.
 
@@ -3412,8 +3461,8 @@ Effect: same idempotent create-or-skip brand/location logic as the JSON
 path (slug natural key for the brand, `(brand_id, address_line1)` for the
 location), but `owner_id` is resolved **per row** from `owner_email`
 instead of once for the whole batch, and a matched `type` links a
-`restaurant_cuisine` row (also idempotent — re-running doesn't duplicate
-the link).
+`location_cuisine` row for that row's LOCATION (tags are per location; also
+idempotent — re-running doesn't duplicate the link).
 
 Response (Lambda invoke result payload):
 ```json

@@ -21,6 +21,7 @@ import {
   getLocationPhotoUploadUrl,
   removeLocationManager,
   removeLocationPermanently,
+  replaceLocationCuisineTags,
   updateLocation,
   updateLocationHours,
   updateLocationPhoto,
@@ -55,6 +56,7 @@ import {
   createPhotoSchema,
   photoUploadUrlSchema,
   updateLocationAboutSchema,
+  updateLocationCuisineTagsSchema,
   updateLocationHoursSchema,
   updateLocationSchema,
 } from "@/lib/validation/location";
@@ -79,6 +81,7 @@ import type {
   VisibilityResponse,
 } from "@/types/menu";
 import type { CreateDealInput, Deal, UpdateDealInput } from "@/types/deal";
+import type { CuisineTag } from "@/types/cuisine";
 import type {
   LocationDetail,
   LocationHour,
@@ -236,6 +239,32 @@ export async function updateLocationAboutAction(
     return { ok: true, data: location };
   } catch (error) {
     return { ok: false, error: messageFor(error, "Something went wrong saving this section.") };
+  }
+}
+
+/**
+ * PUT /locations/{id}/cuisine-tags — full replace of THIS location's cuisine /
+ * dietary tags (tags are per location). The backend re-checks owner / assigned
+ * manager / admin on the call itself.
+ */
+export async function replaceLocationCuisineTagsAction(
+  locationId: number,
+  input: unknown
+): Promise<ActionResult<{ results: CuisineTag[] }>> {
+  const auth = await requireLocationSession();
+  if (!auth.ok) return auth;
+
+  const parsed = updateLocationCuisineTagsSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: "Please check the selected tags and try again." };
+  }
+
+  try {
+    const result = await replaceLocationCuisineTags(locationId, parsed.data, auth.accessToken);
+    revalidateLocationPaths(locationId);
+    return { ok: true, data: result };
+  } catch (error) {
+    return { ok: false, error: messageFor(error, "Something went wrong saving the tags.") };
   }
 }
 

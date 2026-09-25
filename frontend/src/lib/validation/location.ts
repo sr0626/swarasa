@@ -80,6 +80,11 @@ export const updateLocationAboutSchema = z.object({
 
 export type UpdateLocationAboutFormValues = z.infer<typeof updateLocationAboutSchema>;
 
+/** Body of PUT /locations/{id}/cuisine-tags (an empty list clears the tags). */
+export const updateLocationCuisineTagsSchema = z.object({
+  cuisine_tag_ids: z.array(z.number().int().positive()).max(200),
+});
+
 const dayHourSchema = z
   .object({
     day_of_week: z.number().int().min(0).max(6),
