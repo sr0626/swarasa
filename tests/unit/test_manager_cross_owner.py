@@ -47,6 +47,24 @@ async def test_manager_already_active_for_a_different_owner_is_rejected():
 
 
 @pytest.mark.asyncio
+async def test_rejection_message_does_not_disclose_another_owners_account(caplog):
+    """The owner-facing message must be generic (no hint that the person
+    already works under a different owner); the detail goes to the server log."""
+    import logging
+
+    db = _FakeSession(conflicting_owner_id=99)
+    with caplog.at_level(logging.WARNING):
+        with pytest.raises(AppError) as exc_info:
+            await location_manager_service.assert_manager_belongs_to_same_owner(
+                db, "sub-1", owner_id=10
+            )
+    message = exc_info.value.detail.lower()
+    for leak in ("different", "another owner", "owner's account", "already an active manager"):
+        assert leak not in message
+    assert any("manager_different_owner" in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.asyncio
 async def test_none_owner_id_is_a_defensive_noop():
     """`owner_id=None` should never happen in practice (the router's
     `require_location_owner_only` dependency always populates it first)
