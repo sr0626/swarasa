@@ -32,13 +32,12 @@ to revisit later, not a final sign-off.
   cmd-log batch. No code PRs open.
 
 ## Live state (2026-09-25)
-- Migrations through `0015_hide_menu_and_deals` applied to dev via
-  `alembic_upgrade` (0013 menu, 0014 location slug, 0015 hide/show;
-  2026-09-24). Head in code is now `0016_location_cuisine` (#230):
-  **application to dev is pending confirmation** (no record of the
-  `alembic_upgrade` invoke yet); until it is applied, API location reads
-  fail, so run it right after the #230 deploy. #227-#229, #231-#233 added
-  no migration.
+- Migrations through `0016_location_cuisine` applied to dev via
+  `alembic_upgrade` (0013 menu, 0014 location slug, 0015 hide/show,
+  0016 per-location tags; 0016 applied 2026-09-24 evening after the #230
+  deploy — search returned 500 until it ran, then recovered and per-location
+  tag filters were verified against the live API). #227-#229, #231-#233
+  added no migration.
 - `deploy-backend.yml` now queues deploys (concurrency group, #232).
 - Current BRD is v3.9 (`docs/BRD_v39_Restaurant_Platform.docx`; v3.7-v3.9
   kept under n-2 retention).
