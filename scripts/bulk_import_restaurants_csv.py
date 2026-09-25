@@ -56,9 +56,18 @@ present for a row, this script leaves them alone and does not geocode
 that row (lets you pre-fill known coordinates and skip the Nominatim
 round-trip for them).
 
+Local validation (no network, no AWS): before anything else the script checks
+every row against the same rules the server applies -- required cells
+non-blank, 2-letter state/country, numeric in-range latitude/longitude, and
+the shared US phone rule (`backend/app/core/phone.py`, imported directly) --
+and refuses to continue if any row is invalid. `type` values that match no
+tag in `backend/app/scripts/taxonomy.json` are printed as warnings only. A
+starter file with valid example rows: `scripts/data/restaurants_import_template.csv`.
+
 Usage:
-    python3 scripts/bulk_import_restaurants_csv.py --csv-file restaurants.csv
+    python3 scripts/bulk_import_restaurants_csv.py --csv-file restaurants.csv --validate-only
     python3 scripts/bulk_import_restaurants_csv.py --csv-file restaurants.csv --dry-run
+    python3 scripts/bulk_import_restaurants_csv.py --csv-file restaurants.csv
 """
 from __future__ import annotations
 
@@ -74,6 +83,14 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
+
+# Reuse the server's own phone rule (stdlib-only module) so a bad number is
+# caught here, before geocoding or any AWS call.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(_REPO_ROOT / "backend"))
+from app.core.phone import US_PHONE_ERROR, normalize_us_phone  # noqa: E402
+
+TAXONOMY_PATH = _REPO_ROOT / "backend" / "app" / "scripts" / "taxonomy.json"
 
 DEFAULT_PROFILE = "swarasa-dev"
 DEFAULT_REGION = "us-east-1"
@@ -118,6 +135,54 @@ def read_input_csv(path: Path) -> list[dict]:
         print(f"{path} has a header row but no data rows.", file=sys.stderr)
         sys.exit(1)
     return rows
+
+
+def _tag_forms() -> set[str]:
+    """Every accepted `type` spelling (lower-cased name slug and display name)
+    from the seed taxonomy -- a local approximation of the server's
+    `cuisine_tag` match, used for warnings only."""
+    try:
+        tags = json.loads(TAXONOMY_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return set()
+    forms: set[str] = set()
+    for tag in tags:
+        forms.add(tag["name"].lower())
+        forms.add(tag["display_name"].lower())
+    return forms
+
+
+def validate_rows(rows: list[dict]) -> tuple[list[str], list[str]]:
+    """Mirror the server-side row rules locally. Returns (errors, warnings);
+    row numbers are CSV line numbers (header = line 1)."""
+    errors: list[str] = []
+    warnings: list[str] = []
+    known_tags = _tag_forms()
+    for i, row in enumerate(rows, start=2):
+        label = f"line {i} ({row.get('name') or '<no name>'})"
+        for col in sorted(REQUIRED_COLUMNS):
+            if not row.get(col):
+                errors.append(f"{label}: '{col}' is blank")
+        if row.get("state") and len(row["state"]) != 2:
+            errors.append(f"{label}: state {row['state']!r} must be a 2-letter code")
+        if row.get("country") and len(row["country"]) != 2:
+            errors.append(f"{label}: country {row['country']!r} must be a 2-letter code")
+        if row.get("phone") and normalize_us_phone(row["phone"]) is None:
+            errors.append(f"{label}: invalid phone {row['phone']!r}: {US_PHONE_ERROR}")
+        for col, limit in (("latitude", 90), ("longitude", 180)):
+            if row.get(col):
+                try:
+                    if abs(float(row[col])) > limit:
+                        raise ValueError
+                except ValueError:
+                    errors.append(f"{label}: {col} {row[col]!r} is not a number within +/-{limit}")
+        if bool(row.get("latitude")) != bool(row.get("longitude")):
+            errors.append(f"{label}: give both latitude and longitude, or neither")
+        type_text = (row.get("type") or "").strip().lower()
+        if known_tags and type_text and type_text.replace(" ", "_").replace("-", "_") not in known_tags \
+                and type_text not in known_tags:
+            warnings.append(f"{label}: type {row['type']!r} matches no known cuisine tag (row imports without a tag)")
+    return errors, warnings
 
 
 def geocode(row: dict) -> tuple[float, float] | None:
@@ -218,6 +283,11 @@ def main() -> None:
     parser.add_argument("--region", default=DEFAULT_REGION)
     parser.add_argument("--function-name", default=DEFAULT_FUNCTION_NAME)
     parser.add_argument(
+        "--validate-only",
+        action="store_true",
+        help="Validate the CSV locally (no network, no AWS) and exit.",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Parse and geocode only -- print the enriched CSV, skip the Lambda invoke.",
@@ -230,6 +300,18 @@ def main() -> None:
 
     rows = read_input_csv(args.csv_file)
     print(f"Read {len(rows)} row(s) from {args.csv_file}.")
+
+    errors, warnings = validate_rows(rows)
+    for message in warnings:
+        print(f"  warning: {message}")
+    if errors:
+        for message in errors:
+            print(f"  error: {message}", file=sys.stderr)
+        print(f"\n{len(errors)} problem(s) found -- fix the CSV and re-run. Nothing was sent.", file=sys.stderr)
+        sys.exit(1)
+    print("Validation passed.")
+    if args.validate_only:
+        return
 
     enriched_rows = geocode_missing_rows(rows)
     csv_content = build_csv_content(enriched_rows)
