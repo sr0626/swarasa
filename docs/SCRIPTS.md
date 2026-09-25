@@ -10,11 +10,48 @@ All run from the repo root, against **dev**. Refresh SSO first if needed:
 | `list_users.py` | List Cognito users, status and groups | `python3 scripts/list_users.py` |
 | `delete_test_user.py` | Remove a test user (DB rows + Cognito) | `python3 scripts/delete_test_user.py --email a@b.com` |
 | `dev_unclaim_restaurants.py` | Unclaim restaurants to re-test the claim flow | `python3 scripts/dev_unclaim_restaurants.py --slugs dera-grill` |
-| `bulk_import_restaurants_csv.py` | Import restaurants from a CSV (geocodes rows without lat/lng) | `python3 scripts/bulk_import_restaurants_csv.py --csv-file r.csv --dry-run` |
+| `bulk_import_restaurants_csv.py` | Import restaurants from a CSV (geocodes rows without lat/lng) | `python3 scripts/bulk_import_restaurants_csv.py --csv-file r.csv --dry-run` (see "Bulk import" below) |
 | `geocode_missing_locations.py` | Backfill coordinates for locations without any | `python3 scripts/geocode_missing_locations.py --dry-run` |
 
 `delete_test_user.py --skip-cognito-delete` cleans DB rows only.
 `dev_unclaim_restaurants.py` with no `--slugs` unclaims the built-in two.
+
+## Bulk import (CSV)
+
+No admin upload page yet — import is this script only. Start from
+`scripts/data/restaurants_import_template.csv` (3 fake rows: replace them).
+
+**Columns** (header row required, any order, blank cell = not given):
+
+| Column | | Notes |
+|---|---|---|
+| `name`, `address_line1`, `city`, `state`, `postal_code` | required | `state` = 2 letters |
+| `owner_email` | required | Must already be an owner account (log in once as them); unknown email = row error, nothing is created |
+| `phone` | optional | 10-digit US, area code and exchange start 2-9, e.g. `(214) 555-0142`; stored `+1XXXXXXXXXX`; invalid = row error |
+| `type` | optional | **One** tag per row, applied to that location. Use a tag `name` (`south_indian`) or display name (`South Indian`), any case. Unknown = imported with no tag. List: `backend/app/scripts/taxonomy.json` or `GET /cuisine-tags` |
+| `address_line2`, `country` (default `US`), `website`, `description` | optional | |
+| `latitude`, `longitude` | optional | Both or neither; blank = script geocodes it (Nominatim, ~1 s/row) |
+
+Not supported: opening hours, several tags per row, timezone (always America/Chicago).
+Every imported listing is **active + verified**, free tier, slug auto-generated. Max 500 rows.
+Re-running is safe: same restaurant name + address is skipped (name owned by a different owner = row error).
+
+```bash
+# 1. Validate locally (no network, no AWS) - phones, states, coords, unknown tags
+python3 scripts/bulk_import_restaurants_csv.py --csv-file my.csv --validate-only
+# 2. Also geocode and print what would be sent (Nominatim only, no AWS)
+python3 scripts/bulk_import_restaurants_csv.py --csv-file my.csv --dry-run
+# 3. Import - YOU RUN THIS (invokes the Lambda)
+python3 scripts/bulk_import_restaurants_csv.py --csv-file my.csv
+# 4. Fix any rows the geocoder missed (they are invisible in search) - YOU RUN THIS
+python3 scripts/geocode_missing_locations.py --dry-run
+python3 scripts/geocode_missing_locations.py
+```
+
+**Verify:** the script prints created / skipped / errors and each row's error text;
+then check Admin > Listings.
+**Undo:** no bulk undo. In Admin > Listings use **Delete listing** per restaurant
+(soft delete; the name stays reserved) and restore it from "Deleted listings".
 
 ## Lambda management commands (run inside the backend Lambda)
 

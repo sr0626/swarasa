@@ -1,0 +1,4 @@
+name,address_line1,address_line2,city,state,postal_code,country,phone,website,type,description,owner_email,latitude,longitude
+Example Curry House (Fake),100 Example Blvd,Suite 5,Irving,TX,75038,US,(214) 555-0142,https://example.com/curry-house,south indian,FAKE example row - replace or delete,owner@example.com,,
+Sample Tandoor Grill (Fake),200 Sample Ave,,Plano,TX,75024,US,972-555-0143,,punjabi,,owner@example.com,,
+Demo Dosa Corner (Fake),300 Demo St,,Frisco,TX,75034,US,,,dosa,,owner@example.com,33.1507,-96.8236
