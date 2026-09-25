@@ -28,19 +28,51 @@ fully satisfied and asked to stop iterating for now, with an explicit intent
 to revisit later, not a final sign-off.
 
 ## Open PRs
-- Only in-flight docs PRs as of 2026-09-24: this wave-9 tracker/status/
+- Only in-flight docs PRs as of 2026-09-25: this wave-10 tracker/status/
   cmd-log batch. No code PRs open.
 
-## Live state (2026-09-24)
-- Migrations through `0015_hide_menu_and_deals` applied to dev via
-  `alembic_upgrade` (0013 menu, 0014 location slug, 0015 hide/show;
-  2026-09-24). Head is `0015_hide_menu_and_deals`; #224 added no migration.
+## Live state (2026-09-25)
+- Migrations through `0016_location_cuisine` applied to dev via
+  `alembic_upgrade` (0013 menu, 0014 location slug, 0015 hide/show,
+  0016 per-location tags; 0016 applied 2026-09-24 evening after the #230
+  deploy — search returned 500 until it ran, then recovered and per-location
+  tag filters were verified against the live API). #227-#229, #231-#233
+  added no migration.
+- `deploy-backend.yml` now queues deploys (concurrency group, #232).
 - Current BRD is v3.9 (`docs/BRD_v39_Restaurant_Platform.docx`; v3.7-v3.9
   kept under n-2 retention).
 - `menu_item_photos_enabled` platform flag is OFF (seeded false); flip with
   the `set_platform_flag` management command when paid tiers exist.
 - Repo now has "Automatically delete head branches" enabled; the 200+
   merged branches were cleaned up by the user on 2026-09-23.
+
+## Landed 2026-09-24/25, wave 10 (#227-#233)
+- **Owner console shows setup listings** (#227): loader now passes the
+  owner token and always loads locations (a `coming_soon` listing was
+  invisible; `location_count` is the active count). Setup listings show
+  inline, no Coming soon panel; sticky Go-live bar with a large
+  "Activate listing" button; "Finish setup - N left" on the row; status/
+  tier tags moved to the row's first line; per-location "View public
+  page" / "Preview page" links (brand-level button only for 2+ active).
+  No migration.
+- ZIP + phone shown in owner and manager location rows (#228).
+- Generic owner-facing error when a manager is already under another
+  owner (#229): precise reason only in the server log; `code` and 409
+  unchanged.
+- **Per-location cuisine/dietary/type tags** (#230, migration
+  `0016_location_cuisine`): `location_cuisine` table backfilled from the
+  brand's tags, `PUT /locations/{id}/cuisine-tags`, editor tag panel,
+  search filters evaluated per location, brand tags = union of its
+  locations'. Old `restaurant_cuisine` kept but deprecated. Brand-card
+  Add location / View all locations buttons next to the name.
+- Mobile audit fixes (#231): editor sticky stack halved on phones, 44px
+  tap targets, exclusive top-bar menus, section scrollspy fix, contrast
+  token `brand-ink-subtle` darkened. Frontend-only.
+- `deploy-backend.yml` concurrency group queues deploys (#232); fixes the
+  ResourceConflictException race seen on Deploy Backend #72.
+- Deals button state on owner/manager location rows (#233): Deals - N /
+  Add a deal / Deals hidden; counts returned only to owner/admin/assigned
+  manager. No migration.
 
 ## Landed 2026-09-24, wave 9 (#209-#224)
 - **BRD v3.9** (#209): menu engine documented as free/public, stale
@@ -243,7 +275,15 @@ to revisit later, not a final sign-off.
 - Payments/subscriptions/refunds deferred by decision (deals were deferred
   here too, reopened 2026-09-23 -- see wave 5).
 
-## Known gaps (2026-09-24)
+## Known gaps (2026-09-25)
+- `restaurant_cuisine` table deprecated (#230), still present; drop it in
+  a later migration.
+- `manager_not_found` message reveals whether an email has an account
+  (left as is, pending a decision).
+- Admin alert/UI for blocked cross-owner manager assignments not built
+  (reason is only in the server log, #229).
+- #230's Postgres/PostGIS-guarded search test has not been executed;
+  #233 and #230's real pages were not viewed in a browser.
 - Manager's own dashboard list (`GET /auth/me/managed-locations`) still
   filters to active locations only (hidden/coming-soon ones don't show).
 - Admin new-user feed covers owner accounts only (no local diner user table;

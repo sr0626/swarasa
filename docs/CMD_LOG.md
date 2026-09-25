@@ -617,4 +617,14 @@ git push -u origin feat/hide-menu-and-deals   # claude
 aws lambda invoke --function-name swarasa-api-dev --payload '{"_management_command": "alembic_upgrade"}' --profile swarasa-dev --region us-east-1 ...   # user  (after the #223 deploy, applying 0015_hide_menu_and_deals; order of the pushes/invokes above is approximate)
 git push -u origin feat/new-listing-setup-flow   # claude
 git push -u origin docs/wave9-tracker-status-cmdlog   # claude
+git push -u origin fix/setup-flow-activate-obvious   # claude
+git push -u origin feat/location-rows-zip-phone   # claude
+git push -u origin fix/manager-assign-generic-error   # claude
+git push -u origin feat/per-location-tags   # claude
+git push -u origin fix/mobile-audit-fixes   # claude
+git push -u origin fix/deploy-backend-concurrency   # claude
+git push -u origin feat/deals-button-state   # claude
+git push -u origin docs/wave10-tracker-status-cmdlog   # claude
+aws sso login --profile swarasa-dev   # user  (expired session, x2 this evening)
+aws lambda invoke --function-name swarasa-api-dev --payload '{"_management_command": "alembic_upgrade"}' --profile swarasa-dev --region us-east-1 ...   # user  (after the #230 deploy, applying 0016_location_cuisine; first attempt failed on the expired SSO token, succeeded after re-login)
 ```
