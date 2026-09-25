@@ -1,6 +1,9 @@
 // The jump-link row under the restaurant name on a location page:
 // "Deals · Menu · Hours", each ONLY when that section exists for the location
-// (so the anchor always lands somewhere). The section ids are set by the
+// (so the anchor always lands somewhere) and ONLY when there are at least two
+// (a row with a single pill is pointless — e.g. a lone "Hours" chip under the
+// name when the location has no deals and no menu; product feedback
+// 2026-09-25). The section ids are set by the
 // components that render them: RestaurantDeals / RestaurantUpcomingDeals
 // (`deals`), RestaurantMenu (`menu`), the Details card's hours block (`hours`).
 // Pure: unit-tested with `node --test`.
@@ -16,12 +19,16 @@ export interface JumpLinkItem {
 const LABELS: Record<JumpTarget, string> = { deals: "Deals", menu: "Menu", hours: "Hours" };
 const ORDER: JumpTarget[] = ["deals", "menu", "hours"];
 
+/** Minimum number of sections before the jump row is worth showing at all. */
+export const MIN_JUMP_LINKS = 2;
+
 export function buildJumpLinks(sections: Record<JumpTarget, boolean>): JumpLinkItem[] {
-  return ORDER.filter((id) => sections[id]).map((id) => ({
+  const links = ORDER.filter((id) => sections[id]).map((id) => ({
     id,
     label: LABELS[id],
     href: `#${id}`,
   }));
+  return links.length >= MIN_JUMP_LINKS ? links : [];
 }
 
 /** Does the location have a deals section for THIS viewer? Today's deals show for everyone

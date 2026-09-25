@@ -20,6 +20,13 @@ test("only the sections that exist are linked", () => {
   assert.deepEqual(buildJumpLinks({ deals: false, menu: false, hours: false }), []);
 });
 
+test("a single section is not worth a jump row (no lone 'Hours' pill)", () => {
+  assert.deepEqual(buildJumpLinks({ deals: false, menu: false, hours: true }), []);
+  assert.deepEqual(buildJumpLinks({ deals: true, menu: false, hours: false }), []);
+  assert.deepEqual(buildJumpLinks({ deals: false, menu: true, hours: false }), []);
+  assert.equal(buildJumpLinks({ deals: true, menu: false, hours: true }).length, 2);
+});
+
 test("hasDealsSection: today's deal or content-visible upcoming deals", () => {
   assert.equal(hasDealsSection({ has_deal_today: true, upcoming_deals: null }), true);
   assert.equal(hasDealsSection({ has_deal_today: false, upcoming_deals: [{}] }), true);
