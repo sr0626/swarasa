@@ -29,7 +29,7 @@ export function cardItemForLocation(
     slug: restaurant.slug,
     is_claimed: restaurant.is_claimed,
     // Each branch shows ITS OWN tags (tags are per location), not the brand's union.
-    cuisine_tags: card.cuisine_tags,
+    cuisine_tags: card.cuisine_tags ?? [],
     nearest_location: card,
     location_count_nearby: 1,
     cover_photo_url: card.cover_photo_url,

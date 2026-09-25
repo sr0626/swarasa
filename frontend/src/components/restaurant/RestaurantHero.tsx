@@ -149,7 +149,7 @@ export default function RestaurantHero({
   const photos = collectPhotos(restaurant.name, location);
   // Tags are per location: show THIS branch's own tags (the brand union only when the
   // page has no location at all).
-  const cuisineTags = location ? location.cuisine_tags : restaurant.cuisine_tags;
+  const cuisineTags = (location ? location.cuisine_tags : restaurant.cuisine_tags) ?? [];
 
   return (
     <section aria-label={`${restaurant.name} photos and summary`}>

@@ -237,7 +237,7 @@ export default async function PortalLocationPage({ params, searchParams }: Locat
       <LocationCuisineTagsForm
         locationId={location.id}
         allTags={allTags}
-        initialTags={location.cuisine_tags}
+        initialTags={location.cuisine_tags ?? []}
       />
     ),
     info: anchored(sectionById("info"), <LocationInfoForm location={location} role={session.role} />),
