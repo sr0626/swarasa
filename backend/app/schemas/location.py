@@ -123,18 +123,17 @@ class LocationOut(BaseModel):
     # still sees this boolean, so the search/detail page can show a
     # "Deal(s) available today" badge without revealing what the deal is.
     has_deal_today: bool
-    # Content-gated: `None` when the caller may not view deal content
-    # (anonymous, public, a non-owning/non-assigned caller) regardless of
-    # whether deals exist; an array (possibly empty, when has_deal_today is
-    # False) when they may — signed-in registered_user, admin, or this
-    # location's own owner/assigned manager. See
+    # Content-gated: `None` only for an ANONYMOUS (signed-out) caller,
+    # regardless of whether deals exist; an array (possibly empty, when
+    # has_deal_today is False) for ANY signed-in caller of any role
+    # (2026-09-25). See
     # app/services/deal_service.caller_may_view_deal_content_for_location.
     deals_today: list[DealPublicOut] | None
     # Added 2026-09-23 (owner feedback): the location's OTHER active deals —
     # not applicable today (other weekdays / future-dated), not expired —
     # sorted by next occurrence. Exactly the same content gate as
-    # `deals_today`: `null` (never `[]`, never a count) unless the caller may
-    # view deal content; an array (possibly empty) when they may.
+    # `deals_today`: `null` (never `[]`, never a count) for an anonymous caller;
+    # an array (possibly empty) for any signed-in caller.
     upcoming_deals: list[DealUpcomingOut] | None = None
 
 

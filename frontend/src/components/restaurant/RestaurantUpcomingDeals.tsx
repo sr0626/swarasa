@@ -3,9 +3,9 @@
 // detail page below "Today's deals". Owner feedback 2026-09-23.
 //
 // Content gating happens entirely server-side: `LocationDetail.upcoming_deals`
-// is `null` unless the caller passes
-// `deal_service.caller_may_view_deal_content_for_location` (same gate as
-// `deals_today`). This component never re-derives viewer identity — a
+// is `null` only for a signed-out caller (any signed-in role gets the list —
+// `deal_service.caller_may_view_deal_content_for_location`, same gate as
+// `deals_today`; 2026-09-25). This component never re-derives viewer identity — a
 // null/undefined/empty list renders NOTHING (no heading, no count, no hint
 // for signed-out viewers; the sign-in CTA lives in RestaurantDeals).
 import { TagIcon } from "@/components/ui/icons";

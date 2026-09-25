@@ -205,7 +205,7 @@ class DealUpcomingOut(BaseModel):
 class DealPublicOut(BaseModel):
     """Content-gated public shape — only ever populated for a caller who
     passes `deal_service.caller_may_view_deal_content_for_location`
-    (signed-in registered_user, admin, or the location's own owner/manager).
+    (any signed-in caller, of any role; anonymous callers never get it).
     Deliberately narrower than `DealOut`: no `location_id` (redundant, the
     caller already knows which location they asked about),
     `is_active`/timestamps (irrelevant to a public reader — every deal in

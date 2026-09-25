@@ -78,8 +78,9 @@ async def _location_to_out(
     # Deals — public "fact" (has_deal_today) vs content-gated "detail"
     # (deals_today). See app/services/deal_service.py module docstring and
     # `caller_may_view_deal_content_for_location`'s own docstring for the
-    # full reasoning, including the flagged deviation from
-    # docs/DECISIONS.md's older "registered users only, not public" entry.
+    # rule (any signed-in caller sees content; anonymous gets the boolean
+    # only — 2026-09-25 decision). `deals_hidden` / `is_active` suppression
+    # already happened when the deals were loaded, above this gate.
     # One query feeds both lists (today's + the content-gated "other active
     # deals") — no N+1, no second round trip for `upcoming_deals`.
     todays_deals, upcoming = await deal_service.todays_and_upcoming_for_location(
@@ -90,8 +91,8 @@ async def _location_to_out(
         db, location, current_user
     )
     deals_today = deal_service.deals_to_public_out(todays_deals) if may_view_deal_content else None
-    # Same gate as `deals_today`: null (not []) for anyone who can't see deal
-    # content, so neither titles nor a count leak to public/anonymous callers.
+    # Same gate as `deals_today`: null (not []) for anonymous callers, so
+    # neither titles nor a count leak to signed-out visitors.
     upcoming_deals = deal_service.upcoming_to_out(upcoming) if may_view_deal_content else None
 
     return LocationOut(

@@ -157,7 +157,8 @@ paid_until   TIMESTAMP              -- NULL when free
   Deals are ALSO a free-tier feature, not paid-gated — confirmed by direct user
   decision 2026-09-23, overriding this list's earlier inclusion of deals
   (see DECISIONS.md "Deals engine: free-tier, public-signal + registered-user-content
-  visibility (supersedes May 2026 entry)")
+  visibility (supersedes May 2026 entry)"; the content-visibility half was
+  widened 2026-09-25 to EVERY signed-in account — see the Permission model below)
 - Paid tier also caps `location_manager` assignments at 2 per location
 
 ### Permission model
@@ -165,10 +166,16 @@ Every write request must be validated server-side:
 - Owner: full access to all their brands/locations
 - Manager: only locations explicitly assigned (check location_manager table on every write)
 - Admin: full platform access
-- Registered user: read-only + follow + full deal content
-- Public: read-only + a content-free "deal(s) available today" signal only
-  (no deal title/description — see DECISIONS.md "Deals engine: free-tier,
-  public-signal + registered-user-content visibility")
+- Registered user: read-only + follow (follow stays registered_user-only)
+- **Deal content (title/description/days/dates, "More deals & specials") is
+  visible to EVERY signed-in account** — registered_user, owner (of any
+  restaurant, not just their own), manager, admin (user decision 2026-09-25,
+  supersedes the registered-user-content-only rule; see DECISIONS.md "Deals
+  engine: free-tier, public-signal + registered-user-content visibility" and
+  its 2026-09-25 amendment). `deals_hidden` and a deal's `is_active` still
+  suppress content for everyone.
+- Public / signed-out: read-only + a content-free "deal(s) available today"
+  signal only (no deal title/description)
 
 ## Coding Conventions
 

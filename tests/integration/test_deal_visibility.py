@@ -2,13 +2,15 @@
 /locations/{id}` — `has_deal_today` (the boolean "fact," always public) vs.
 `deals_today` (the gated content array). See
 `app/services/deal_service.py::caller_may_view_deal_content_for_location`
-and docs/DECISIONS.md "Deals: public boolean signal, gated content" for
-the full design, including the flagged deviation from the older "registered
-users only, not public" decision.
+and docs/DECISIONS.md "Deals engine: free-tier, public-signal +
+registered-user-content visibility" (2026-09-25 amendment).
 
-Covers every caller category this task's brief called out explicitly:
-anonymous, a signed-in registered_user, the location's own owner, an
-assigned manager, an unassigned manager, a different owner, and admin.
+RULE (user decision 2026-09-25): ANY signed-in caller — registered_user,
+the owning owner, an owner of ANOTHER brand, an assigned or unassigned
+manager, admin — gets deal content; only an anonymous caller gets `null`
+(boolean signal only). `deals_hidden` and inactive deals still suppress
+content for everyone. (The two tests that used to assert "unassigned
+manager" / "different owner" get `null` were changed deliberately.)
 """
 from __future__ import annotations
 
@@ -150,7 +152,7 @@ async def test_assigned_manager_sees_content(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_unassigned_manager_sees_boolean_only(client, db_session):
+async def test_unassigned_manager_now_sees_content(client, db_session):
     owner = await create_owner(db_session)
     brand = await create_brand(db_session, owner_id=owner.id)
     location = await create_location(db_session, brand_id=brand.id)
@@ -162,11 +164,11 @@ async def test_unassigned_manager_sees_boolean_only(client, db_session):
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["has_deal_today"] is True
-    assert body["deals_today"] is None
+    assert [d["title"] for d in body["deals_today"]] == ["Hidden From This Manager"]
 
 
 @pytest.mark.asyncio
-async def test_different_owner_sees_boolean_only(client, db_session):
+async def test_different_owner_now_sees_content(client, db_session):
     owner_a = await create_owner(db_session)
     owner_b = await create_owner(db_session)
     brand = await create_brand(db_session, owner_id=owner_a.id)
@@ -179,7 +181,7 @@ async def test_different_owner_sees_boolean_only(client, db_session):
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["has_deal_today"] is True
-    assert body["deals_today"] is None
+    assert [d["title"] for d in body["deals_today"]] == ["Not Owner B's"]
 
 
 @pytest.mark.asyncio
@@ -210,3 +212,71 @@ async def test_inactive_deal_never_shows_even_to_registered_user(client, db_sess
     body = response.json()
     assert body["has_deal_today"] is False
     assert body["deals_today"] == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["registered_user", "owner", "manager", "admin"])
+async def test_every_signed_in_role_sees_deals_and_upcoming_unrelated_to_location(
+    client, db_session, role
+):
+    """Matrix: a caller with NO relationship to the location (random sub, no
+    owner account / manager row) still gets both content arrays."""
+    owner = await create_owner(db_session)
+    brand = await create_brand(db_session, owner_id=owner.id)
+    location = await create_location(db_session, brand_id=brand.id)
+    await create_deal(db_session, location_id=location.id, title="Everyday Special", is_active=True)
+    await db_session.commit()
+
+    _as_optional_user(role)
+    body = (await client.get(f"/locations/{location.id}")).json()
+    assert body["has_deal_today"] is True
+    assert [d["title"] for d in body["deals_today"]] == ["Everyday Special"]
+    assert body["upcoming_deals"] == []
+
+
+@pytest.mark.asyncio
+async def test_anonymous_gets_null_for_both_content_arrays(client, db_session, as_anonymous):
+    owner = await create_owner(db_session)
+    brand = await create_brand(db_session, owner_id=owner.id)
+    location = await create_location(db_session, brand_id=brand.id)
+    await create_deal(db_session, location_id=location.id, title="Everyday Special", is_active=True)
+    await db_session.commit()
+
+    body = (await client.get(f"/locations/{location.id}")).json()
+    assert body["has_deal_today"] is True
+    assert body["deals_today"] is None
+    assert body["upcoming_deals"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["registered_user", "owner", "manager", "admin"])
+async def test_deals_hidden_suppresses_content_for_every_signed_in_role(client, db_session, role):
+    owner = await create_owner(db_session)
+    brand = await create_brand(db_session, owner_id=owner.id)
+    location = await create_location(db_session, brand_id=brand.id)
+    await create_deal(db_session, location_id=location.id, title="Hidden By Switch", is_active=True)
+    location.deals_hidden = True
+    await db_session.commit()
+
+    _as_optional_user(role)
+    body = (await client.get(f"/locations/{location.id}")).json()
+    assert body["has_deal_today"] is False
+    assert body["deals_today"] == []
+    assert body["upcoming_deals"] == []
+    assert "Hidden By Switch" not in str(body)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["owner", "manager", "admin"])
+async def test_inactive_deal_suppressed_for_every_signed_in_role(client, db_session, role):
+    owner = await create_owner(db_session)
+    brand = await create_brand(db_session, owner_id=owner.id)
+    location = await create_location(db_session, brand_id=brand.id)
+    await create_deal(db_session, location_id=location.id, title="Paused Deal", is_active=False)
+    await db_session.commit()
+
+    _as_optional_user(role)
+    body = (await client.get(f"/locations/{location.id}")).json()
+    assert body["has_deal_today"] is False
+    assert body["deals_today"] == []
+    assert body["upcoming_deals"] == []

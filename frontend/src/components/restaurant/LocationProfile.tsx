@@ -131,14 +131,16 @@ export default function LocationProfile({
               <RestaurantDeals
                 hasDealToday={location.has_deal_today}
                 dealsToday={location.deals_today}
-                // Signed-out visitors only (no session) get the sign-in link.
-                signInReturnPath={session ? undefined : currentPath}
+                // Any signed-in session gets full cards; only signed-out
+                // visitors get the sign-in banner (2026-09-25).
+                signedIn={session !== null}
+                signInReturnPath={currentPath}
               />
             )}
 
             {/* The location's OTHER active deals (other weekdays / future
                 start). Same server-side content gate as deals_today — null for
-                signed-out viewers, in which case this renders nothing. When
+                signed-out viewers only (renders nothing). When
                 there is no "Today's deals" section it owns the #deals anchor. */}
             {location && (
               <RestaurantUpcomingDeals

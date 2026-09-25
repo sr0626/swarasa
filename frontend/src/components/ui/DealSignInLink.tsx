@@ -1,6 +1,6 @@
 // The "Deal(s) available today" signal AS the sign-in link, for SIGNED-OUT
-// visitors only (callers decide — never rendered for any signed-in role,
-// who keep the plain, non-interactive DealBadge). Product decision
+// visitors only (callers decide — never rendered for a signed-in viewer, who
+// gets the full deal content since 2026-09-25). Product decision
 // 2026-09-23: instead of a badge plus a separate "Sign in to see deals" text
 // link, the badge/pane ITSELF is the link, so the whole signal is one
 // tappable target. It goes to /login?next=<current page> via

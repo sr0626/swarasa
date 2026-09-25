@@ -62,7 +62,7 @@ class FollowedBrandOut(BaseModel):
     has_deal_today: bool = False
     # Up to 2 of today's deal titles (title only). Safe to include: this
     # endpoint is registered_user-only, a role that may view deal content
-    # (`deal_service.caller_may_view_deal_content_for_location`). Empty
+    # (every signed-in caller may — `deal_service.caller_may_view_deal_content_for_location`). Empty
     # whenever `has_deal_today` is false. (The tile itself shows only the
     # badge; kept for API compatibility.)
     deal_titles_today: list[str] = []

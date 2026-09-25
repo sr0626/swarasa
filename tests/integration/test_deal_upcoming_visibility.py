@@ -3,10 +3,11 @@ location's OTHER active deals — not applicable today, not expired), added
 2026-09-23 after owner feedback.
 
 Same content gate as `deals_today` (`deal_service.
-caller_may_view_deal_content_for_location`): registered_user, admin, the
-owning owner and an assigned manager get an array (possibly empty); anonymous
-callers, a different owner and an unassigned manager get `null` — never `[]`,
-never a count, never a title anywhere in the response body.
+caller_may_view_deal_content_for_location`): since 2026-09-25 ANY signed-in
+caller (registered_user, admin, any owner incl. another brand's, any manager
+incl. unassigned) gets an array (possibly empty); only anonymous callers get
+`null` — never `[]`, never a count, never a title anywhere in the response
+body.
 
 Dates are built relative to the real "now" in the location's timezone
 (America/Chicago via LocationFactory) so the tests hold on any weekday.
@@ -125,7 +126,7 @@ async def test_owner_and_assigned_manager_get_array(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_other_owner_and_unassigned_manager_get_null(client, db_session):
+async def test_other_owner_and_unassigned_manager_now_get_the_list(client, db_session):
     _, location = await _seed(db_session)
     other_owner = await create_owner(db_session)
     await create_deal(db_session, location_id=location.id, title="Nope", applicable_days=[_other_weekday()])
@@ -133,13 +134,11 @@ async def test_other_owner_and_unassigned_manager_get_null(client, db_session):
 
     _as_optional_user("owner", sub=other_owner.cognito_sub, email=other_owner.email)
     response = await client.get(f"/locations/{location.id}")
-    assert response.json()["upcoming_deals"] is None
-    assert "Nope" not in response.text
+    assert [d["title"] for d in response.json()["upcoming_deals"]] == ["Nope"]
 
     _as_optional_user("manager", sub=str(uuid.uuid4()))
     response = await client.get(f"/locations/{location.id}")
-    assert response.json()["upcoming_deals"] is None
-    assert "Nope" not in response.text
+    assert [d["title"] for d in response.json()["upcoming_deals"]] == ["Nope"]
 
 
 @pytest.mark.asyncio
