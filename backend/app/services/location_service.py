@@ -853,12 +853,39 @@ async def _caller_may_see_inactive_locations(db: AsyncSession, brand, current_us
 # ---------------------------------------------------------------------------
 
 
+def _hours_snapshot(rows, days: list[int]) -> dict[str, str]:
+    """`{"0": "11:00-22:00", "1": "closed", "2": "unknown"}` for just `days` —
+    compact, JSON-safe audit payload (keys are day_of_week as strings)."""
+    by_day = {row.day_of_week: row for row in rows}
+    snapshot: dict[str, str] = {}
+    for day in days:
+        row = by_day.get(day)
+        if row is None or row.is_closed is None:
+            snapshot[str(day)] = "unknown"
+        elif row.is_closed:
+            snapshot[str(day)] = "closed"
+        elif row.open_time is not None and row.close_time is not None:
+            snapshot[str(day)] = (
+                f"{row.open_time.strftime('%H:%M')}-{row.close_time.strftime('%H:%M')}"
+            )
+        else:
+            snapshot[str(day)] = "unknown"
+    return snapshot
+
+
 async def replace_location_hours(
     db: AsyncSession, location_id: int, entries: list[HourEntryIn], current_user
 ) -> HoursResponse:
     location = await get_location_or_404(db, location_id)
+    days = [e.day_of_week for e in entries]
+    old_rows = await hours_service.get_hours_for_location(db, location.id)
+    old_snapshot = _hours_snapshot(old_rows, days)
     await hours_service.replace_hours(db, location.id, entries)
+    new_rows = await hours_service.get_hours_for_location(db, location.id)
 
+    # `hours_updated_days` stays (existing summary + legacy consumers); the
+    # per-day `hours` snapshots are what lets the activity feed show
+    # "Hours (Monday): 11am-9pm -> 10am-10pm" (audit_diff.py).
     await audit_service.log(
         db,
         table_name="restaurant_location",
@@ -866,8 +893,8 @@ async def replace_location_hours(
         action="update",
         actor_id=current_user.cognito_sub,
         actor_role=current_user.role,
-        old_val=None,
-        new_val={"hours_updated_days": [e.day_of_week for e in entries]},
+        old_val={"hours": old_snapshot},
+        new_val={"hours_updated_days": days, "hours": _hours_snapshot(new_rows, days)},
     )
     await db.commit()
 
