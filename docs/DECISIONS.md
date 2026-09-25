@@ -267,6 +267,21 @@ same-day fallback if the new version needs correcting)*
 
 ## Infrastructure & Hosting
 
+**Backend deploys queue one at a time: workflow-level `concurrency` group `deploy-backend` with `cancel-in-progress: false`**
+2026-09-25 | Built in PR #232 (DevOps, `.github/workflows/deploy-backend.yml`; no
+IAM or infra change). Root cause: Deploy Backend #72 (PR #229) failed at "Point
+deal-expiry Lambda at the same new image" with `ResourceConflictException: An
+update is in progress`, because PR #230 merged minutes later and its deploy
+updated the same Lambda concurrently. The later run succeeded, so the final state
+happened to be right, but the same race can also leave the API and deal-expiry
+Lambdas on different images. Fix: `concurrency: group: deploy-backend,
+cancel-in-progress: false`, so deploys run one at a time. A run already in
+progress is never killed; GitHub keeps only the newest pending run, which is what
+we want because each run deploys its own commit's image and the latest commit
+should win.
+*Rejected: `cancel-in-progress: true` (could kill a run mid-Lambda-update, which
+is worse than waiting)*
+
 **Deal-expiry Lambda packaging: container image REUSING the API Lambda's own image, not a second ECR repo/Dockerfile**
 2026-09-23 | `backend/app/lambda_handlers/deal_expiry.py` (PR #185) shipped
 against `infra/modules/lambda/main.tf`'s `aws_lambda_function.deal_expiry`,
@@ -876,6 +891,48 @@ Infra to revisit if this pattern gets used often enough to want it).*
 ---
 
 ## Database & Data Model
+
+**Cuisine / dietary / type tags are per location, not per brand (`location_cuisine`, migration `0016_location_cuisine`); the old `restaurant_cuisine` is kept but deprecated**
+2026-09-24 | Built in PR #230. Why: branches of one restaurant differ — one branch
+may not serve breakfast, another runs a different kitchen or menu — so a single
+brand-level tag set is wrong for some branches. **Schema:** new `location_cuisine`
+(composite PK `location_id, cuisine_tag_id`, both FKs `ON DELETE CASCADE`, index
+on `cuisine_tag_id`). The migration BACKFILLS it from `restaurant_cuisine`
+(idempotent `INSERT ... SELECT ... ON CONFLICT DO NOTHING`): every existing
+location, in every status and including soft-deleted brands, receives its brand's
+tags, so nothing changes visibly at deploy time. **`restaurant_cuisine` is kept
+but deprecated:** no application code reads or writes it any more (model
+docstring and `docs/DATA_MODEL.md` say so). This is an expand-then-contract
+rollout — the migration stays reversible (downgrade folds the per-location union
+back into `restaurant_cuisine` before dropping `location_cuisine`) and an app
+rollback still finds its data; the old table is dropped by a later migration once
+the change has soaked. Supersedes the earlier statement (see the CSV bulk-import
+entry) that `restaurant_cuisine` stays brand-level.
+**Behaviour:** a new location starts with a COPY of the brand's first existing
+location's tags (lowest id, any status; empty for the brand's first location);
+`POST /locations` takes an optional `cuisine_tag_ids` (omitted = that copy,
+`[]` = none). `PUT /locations/{id}/cuisine-tags` fully replaces one location's
+tags (unknown / inactive ids ignored, siblings untouched), gated by
+`require_location_write_access` (owner, actively-assigned manager, or admin,
+re-validated server-side) and audit-logged on `restaurant_location` with
+before/after tag slugs. The brand-level `cuisine_tags` payload is now the UNION
+of its locations' tags (public callers: active locations only, so a hidden or
+setup branch never advertises tags; owner/admin: all). `POST/PATCH /restaurants`
+no longer take `cuisine_tag_ids` (an old client still sending it is harmlessly
+ignored). **Search:** `cuisine[]` / `dietary[]` / `type[]` filters and the `q`
+tag match are evaluated PER CANDIDATE LOCATION, so a branch without the tag is
+never the tile's `nearest_location` and is not counted in
+`location_count_nearby` for that filter; the tile's tags are the nearest
+surviving location's. Follow tiles show the chosen location's tags. UI: a
+"Cuisine & dietary tags" panel in the location editor, and the owner brand card
+shows tags on each location row instead of a brand-level row. After deploy the
+human applies the migration via the `alembic_upgrade` management invoke; expect
+`location_cuisine` rows = each brand's tag count x its number of locations.
+*Rejected: keeping brand-level tags with per-location overrides (two sources of
+truth and a precedence rule for every read path, search filter and count; a
+plain per-location set is simpler and matches how owners think about a branch);
+dropping `restaurant_cuisine` in the same migration (irreversible; the
+expand-then-contract rollout keeps rollback safe)*
 
 **Registered-user activity tracking (searches + tile clicks): `user_activity_event` table, registered users only, best-effort, 12-month retention with no new infra**
 2026-09-23 | User-approved ("go with your suggestion") after the click-history
@@ -1653,6 +1710,30 @@ bug in a future audit-log query).*
 
 ## Authentication & Permissions
 
+**Owner-facing error messages must not disclose another tenant's relationships: the cross-owner manager-assignment `409` is now generic, the precise reason lives only in server logs**
+2026-09-25 | Built in PR #229. User feedback on the "Manager scoped to one owner
+at a time" invariant (`409 manager_different_owner`): its message ("This person is
+already an active manager for a different restaurant owner's account...")
+told an owner that a given email manages for ANOTHER owner, which discloses that
+tenant's relationship. The API now returns "We couldn't assign this person as a
+manager. Please check the email address, or contact support if you think this is a
+mistake."; the precise reason is written to the server log as a WARNING
+(`manager_different_owner` with the owner id and manager sub). The HTTP status
+(409) and the machine-readable `code` (`manager_different_owner`) are UNCHANGED,
+so admin tooling and the API contract still see the reason; only the
+human-readable `message` was genericised. A regression test fails against the old
+message. Consistent with root CLAUDE.md "NEVER expose internal stack details in
+API error responses", extended to other tenants' data. **Follow-ups, not built:**
+(1) an admin-visible alert / UI entry for blocked cross-owner assignments (the
+explicit text belongs in logs, admin alerts and the admin UI); (2) `404
+manager_not_found` ("No registered user exists with this email") is similarly
+explicit and is a form of email enumeration, but it is LEFT as-is because an owner
+must know to ask the person to register first — revisit once invites exist (SES,
+Phase 2+).
+*Rejected: changing the 409 status or the `code` (admin tooling and the API
+contract keep seeing the reason; only the human-readable `message` is
+genericised)*
+
 **Display name is set-once: `PATCH /auth/me` returns `409 name_locked` on a change; admins change a name only through the `set_user_name` management command**
 2026-09-23 | User-requested. Source: PR #195
 (`backend/app/services/auth_service.py::_reject_name_change_if_locked` /
@@ -2019,6 +2100,108 @@ Owner adds new location during free period — it gets the benefit too.
 ---
 
 ## Features & Product
+
+**Mobile-first audit fixes: 44px target policy (editor inputs included), compact editor sticky stack, exclusive top-bar menus, and `brand-ink-subtle` darkened to `#7A6A5D` for AA contrast**
+2026-09-25 | Built in PR #231 from a read-only 375px audit (also re-measured at
+320/390/430/700/1280). Frontend-only, no API or schema change. Decisions worth
+keeping:
+- **Contrast token.** `brand-ink-subtle` (defined only in
+  `frontend/tailwind.config.ts`) went from `#8A7A6E` to **`#7A6A5D`**: 4.13 -> 5.19:1
+  on white and 3.81 -> 4.79:1 on the `#FBF5EC` page background, so it now meets
+  WCAG AA (4.5:1) on both, while staying visibly lighter than `ink-muted`
+  (`#5A4A3E`, 8.45 / 7.80). Text on the chip background (`#F0DEC4`) would still
+  fail with `ink-subtle` (3.94:1), so the "Opens at ..." / hours-unknown pills
+  (`OpenStatusBadge`, `LocationStatusChip`) use `ink-muted` (6.42:1) instead.
+  `brand-placeholder` (`#A79684`, 2.64:1) is allowed ONLY as
+  `placeholder:` text (placeholders are exempt from 4.5:1) and must never carry
+  real text. A regression test (`lib/ui/contrast.test.ts`) pins the ratios.
+- **44px touch-target policy applies to the owner editor too**, not just the
+  public pages: hours time inputs, text inputs (now 46px, 16px text on phones so
+  iOS doesn't zoom), manager Remove, specialty input, chip remove, photo Set as
+  cover / Delete, setup "Add" links; text links get a 44px hit area via padding
+  and negative margin without changing layout (logo, Forgot password, tile
+  address link, "Create an account" / "Sign in", admin bell "View all"). Carousel
+  dots get a 32x44 hit area on phones (a full 44px wide would not fit 10 dots in
+  343px), 44 wide from `sm`.
+- **Editor sticky stack compacted on phones.** Below `md` the site header is NOT
+  sticky in the editor (`TopBar stickyOnMobile={false}`; sticky again from `md`),
+  the section bar is 48px and the Go-live bar is one row: the pinned stack drops
+  from 194px (24% of an 812px screen) to 101px (12%), and to 48px once the
+  listing is live. `--editor-topbar-h` is published as 0 when the header isn't
+  sticky, and the anchor scroll-margin and Go-live `top` follow it, so every
+  jump target still lands 16px under the stack. Scroll-spy highlighting is now a
+  pure function (`pickActiveSectionId`) so the bottom of the page highlights the
+  last section.
+- **Top-bar menus are mutually exclusive** (hamburger, account dropdown, admin
+  bell) through a small event bus (`lib/nav/exclusiveMenu.ts`); Escape /
+  focus-return / outside-click behaviour is unchanged.
+- **Deliberate non-fix:** the diner-facing "More deals & specials" card keeps
+  showing only the Days line, not dates — the audit flagged this, but it is the
+  user's explicit 2026-09-24 request (see "Deals refinements", item 3).
+- Known leftovers (not addressed): a handful of sub-44px text links outside the
+  requested list ("See popular near you", "Back to {brand}", "Find more", the
+  home/search hero input label area) and the audit's minor nits. Real-device iOS
+  Safari (safe areas, on-screen keyboard) was not verifiable.
+*Rejected: a full 44px-wide hit area for every carousel dot on phones (10 dots
+do not fit 343px); showing dates on "More deals & specials" to follow the audit
+(contradicts the user's explicit request)*
+
+**Deal counts on owner/manager location rows are owner/manager/admin-only metadata; the Deals button reflects live-deal state**
+2026-09-25 | Built in PR #233. `GET /restaurants/{id}/locations` gains
+`active_deals_count` and `deals_hidden`, populated ONLY when the caller is the
+brand's owner or an admin (the same callers that already see non-active
+locations on that endpoint — `include_inactive`); they are `null` for anonymous,
+another owner, a manager, or a registered user. `GET /auth/me/managed-locations`
+returns them (never null) for the manager's own assigned rows, which are already
+self-scoped. Public callers keep learning only the content-free `has_deal_today`
+signal (see "Deals engine: free-tier, public-signal + registered-user-content
+visibility") — a deal COUNT is deal-content metadata, so it never appears on a
+public surface. **"Live deal" = `is_active` AND (`end_at` IS NULL OR `end_at` >
+now)** (`deal_service.live_deal_counts`, one grouped query per request, no N+1).
+It is deliberately not time-of-week aware: a future-`start_at` or
+weekday-restricted deal still counts, because the owner has set it up and must
+not be told to "Add a deal". It is also independent of the location-level "Hide
+all deals" switch, which is surfaced separately as `deals_hidden`. The button
+states: `Deals · N` (>= 1 live), `Add a deal` (none), `Deals hidden` /
+`Deals hidden · N` (hide-all on), plain `Deals` when the count is unknown (older
+backend); each state differs in label, not only colour. No migration, counts are
+computed.
+*Rejected: counting only deals applicable right now by weekday and start date
+(an owner with a "Weekend brunch" deal would be told "Add a deal" on a Tuesday)*
+
+**Owner console lists setup (`coming_soon`) locations inline, with a sticky Go-live bar; per-location page links (refines "New manual listings start in setup")**
+2026-09-24 | Built in PR #227, after owner feedback on PR #224's setup flow:
+"added new location, entered hours, couldn't notice Activate, hit Back to
+locations... that's gone." **Root cause of the "first location vanished" report
+(a frontend bug, backend was correct):** the listing was never lost, but the
+owner loader (`loadOwnerRestaurants`) called `GET /restaurants/{id}/locations`
+WITHOUT the owner's access token, and that endpoint returns only `active`
+locations to an anonymous caller (the brand's owner and admins get the
+non-active ones), so a `coming_soon` listing was invisible until activated. It
+also skipped the call when `brand.location_count === 0`, but `location_count` is
+the ACTIVE count, so a brand whose only listing was in setup rendered "No
+locations yet". Fix: pass the token (an authenticated read bypasses the Next data
+cache) and always load the locations; new backend tests pin the behaviour
+(owner/admin see a setup listing, including one with no `location_name`;
+anonymous and other owners do not; `location_count` stays active-only).
+**UX changes:** setup locations are listed INLINE with Active / Hidden / Closed
+ones on the owner brand card, with a stronger "Coming soon" tag (gold fill, ring,
+dot) and a "Finish setup - N left" button — the separate Coming soon panel and
+its filter (`ComingSoonLocationsPanel`) were removed. In the editor a sticky
+**Go-live bar** (only while in setup) shows either the outstanding items as jump
+links or "All set - ready to go live" with a large **Activate listing** button,
+disabled until the checklist is complete and then emphasised with a finite,
+`motion-safe` glow; a manager sees the checklist but no button. Saving hours or
+details that completes the checklist prompts "Everything's ready - Activate
+listing" inline. Activation still goes through the existing status action; the
+server gate (422 `listing_incomplete`) is unchanged. Each location row has its own
+**View public page** (active) / **Preview page** (not live) link; the
+brand-level button is "View all locations" and appears only when the brand has 2+
+active locations (none for a single location); admin listings rows follow the
+same logic. No schema or API change.
+*Rejected: keeping the separate Coming soon panel and filter (replaced by inline
+rows); a brand-level page button for a single-location brand (it duplicates the
+location's own link)*
 
 **Future / parked (no code): menu QR code as a paid feature, the proposed QR-vs-web menu visibility rule (CONFLICTS with the free-public-menu decision — re-confirm before build), city landing pages**
 2026-09-25 | Nothing here is built; recorded so the ideas and the one open conflict
