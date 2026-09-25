@@ -46,6 +46,18 @@ permissions:
   id-token: write   # required for OIDC — no static AWS keys, ever
   contents: read
 
+# One deploy at a time. Two merges landing minutes apart used to run two
+# deploys concurrently; the second one's `update-function-code` on the
+# deal-expiry Lambda then failed with ResourceConflictException (seen on
+# Deploy Backend #72, PR #229 vs #230, 2026-09-24). `cancel-in-progress:
+# false` queues instead of killing a run that is mid-deploy (a half-applied
+# Lambda update is worse than waiting); GitHub keeps only the newest pending
+# run, which is what we want since each run deploys its own commit's image
+# and the latest commit should win.
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+
 env:
   AWS_REGION: us-east-1                  # confirmed — see DECISIONS.md "Region"
   ECR_REPOSITORY: swarasa-api-dev        # confirmed against infra/modules/ecr — see header
