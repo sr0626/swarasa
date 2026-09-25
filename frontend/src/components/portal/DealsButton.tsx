@@ -16,7 +16,7 @@ const BOX =
   "flex min-h-[44px] shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-brand-control border px-5 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent";
 
 const VARIANT_CLASS: Record<DealsButtonVariant, string> = {
-  live: "border-brand-accent/40 bg-brand-accent/10 text-brand-accent hover:bg-brand-accent/20",
+  live: "border-brand-accent/40 bg-brand-accent/10 text-brand-accent hover:bg-brand-accent/15",
   empty:
     "border-brand-border bg-white text-brand-ink-muted hover:border-brand-ink-subtle hover:bg-brand-chip",
   hidden:
