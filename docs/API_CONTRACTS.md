@@ -927,6 +927,23 @@ Audit: one `restaurant_location` `update` row with
 `GET /restaurants/{id}/locations` items also carry `cuisine_tags` (that
 location's own tags, one batched query for the page).
 
+**Deals-button state — `active_deals_count` / `deals_hidden` (added
+2026-09-24, no migration; counts are computed).** Each
+`GET /restaurants/{id}/locations` item also carries:
+
+| field | type | meaning |
+|---|---|---|
+| `active_deals_count` | int \| null | Live deals at this location: `is_active = true` AND (`end_at` IS NULL OR `end_at` > now). Inactive and expired deals are not counted; a deal with a future `start_at` or restricted `applicable_days` IS counted (the owner has set it up). Independent of `deals_hidden`. |
+| `deals_hidden` | bool \| null | The location-level "Hide all deals" switch (`restaurant_location.deals_hidden`). |
+
+These are deal **content metadata**, so they are populated ONLY for a caller
+with write access — the brand's owning owner or an admin (the same callers
+that see non-active locations here). For an anonymous caller, another owner,
+a manager or a registered user, both are `null`; the public only ever learns
+the boolean `has_deal_today` (unchanged). Computed with ONE grouped query
+for the whole page (no per-location queries). They drive the owner business
+page's Deals button (`Deals · N` / `Add a deal` / `Deals hidden`).
+
 ### Photos (`restaurant_photo`, sub-resource of `/locations/{id}`)
 
 **Added alongside `restaurant_photo`'s follow-up migration** — closes
@@ -1986,7 +2003,9 @@ Response: `200`
       "is_verified": true,
       "is_paid": true,
       "is_open_now": true,
-      "follower_count": 12
+      "follower_count": 12,
+      "active_deals_count": 2,
+      "deals_hidden": false
     }
   ],
   "page": 1,
@@ -1994,6 +2013,11 @@ Response: `200`
   "total": 1
 }
 ```
+`active_deals_count` / `deals_hidden` — added 2026-09-24 for the manager
+panel's Deals button. Same definitions as on `GET /restaurants/{id}/locations`
+(live = `is_active` AND (`end_at` NULL or > now); `deals_hidden` = the
+"Hide all deals" switch). Never `null` here: every row is one the caller is
+assigned to and may write. One grouped query for the page.
 Same per-row shape as `GET /restaurants/{id}/locations`'s
 `LocationSummaryOut` (deliberately duplicated as its own
 `ManagedLocationOut` schema, not imported — see

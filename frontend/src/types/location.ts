@@ -75,6 +75,15 @@ export interface LocationSummary {
   is_open_now: boolean | null;
   /** THIS location's own cuisine/dietary tags (per-location, additive). */
   cuisine_tags: CuisineTag[];
+  /**
+   * Live deals at this location (active and not past their end date) —
+   * drives the Deals button state on the owner console. Deal-content metadata,
+   * so it is `null` (or absent) unless the caller is the brand's owner / an
+   * admin; the public list never carries it.
+   */
+  active_deals_count?: number | null;
+  /** The location-level "Hide all deals" switch; same visibility as `active_deals_count`. */
+  deals_hidden?: boolean | null;
 }
 
 /**
@@ -363,4 +372,8 @@ export interface ManagedLocation {
    * the same number.
    */
   follower_count: number;
+  /** Live deals here (active, not past end date) — see `LocationSummary.active_deals_count`. */
+  active_deals_count?: number;
+  /** The location-level "Hide all deals" switch. */
+  deals_hidden?: boolean;
 }

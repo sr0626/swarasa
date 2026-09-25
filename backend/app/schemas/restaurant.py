@@ -111,6 +111,15 @@ class LocationSummaryOut(BaseModel):
     is_open_now: bool | None
     # This location's own tags (additive) — one batched query for the page.
     cuisine_tags: list[CuisineTagOut] = []
+    # Owner-console Deals-button state (2026-09-24). Deal CONTENT metadata, so
+    # populated ONLY for a caller with write access to the brand (the owning
+    # owner or an admin — same caller set that sees non-active locations
+    # here); `None` for anonymous / other-owner / manager / registered_user
+    # callers, who only ever learn the boolean `has_deal_today` elsewhere.
+    # `active_deals_count` = live deals (is_active and not past end_at);
+    # `deals_hidden` = the location-level "Hide all deals" switch.
+    active_deals_count: int | None = None
+    deals_hidden: bool | None = None
 
 
 class LocationListResponse(BaseModel):

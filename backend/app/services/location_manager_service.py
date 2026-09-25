@@ -37,6 +37,7 @@ from app.models.restaurant_location import RestaurantLocation
 from app.services import (
     audit_service,
     cognito_service,
+    deal_service,
     follow_service,
     hours_service,
     platform_config_service,
@@ -418,6 +419,9 @@ async def list_managed_locations(db: AsyncSession, current_user, pagination):
         .all()
     )
 
+    # One grouped query for the whole page (the caller is assigned to every
+    # row, so the counts are theirs to see).
+    deal_counts = await deal_service.live_deal_counts(db, [row.id for row in rows])
     results = []
     for row in rows:
         is_open_now = await hours_service.is_open_now_for_location(db, row.id, row.timezone)
@@ -439,6 +443,8 @@ async def list_managed_locations(db: AsyncSession, current_user, pagination):
                 is_paid=row.is_paid,
                 is_open_now=is_open_now,
                 follower_count=follower_count,
+                active_deals_count=deal_counts.get(row.id, 0),
+                deals_hidden=bool(row.deals_hidden),
             )
         )
 
