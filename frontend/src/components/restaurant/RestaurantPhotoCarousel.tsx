@@ -147,7 +147,7 @@ export default function RestaurantPhotoCarousel({
         <ArrowIcon direction="right" />
       </button>
 
-      <div className="absolute inset-x-0 bottom-2 flex justify-center">
+      <div className="absolute inset-x-0 bottom-3 flex justify-center">
         <div className="flex items-center rounded-brand-pill bg-brand-ink/60 px-1">
           {photos.map((photo, index) => (
             <button

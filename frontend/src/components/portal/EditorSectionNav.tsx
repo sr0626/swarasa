@@ -34,6 +34,7 @@
 // when scrolled to the page bottom).
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { centerScrollLeft } from "@/lib/ui/horizontalScroll";
 import { isAtPageBottom, pickActiveSectionId } from "@/lib/portal/activeSection";
 import type { EditorSection } from "@/lib/portal/editorSections";
 
@@ -142,8 +143,12 @@ export default function EditorSectionNav({
     if (!list || !activeId) return;
     const link = list.querySelector<HTMLElement>(`[data-anchor="${activeId}"]`);
     if (!link) return;
-    const left = link.offsetLeft - (list.clientWidth - link.offsetWidth) / 2;
-    list.scrollTo({ left, behavior: "auto" });
+    // The <ul> is `relative`, so offsetLeft is measured from the list itself
+    // (not from the sticky bar, which also holds the Back link).
+    list.scrollTo({
+      left: centerScrollLeft(link.offsetLeft, link.offsetWidth, list.clientWidth, list.scrollWidth),
+      behavior: "auto",
+    });
   }, [activeId]);
 
   function handleClick(anchorId: string) {
@@ -180,7 +185,7 @@ export default function EditorSectionNav({
       aria-label="Jump to a section of this listing"
       className="min-w-0 flex-1"
     >
-      <ul ref={listRef} className="flex h-12 items-center gap-1 overflow-x-auto md:h-14 overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <ul ref={listRef} className="relative flex h-12 items-center gap-1 overflow-x-auto md:h-14 overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {sections.map((s) => {
           const active = activeId === s.anchorId;
           return (

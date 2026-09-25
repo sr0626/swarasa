@@ -111,8 +111,8 @@ export default function GoLiveBar({
                 >
                   {state.count} thing{state.count === 1 ? "" : "s"} left
                 </a>
-                {/* From `sm`: the same sentence with a jump link per item (44px-tall tap area
-                    via padding-free min-height, so the text still reads as one line). */}
+                {/* From `sm`: the same sentence with a jump link per item (a 44px-tall tap
+                    area from `py-3 -my-3`, so the text line keeps its height). */}
                 <span className="hidden sm:inline">
                   {state.count} thing{state.count === 1 ? "" : "s"} left:{" "}
                   {state.items.map((item, index) => (
@@ -120,7 +120,7 @@ export default function GoLiveBar({
                       {index > 0 && ", "}
                       <a
                         href={`#sec-${item.sectionId}`}
-                        className="inline-flex min-h-[44px] items-center underline decoration-brand-accent underline-offset-2 hover:text-brand-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent"
+                        className="-my-3 inline-block py-3 underline decoration-brand-accent underline-offset-2 hover:text-brand-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent"
                       >
                         {item.short}
                       </a>

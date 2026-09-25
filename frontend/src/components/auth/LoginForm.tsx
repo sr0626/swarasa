@@ -240,7 +240,7 @@ export default function LoginForm({
         New here?{" "}
         <Link
           href={withNext("/signup", nextPath)}
-          className="font-medium text-brand-accent transition hover:text-brand-accent-hover"
+          className="-my-3 inline-block py-3 font-medium text-brand-accent transition hover:text-brand-accent-hover"
         >
           Create an account
         </Link>
