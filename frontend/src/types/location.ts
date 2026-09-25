@@ -171,23 +171,21 @@ export interface LocationDetail {
    * tier feature — never gated on `is_paid`. */
   has_deal_today: boolean;
   /**
-   * Content-gated: `null` when the caller may not view deal content (public,
-   * signed-out, or a signed-in caller with no relationship to this
-   * location) regardless of `has_deal_today`; `[]` when visible-but-none
+   * Content-gated: `null` ONLY for a signed-out (anonymous) caller,
+   * regardless of `has_deal_today` (any signed-in caller of any role gets
+   * the content — 2026-09-25); `[]` when visible-but-none
    * (shouldn't normally co-occur with `has_deal_today: true`, but not
    * assumed); a real array when visible-and-present. See
-   * `deal_service.caller_may_view_deal_content_for_location` — true for a
-   * signed-in `registered_user`/`admin`, or the location's own
-   * owner/assigned manager. Only populated when `getLocationById` is
+   * `deal_service.caller_may_view_deal_content_for_location` — true for
+   * any authenticated caller. Only populated when `getLocationById` is
    * called WITH an access token (see that function's own doc comment).
    */
   deals_today: DealPublic[] | null;
   /**
    * The location's OTHER active deals — not applicable today (other
    * weekdays / future-dated), not expired — sorted soonest-next-occurrence
-   * first. Same content gate as `deals_today`: `null` (never a count) when
-   * the viewer may not see deal content; an array (possibly empty)
-   * otherwise. Optional so a response from a backend that predates the field
+   * first. Same content gate as `deals_today`: `null` (never a count) for a
+   * signed-out viewer; an array (possibly empty) for any signed-in viewer. Optional so a response from a backend that predates the field
    * reads as `undefined` -> treated as null.
    */
   upcoming_deals?: DealUpcoming[] | null;

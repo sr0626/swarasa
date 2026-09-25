@@ -42,8 +42,8 @@ export interface DealListResponse {
 
 /** Content-gated public shape — see backend/app/schemas/deal.py
  * `DealPublicOut`. Only ever populated for a caller who passes
- * `deal_service.caller_may_view_deal_content_for_location` (a signed-in
- * registered_user, admin, or the location's own owner/manager). Deliberately
+ * `deal_service.caller_may_view_deal_content_for_location` (any signed-in
+ * caller, of any role; anonymous callers never get it — 2026-09-25). Deliberately
  * narrower than `Deal`: no `location_id`/`is_active`/timestamps — a public
  * reader doesn't need them, every deal in this list already matched "today"
  * by construction. */

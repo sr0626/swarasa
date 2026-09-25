@@ -16,12 +16,9 @@ docstring for the schema design. This module owns three separable things:
 3. The public content-visibility gate
    (`caller_may_view_deal_content_for_location`) — the FACT of a deal
    (`has_deal_today: bool`) is unconditionally public; the CONTENT
-   (title/description) is gated to a signed-in registered_user, admin, or
-   the location's own owner/manager. See that function's own docstring for
-   the full reasoning, including the explicit deviation from
-   docs/DECISIONS.md's older "Deals visible to registered users only (not
-   public)" entry — flagged there and in docs/DECISIONS.md's follow-up
-   entry for human confirmation, not silently assumed.
+   (title/description) is visible to ANY signed-in caller (any role), and
+   withheld only from anonymous callers (2026-09-25 decision — see that
+   function's docstring and docs/DECISIONS.md).
 """
 from __future__ import annotations
 
@@ -32,7 +29,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
 from app.models.deal import Deal, effective_deal_type
-from app.models.location_manager import LocationManager
 from app.models.restaurant_brand import RestaurantBrand
 from app.models.restaurant_location import RestaurantLocation
 from app.schemas.deal import (
@@ -43,7 +39,7 @@ from app.schemas.deal import (
     DealUpdate,
     DealVisibilityOut,
 )
-from app.services import audit_service, auth_service, hours_service
+from app.services import audit_service, hours_service
 
 _AUDITED_FIELDS = (
     "deal_type",  # recorded as the EFFECTIVE (end_at-derived) type — see _snapshot
@@ -529,52 +525,32 @@ async def todays_and_upcoming_for_location(
 async def caller_may_view_deal_content_for_location(
     db: AsyncSession, location: RestaurantLocation, current_user
 ) -> bool:
-    """The public-facing deal CONTENT gate (title/description) — distinct
-    from `has_deal_today`, which is unconditionally public regardless of
-    this. Same caller-aware-gating shape as
-    `location_service._caller_may_view_hidden_location`.
+    """The deal CONTENT gate (title/description/days/dates) — distinct from
+    `has_deal_today`, which is unconditionally public regardless of this.
 
-    JUDGMENT CALL (flagged for review): docs/DECISIONS.md's pre-existing
-    "Deals visible to registered users only (not public)" entry (May 2026)
-    reads as an all-or-nothing public/registered split with no boolean
-    "fact of a deal" carve-out. This task's own instructions (2026-09-23)
-    explicitly specify a different, more granular design: the FACT that a
-    location has a deal today is public (search badge, `has_deal_today`),
-    while only the CONTENT (title/description) stays gated to a signed-in
-    registered_user — plus, newly, the location's own owner/manager/admin
-    (not covered by the original May 2026 decision at all, which predates
-    the owner/manager portal). Implemented exactly as this task specified,
-    NOT re-derived from the older decision, since the newer instruction is
-    explicit and detailed ("this is the core product requirement, get it
-    right") — but this is a real, documented deviation from a prior
-    DECISIONS.md entry, not a reconciled continuation of it. See
-    docs/DECISIONS.md's follow-up entry for this same flag, surfaced for
-    human confirmation rather than assumed correct.
+    RULE (user decision 2026-09-25, supersedes the 2026-09-23 "registered
+    user + the location's own owner/manager/admin" rule): ANY signed-in
+    caller — registered_user, owner (of ANY restaurant, including someone
+    else's), manager (assigned or not), admin — may view deal content.
+    ONLY an anonymous (signed-out) caller may not; they keep the
+    content-free public signal (`has_deal_today`, search/tile badges).
+    Deals are public marketing; the earlier per-role relationship check left
+    a signed-in owner viewing another owner's restaurant in an awkward
+    in-between state (content-free pill, no sign-in prompt).
 
-    True for: a signed-in `registered_user`, an `admin`, the `owner` of
-    this location's brand, or a `manager` with an active
-    `location_manager` row for this exact location. False for anonymous
-    and for any other authenticated caller (public caller, a different
-    owner/manager, or an owner/manager not signed in as themselves).
+    This does NOT override the suppression rules that apply to everyone:
+    the location-level "Hide all deals" switch (`deals_hidden`) and a
+    deal's own `is_active` are applied when the deals are loaded
+    (`get_active_deals_map`), before this gate is consulted, so hidden or
+    inactive deals stay out of the public response even for a signed-in
+    caller (management endpoints are how an owner edits those). Follow
+    stays registered_user-only (unrelated to this gate).
+
+    `db`/`location` are unused now that the rule no longer depends on the
+    caller's relationship to the location; the signature is kept so the
+    choke point (and its callers) stay stable if the rule is tightened.
     """
-    if current_user is None:
-        return False
-    if current_user.role in ("registered_user", "admin"):
-        return True
-    if current_user.role == "owner":
-        owner = await auth_service.get_owner_account_by_sub(db, current_user.cognito_sub)
-        brand = await db.get(RestaurantBrand, location.brand_id)
-        return owner is not None and brand is not None and brand.owner_id == owner.id
-    if current_user.role == "manager":
-        result = await db.execute(
-            select(LocationManager).where(
-                LocationManager.user_id == current_user.cognito_sub,
-                LocationManager.location_id == location.id,
-                LocationManager.is_active == True,  # noqa: E712
-            )
-        )
-        return result.scalar_one_or_none() is not None
-    return False
+    return current_user is not None
 
 
 def deals_to_public_out(deals: list[Deal]) -> list[DealPublicOut]:

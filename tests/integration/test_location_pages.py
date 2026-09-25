@@ -487,7 +487,7 @@ async def test_hidden_location_page_404s_for_the_public_but_not_its_owner(
 
 
 @pytest.mark.asyncio
-async def test_location_page_deal_content_is_gated_like_location_detail(client, db_session, as_user):
+async def test_location_page_deal_content_signed_out_null_signed_in_content(client, db_session, as_user):
     _owner, brand = await _owned_brand(db_session, slug="namaste-grill")
     loc = await create_location(db_session, brand_id=brand.id, slug="irving")
     await create_deal(db_session, location_id=loc.id, title="Members only lunch")
@@ -502,6 +502,12 @@ async def test_location_page_deal_content_is_gated_like_location_detail(client, 
     _as_both(as_user, "registered_user")
     member = (await client.get(url)).json()["location"]
     assert [d["title"] for d in member["deals_today"]] == ["Members only lunch"]
+
+    # 2026-09-25: an owner of ANOTHER brand is signed in too -> content, not null.
+    _as_both(as_user, "owner")
+    other = (await client.get(url)).json()["location"]
+    assert [d["title"] for d in other["deals_today"]] == ["Members only lunch"]
+    assert other["upcoming_deals"] == []
 
 
 # ---------------------------------------------------------------------------

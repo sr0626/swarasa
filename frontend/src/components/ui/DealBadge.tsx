@@ -4,9 +4,10 @@
 // (product decision, 2026-09-23: "signed-out/public visitors see ONLY a
 // content-free badge — no title/description").
 //
-// Shared by RestaurantCard.tsx (search results / "Popular near you") and
-// RestaurantDeals.tsx (restaurant detail page) so the copy and styling
-// can't drift between the two surfaces. Search results never have deal
+// Used by RestaurantCard.tsx (search results / "Popular near you"), and its
+// copy/styling is mirrored by the signed-out sign-in banner on the restaurant
+// detail page (DealSignInLink). NOTE (2026-09-25): a SIGNED-IN viewer of a
+// restaurant page no longer sees this pill — they get the full deal cards. Search results never have deal
 // CONTENT to show regardless of viewer (docs/API_CONTRACTS.md "GET
 // /search" — `NearestLocationOut` only ever carries the boolean
 // `has_deal_today`, never `deals_today`), so this is also the only deal UI

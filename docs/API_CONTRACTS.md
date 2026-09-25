@@ -421,7 +421,9 @@ Auth: optional (`Authorization: Bearer` when signed in). One round trip for a
 location profile page: `{ "restaurant": <GET /restaurants/{id} payload>,
 "location": <GET /locations/{id} payload> }`. **Exactly the visibility and
 deal-content gating of `GET /locations/{id}`** (it is the same code path once
-the slug pair is resolved): 404 for an unknown pair, a location slug that
+the slug pair is resolved — so `location.deals_today`/`upcoming_deals` are
+`null` for a signed-out caller only and populated for any signed-in caller,
+2026-09-25): 404 for an unknown pair, a location slug that
 belongs to a different brand, a soft-deleted brand (admin excepted), or a
 hidden location for a caller who is not its owner/admin/assigned manager.
 `restaurant.location_count` is the ACTIVE-location count — the page uses it to
@@ -732,20 +734,29 @@ location (see `frontend/src/lib/api/locations.ts` `getLocationById`'s
     including anonymous. `true` when this location has at least one
     active deal whose day pattern/date window matches today (in the
     location's own timezone). This is a "fact," never deal content.
-  - `deals_today` — `null` when the caller may not view deal CONTENT
-    (anonymous, public, or an authenticated caller with no relationship
-    to this location); an array (possibly `[]`, exactly when
-    `has_deal_today` is `false`) when they may — a signed-in
-    `registered_user`, `admin`, or this location's own `owner`/an
-    actively-assigned `manager`. Each entry is
+  - `deals_today` — **Visibility amended 2026-09-25 (user decision,
+    supersedes the 2026-09-23 role/relationship gate):** `null` ONLY for an
+    **anonymous** (signed-out) caller; an array (possibly `[]`, exactly
+    when `has_deal_today` is `false`) for **ANY signed-in caller with a
+    valid token, of any role** — `registered_user`, `owner` (of any
+    restaurant, not just their own), `manager` (assigned or not), `admin`.
+    Deals are public marketing; the old relationship check left a signed-in
+    owner viewing another owner's restaurant with a content-free pill and
+    no sign-in prompt. The location-level "Hide all deals" switch
+    (`deals_hidden`) and a deal's own `is_active` still suppress content
+    (and the boolean) for everyone including signed-in callers; the
+    management endpoints (`GET /locations/{id}/deals`) are how an
+    owner/manager/admin sees hidden/inactive deals. Following a brand is
+    unchanged (`registered_user` only). Each entry is
     `{ id, deal_type, title, description }` — `deal_type` is `"deal"` or
     `"special"`, derived from `end_at` (no end date -> `"special"`, else
     `"deal"`; see "Deals (`deal`)" below). Distinguish "no deals
-    today" (`[]`) from "content withheld" (`null`) — show the
-    registration/sign-in prompt only for the `null` case when
-    `has_deal_today` is `true`.
+    today" (`[]`) from "content withheld" (`null`, i.e. signed-out) — show
+    the sign-in prompt only for the `null` case when `has_deal_today` is
+    `true`; a signed-in caller never gets `null` and never a content-free
+    pill.
     **JUDGMENT CALL, unresolved (flagged for human confirmation):** this
-    gate is caller-role-based only — it does NOT check
+    gate is signed-in-or-not only — it does NOT check
     `restaurant_location.is_paid`, which appears to conflict with root
     CLAUDE.md's "is_paid=false locations: ... deals ... are NOT returned
     by API" line. See `docs/DECISIONS.md`'s dedicated flagged entry for
@@ -757,10 +768,9 @@ location (see `frontend/src/lib/api/locations.ts` `getLocationById`'s
     in the future; a deal that will never occur again (e.g. Friday-only,
     `end_at` on Thursday) or whose `end_at` has passed is excluded. Exactly
     the same content gate as `deals_today`: **`null`** (never `[]`, never a
-    count, no titles anywhere in the body) for anonymous/public callers, a
-    different owner, or an unassigned manager; an array (possibly `[]`) for
-    a signed-in `registered_user`, `admin`, the owning owner or an
-    actively-assigned manager. `has_deal_today` and the sign-in CTA
+    count, no titles anywhere in the body) for anonymous (signed-out)
+    callers only; an array (possibly `[]`) for ANY signed-in caller of any
+    role (amended 2026-09-25, see `deals_today`). `has_deal_today` and the sign-in CTA
     behaviour are unchanged. Each entry:
     `{ id, deal_type, title, description, applicable_days, start_at,
     end_at, next_occurrence }` — `applicable_days` `null` = every day
@@ -1427,10 +1437,12 @@ How the frontend consumes the endpoints above (typed client
   `nearest_location.has_deal_today` is true — for every viewer, since a
   search result never carries deal content.
 - **Restaurant detail** — SSR; `getLocationById` is called WITH the
-  viewer's access token when signed in, so `deals_today` reflects their
-  content access. `deals_today` array present -> full deal cards
-  (title/description); `null` with `has_deal_today: true` -> the
-  content-free badge only. A separate "More deals & specials" section
+  viewer's access token when signed in. Any signed-in session (every role,
+  amended 2026-09-25) gets `deals_today`/`upcoming_deals` content -> full
+  deal cards (title/description), and never a content-free pill; only a
+  SIGNED-OUT visitor with `has_deal_today: true` sees the sign-in banner
+  (content-free). Pure helper `dealsPanelMode`
+  (`frontend/src/lib/deals/panel.ts`) decides banner vs cards vs nothing. A separate "More deals & specials" section
   (`RestaurantUpcomingDeals`) lists `upcoming_deals` (title, Deal/Special
   badge, description, days, date range or "Ongoing", next date) and renders
   nothing when the field is `null`/empty.
@@ -2152,8 +2164,8 @@ predicate `GET /search` uses (location's own timezone, applicable weekday,
 `start_at`/`end_at` window). `deal_titles_today` carries at most 2 of those
 deals' titles (ordered by location id, then deal id; `[]` when there is no
 deal today). Titles are safe to include here because this endpoint is
-registered_user-only, a role that may view deal content (same gate as
-`GET /locations/{id}` `deals_today`); descriptions are not included — the
+registered_user-only, and every signed-in role may view deal content (same
+gate as `GET /locations/{id}` `deals_today`, amended 2026-09-25); descriptions are not included — the
 restaurant page has the full text. Computed for the whole page in two extra
 queries (locations, then one bulk deal read), never per brand.
 

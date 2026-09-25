@@ -253,6 +253,11 @@ JWT_SECRET            Cognito JWT public key (fetched from Cognito endpoint)
   Stripe/billing/subscriptions/refunds remained deferred) — see
   DECISIONS.md "Deals engine: free-tier, public-signal + registered-user-content
   visibility". Deals are a FREE-tier feature, not paid-gated, per that decision.
+  Deal CONTENT visibility (2026-09-25 amendment): ANY signed-in caller of any
+  role gets `deals_today`/`upcoming_deals` content; anonymous callers get
+  `null` and only the public `has_deal_today` boolean. One choke point:
+  `deal_service.caller_may_view_deal_content_for_location`. `deals_hidden`
+  and `deal.is_active` still suppress content for everyone.
 - Analytics endpoints (Phase 2)
 - `open_now` as a `/search` query filter (Phase 3 — see DECISIONS.md
   "Restaurant hours"; grouped with map view / NLS search). Display-only

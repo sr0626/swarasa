@@ -1,54 +1,46 @@
-// Public restaurant detail page's deals section — task requirement
-// (2026-09-23): "Deal(s) available today" badge for the public
-// (content-free), full deal cards (title + description) for a signed-in
-// registered_user and up (and the location's own owner/manager/admin).
+// Public restaurant detail page's deals section. Rule (user decision
+// 2026-09-25, supersedes the 2026-09-23 registered-user-and-up rule): EVERY
+// signed-in session (registered_user, owner of any restaurant, manager,
+// admin) sees the full deal cards (title + description); only a SIGNED-OUT
+// visitor sees the content-free "Deal(s) available today" sign-in banner.
+// There is no content-free pill state for a signed-in viewer.
 //
-// Content gating happens entirely server-side, before this component ever
-// renders: `LocationDetail.deals_today` is `null` unless the caller passes
-// `deal_service.caller_may_view_deal_content_for_location`
-// (backend/app/services/deal_service.py) — this component only branches on
-// whether that array is present, it never re-derives viewer identity
-// itself (see the restaurant page routes for where the access token is
-// attached to the `getLocationById` call that produces this data).
+// The content itself is gated server-side: `LocationDetail.deals_today` is
+// `null` only for an anonymous caller
+// (`deal_service.caller_may_view_deal_content_for_location`,
+// backend/app/services/deal_service.py). Banner-vs-cards-vs-nothing is the
+// pure `dealsPanelMode` (lib/deals/panel.ts).
 import { DEALS_SECTION_ID, dealTypeLabel } from "@/lib/deals/format";
-import DealBadge from "@/components/ui/DealBadge";
+import { dealsPanelMode } from "@/lib/deals/panel";
 import DealSignInLink from "@/components/ui/DealSignInLink";
 import { TagIcon } from "@/components/ui/icons";
 import type { DealPublic } from "@/types/deal";
 
 interface RestaurantDealsProps {
   hasDealToday: boolean;
-  /** null = content-gated for this viewer (still show the content-free
-   * badge, per `hasDealToday`); a real (non-empty, in practice) array =
-   * full content. */
+  /** null = signed-out caller (content withheld); an array = full content. */
   dealsToday: DealPublic[] | null;
-  /** This page's path, passed ONLY for a signed-out visitor — turns the
-   * "Deal(s) available today" pane into a large sign-in banner that returns
-   * here after sign-in. Omitted for every signed-in role, whose UI is
-   * unchanged (plain badge). */
-  signInReturnPath?: string;
+  /** Is there a signed-in session? Signed-in viewers always get cards. */
+  signedIn: boolean;
+  /** This page's path — the sign-in banner returns here after sign-in. */
+  signInReturnPath: string;
 }
 
 export default function RestaurantDeals({
   hasDealToday,
   dealsToday,
+  signedIn,
   signInReturnPath,
 }: RestaurantDealsProps) {
-  if (!hasDealToday) return null;
+  const mode = dealsPanelMode({ hasDealToday, dealsToday, signedIn });
+  if (mode === "none") return null;
 
-  if (!dealsToday || dealsToday.length === 0) {
-    // Content-gated for this viewer (signed-out, or signed in with no
-    // relationship to this location) — content-free by design, no
-    // title/description, no explanation of why (that would itself hint at
-    // there being more to see for some viewers and not others).
+  if (mode === "sign-in-banner") {
+    // Signed-out only: a large, prominent banner that IS the sign-in link.
+    // Content-free by design — no title/description.
     return (
       <section id={DEALS_SECTION_ID} aria-label="Deals" className="scroll-mt-24">
-        {signInReturnPath ? (
-          // Signed-out: a large, prominent banner that IS the sign-in link.
-          <DealSignInLink currentPath={signInReturnPath} variant="banner" />
-        ) : (
-          <DealBadge />
-        )}
+        <DealSignInLink currentPath={signInReturnPath} variant="banner" />
       </section>
     );
   }
@@ -67,7 +59,7 @@ export default function RestaurantDeals({
         Today&apos;s deals
       </h2>
       <ul className="mt-3 flex flex-col gap-3">
-        {dealsToday.map((deal) => (
+        {(dealsToday ?? []).map((deal) => (
           <li
             key={deal.id}
             className="rounded-brand-control border border-brand-border bg-brand-bg p-4"
