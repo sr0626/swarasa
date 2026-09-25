@@ -366,6 +366,10 @@ _UPDATABLE_FIELDS = (
 _CLEARABLE_FIELDS = ("about", "specialties")
 _AUDITED_FIELDS = _UPDATABLE_FIELDS + _CLEARABLE_FIELDS
 
+# The address block a non-admin PATCH must carry (all four, non-empty) for its
+# `latitude`/`longitude` to be accepted — see `update_location`.
+_ADDRESS_BLOCK = ("address_line1", "city", "state", "postal_code")
+
 
 async def update_location(
     db: AsyncSession, location_id: int, body: LocationUpdate, current_user
@@ -377,6 +381,22 @@ async def update_location(
     old_val["longitude"] = float(location.longitude) if location.longitude is not None else None
 
     data = body.model_dump(exclude_unset=True)
+
+    # The map position is derived from the address, never hand-edited (user
+    # decision 2026-09-24). Owners/managers may only send latitude/longitude
+    # alongside the FULL address block in the same request — the shape the
+    # frontend's server action sends after re-geocoding the changed address
+    # (the API Lambda has no internet, so geocoding happens there). A bare
+    # lat/lng edit is rejected; an admin may still set coordinates directly.
+    if ("latitude" in data or "longitude" in data) and current_user.role != "admin":
+        if not all(data.get(field) for field in _ADDRESS_BLOCK):
+            raise AppError(
+                422,
+                "The map position is set automatically from the address and can't "
+                "be edited directly.",
+                "coordinates_not_editable",
+            )
+
     for field in _UPDATABLE_FIELDS:
         if field in data and data[field] is not None:
             value = data[field]
