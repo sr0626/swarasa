@@ -308,7 +308,7 @@ export default function LocationPhotoManager({
                     type="button"
                     onClick={() => handleSetAsCover(photo)}
                     disabled={pendingPhotoId === photo.id}
-                    className="min-h-[32px] rounded-brand-control px-2 text-xs font-semibold text-brand-ink-muted underline decoration-brand-border underline-offset-2 hover:text-brand-ink disabled:cursor-not-allowed disabled:opacity-60"
+                    className="min-h-[44px] rounded-brand-control px-2 text-xs font-semibold text-brand-ink-muted underline decoration-brand-border underline-offset-2 hover:text-brand-ink disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Set as cover
                   </button>
@@ -317,7 +317,7 @@ export default function LocationPhotoManager({
                     onClick={() => handleDeleteGalleryPhoto(photo)}
                     disabled={pendingPhotoId === photo.id}
                     aria-label="Delete photo"
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-brand-control text-brand-closed transition hover:bg-brand-closed-bg disabled:cursor-not-allowed disabled:opacity-60"
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-brand-control text-brand-closed transition hover:bg-brand-closed-bg disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <TrashIcon className="h-4 w-4" />
                   </button>

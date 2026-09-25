@@ -19,6 +19,7 @@ import {
   assignLocationManagerAction,
   removeLocationManagerAction,
 } from "@/app/portal/locations/[id]/actions";
+import { inputClass } from "@/components/portal/formFields";
 import { PlusIcon, TrashIcon, UsersIcon } from "@/components/ui/icons";
 import type { LocationManager } from "@/types/location";
 
@@ -124,8 +125,8 @@ export default function LocationManagerAssignment({
         <ul className="mt-4 divide-y divide-brand-border rounded-brand-control border border-brand-border">
           {managers.map((manager) => (
             <li key={manager.id} className="flex flex-wrap items-center justify-between gap-2 p-3">
-              <div>
-                <p className="text-sm font-medium text-brand-ink">
+              <div className="min-w-0 max-w-full">
+                <p className="break-all text-sm font-medium text-brand-ink">
                   {manager.email ?? "Unknown user"}
                 </p>
                 <p className="text-xs text-brand-ink-subtle">
@@ -142,8 +143,8 @@ export default function LocationManagerAssignment({
                   disabled={removingId === manager.id}
                   className={
                     confirmingRemoveId === manager.id
-                      ? "flex min-h-[36px] items-center gap-1.5 rounded-brand-control bg-brand-closed px-3 text-xs font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-                      : "flex min-h-[36px] items-center gap-1.5 rounded-brand-control border border-brand-closed px-3 text-xs font-semibold text-brand-closed transition hover:bg-brand-closed-bg disabled:cursor-not-allowed disabled:opacity-60"
+                      ? "flex min-h-[44px] items-center gap-1.5 rounded-brand-control bg-brand-closed px-3 text-xs font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                      : "flex min-h-[44px] items-center gap-1.5 rounded-brand-control border border-brand-closed px-3 text-xs font-semibold text-brand-closed transition hover:bg-brand-closed-bg disabled:cursor-not-allowed disabled:opacity-60"
                   }
                 >
                   <TrashIcon className="h-3.5 w-3.5" />
@@ -182,7 +183,7 @@ export default function LocationManagerAssignment({
             onChange={(e) => setEmail(e.target.value)}
             placeholder="manager@example.com"
             disabled={atCap}
-            className="mt-1.5 w-full rounded-brand-control border border-brand-border bg-white px-3 py-2.5 text-sm text-brand-ink placeholder:text-brand-placeholder focus:border-brand-accent focus:outline-none disabled:cursor-not-allowed disabled:bg-brand-bg"
+            className={`${inputClass(false)} disabled:cursor-not-allowed disabled:bg-brand-bg`}
           />
         </div>
         <button

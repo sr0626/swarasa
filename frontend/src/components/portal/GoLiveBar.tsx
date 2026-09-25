@@ -15,6 +15,11 @@
 //
 // The bar publishes its own height as `--editor-golive-h` on <html> so the
 // section anchors' scroll-margin (editorSectionAnchor.ts) clears it too.
+//
+// Phone (below `sm`): one compact row -- "2 things left" (a 44px link down to the
+// full checklist banner, which has its own 44px "Add" links) + the Activate
+// button -- so the pinned stack stays ~100px. From `sm` the individual
+// "add phone / add hours" jump links are shown inline as before.
 import { useEffect, useId, useRef, useState } from "react";
 import ActivateListingButton from "@/components/portal/ActivateListingButton";
 import { goLiveBarState } from "@/lib/portal/listingSetup";
@@ -77,8 +82,9 @@ export default function GoLiveBar({
       data-go-live-bar
       data-testid="go-live-bar"
       data-state={state.kind}
-      // top = site header + the 3.5rem section-nav row above it.
-      className={`sticky top-[calc(var(--editor-topbar-h,73px)+3.5rem)] z-20 -mx-4 border-b px-4 py-2 shadow-sm sm:-mx-6 sm:px-6 ${
+      // top = site header (sticky from `md` only) + the section-nav row above it
+      // (3rem on a phone, 3.5rem from `md`).
+      className={`sticky top-[calc(var(--editor-topbar-h,0px)+3rem)] z-20 -mx-4 border-b px-4 py-1 shadow-sm sm:-mx-6 sm:px-6 md:top-[calc(var(--editor-topbar-h,73px)+3.5rem)] md:py-2 ${
         ready ? "border-brand-success/40 bg-brand-success-bg" : "border-brand-border bg-white"
       }`}
     >
@@ -98,24 +104,35 @@ export default function GoLiveBar({
               state.headline
             ) : (
               <>
-                {state.count} thing{state.count === 1 ? "" : "s"} left:{" "}
-                {state.items.map((item, index) => (
-                  <span key={item.key}>
-                    {index > 0 && ", "}
-                    <a
-                      href={`#sec-${item.sectionId}`}
-                      className="underline decoration-brand-accent underline-offset-2 hover:text-brand-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent"
-                    >
-                      {item.short}
-                    </a>
-                  </span>
-                ))}
-                {state.hasUnknown && (
-                  <span>
-                    {state.items.length > 0 && ", "}
-                    finish the remaining details
-                  </span>
-                )}
+                {/* Phone: one short link to the checklist banner. */}
+                <a
+                  href="#setup-checklist"
+                  className="inline-flex min-h-[44px] items-center underline decoration-brand-accent underline-offset-2 hover:text-brand-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent sm:hidden"
+                >
+                  {state.count} thing{state.count === 1 ? "" : "s"} left
+                </a>
+                {/* From `sm`: the same sentence with a jump link per item (a 44px-tall tap
+                    area from `py-3 -my-3`, so the text line keeps its height). */}
+                <span className="hidden sm:inline">
+                  {state.count} thing{state.count === 1 ? "" : "s"} left:{" "}
+                  {state.items.map((item, index) => (
+                    <span key={item.key}>
+                      {index > 0 && ", "}
+                      <a
+                        href={`#sec-${item.sectionId}`}
+                        className="-my-3 inline-block py-3 underline decoration-brand-accent underline-offset-2 hover:text-brand-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent"
+                      >
+                        {item.short}
+                      </a>
+                    </span>
+                  ))}
+                  {state.hasUnknown && (
+                    <span>
+                      {state.items.length > 0 && ", "}
+                      finish the remaining details
+                    </span>
+                  )}
+                </span>
               </>
             )}
           </p>

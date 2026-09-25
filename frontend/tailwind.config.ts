@@ -41,7 +41,7 @@ const config: Config = {
           bg: "#FBF5EC",
           ink: "#241812",
           "ink-muted": "#5A4A3E",
-          "ink-subtle": "#8A7A6E",
+          "ink-subtle": "#7A6A5D", // AA (>= 4.5:1) on white (5.19) and on the #FBF5EC page bg (4.79); was #8A7A6E (4.13 / 3.81)
           placeholder: "#A79684",
           accent: "#C0392B",
           "accent-hover": "#8E2A1F",

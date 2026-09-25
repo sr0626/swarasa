@@ -14,12 +14,13 @@
 // particular has to stay reachable on a 375px viewport. (The top bar's mobile
 // menu button, TopBarNav.tsx, only holds navigation links; account items and
 // Logout live here, always.)
-import { useEffect, useRef, useState, type FocusEvent } from "react";
+import { useEffect, useId, useRef, useState, type FocusEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signOut } from "@aws-amplify/auth";
 import { ensureAmplifyConfigured } from "@/lib/auth/amplifyClient";
 import { stopSessionKeepAlive } from "@/lib/auth/sessionKeepAlive";
+import { announceMenuOpen, onOtherMenuOpen } from "@/lib/nav/exclusiveMenu";
 import { ChevronDownIcon } from "@/components/ui/icons";
 import type { UserRole } from "@/types/auth";
 
@@ -80,6 +81,13 @@ export default function AccountMenu({
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const itemRefs = useRef<Array<HTMLAnchorElement | HTMLButtonElement | null>>([]);
+
+  // Only one top-bar menu open at a time: announce this one, close on another's.
+  const menuId = useId();
+  useEffect(() => {
+    if (open) announceMenuOpen(menuId);
+  }, [open, menuId]);
+  useEffect(() => onOtherMenuOpen(menuId, () => setOpen(false)), [menuId]);
 
   /**
    * Logout (docs/PROJECT_PLAN.csv row, task brief): stop the silent-refresh

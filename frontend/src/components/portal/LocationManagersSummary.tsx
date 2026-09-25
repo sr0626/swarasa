@@ -33,9 +33,10 @@ export default function LocationManagersSummary({
   }
 
   return (
-    <span className="inline-flex items-start gap-1.5 text-xs text-brand-ink-muted">
+    <span className="inline-flex min-w-0 max-w-full items-start gap-1.5 text-xs text-brand-ink-muted">
       <UsersIcon className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-      <span>
+      {/* break-all: a long e-mail has no break opportunity and would push the row past the card edge on a phone. */}
+      <span className="min-w-0 break-all">
         {managers.length} manager{managers.length === 1 ? "" : "s"}:{" "}
         {managers.map((m) => m.email ?? "Unknown user").join(", ")}
       </span>

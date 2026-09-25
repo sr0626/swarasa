@@ -222,7 +222,7 @@ export default function LoginForm({
         </label>
         <Link
           href="/forgot-password"
-          className="text-sm font-medium text-brand-accent transition hover:text-brand-accent-hover"
+          className="inline-flex min-h-[44px] items-center text-sm font-medium text-brand-accent transition hover:text-brand-accent-hover"
         >
           Forgot password?
         </Link>
@@ -240,7 +240,7 @@ export default function LoginForm({
         New here?{" "}
         <Link
           href={withNext("/signup", nextPath)}
-          className="font-medium text-brand-accent transition hover:text-brand-accent-hover"
+          className="-my-3 inline-block py-3 font-medium text-brand-accent transition hover:text-brand-accent-hover"
         >
           Create an account
         </Link>

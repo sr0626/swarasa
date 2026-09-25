@@ -25,6 +25,7 @@ import { Suspense, useEffect, useId, useRef, useState, type FocusEvent } from "r
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { MenuIcon, XIcon } from "@/components/ui/icons";
+import { announceMenuOpen, onOtherMenuOpen } from "@/lib/nav/exclusiveMenu";
 import { isTopBarLinkActive, type TopBarLink } from "@/lib/nav/topBarLinks";
 
 type Variant = "desktop" | "mobile";
@@ -123,6 +124,13 @@ export function TopBarMobileNav({ links }: { links: ReadonlyArray<TopBarLink> })
   const panelId = useId();
   const containerRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+
+  // Only one top-bar menu open at a time: announce this one, close on another's.
+  const menuId = useId();
+  useEffect(() => {
+    if (open) announceMenuOpen(menuId);
+  }, [open, menuId]);
+  useEffect(() => onOtherMenuOpen(menuId, () => setOpen(false)), [menuId]);
 
   // Close on any navigation (including ones that don't go through a link
   // click here, e.g. browser back).

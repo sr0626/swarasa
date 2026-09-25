@@ -23,7 +23,7 @@ export default function LocationStatusChip({ status }: { status: ConsoleTodaySta
       return <span className={`${base} bg-brand-success-bg text-brand-success`}>Open Now</span>;
     case "opens_at":
       return (
-        <span className={`${base} bg-brand-chip text-brand-ink-subtle`}>
+        <span className={`${base} bg-brand-chip text-brand-ink-muted`}>
           Opens at {status.time}
         </span>
       );

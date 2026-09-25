@@ -279,7 +279,7 @@ export default function SignUpForm({
         Already have an account?{" "}
         <Link
           href={withNext("/login", nextPath)}
-          className="font-medium text-brand-accent transition hover:text-brand-accent-hover"
+          className="-my-3 inline-block py-3 font-medium text-brand-accent transition hover:text-brand-accent-hover"
         >
           Sign in
         </Link>

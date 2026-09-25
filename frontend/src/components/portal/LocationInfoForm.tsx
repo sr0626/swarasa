@@ -64,7 +64,7 @@ function addressChanged(a: FormState, b: FormState): boolean {
 }
 
 const inputClass =
-  "mt-1.5 w-full rounded-brand-control border border-brand-border bg-white px-3 py-2.5 text-sm text-brand-ink placeholder:text-brand-placeholder focus:border-brand-accent focus:outline-none";
+  "mt-1.5 min-h-[44px] w-full rounded-brand-control border border-brand-border bg-white px-3 py-2.5 text-base text-brand-ink placeholder:text-brand-placeholder focus:border-brand-accent focus:outline-none sm:text-sm";
 const labelClass = "text-sm font-semibold text-brand-ink";
 
 export default function LocationInfoForm({

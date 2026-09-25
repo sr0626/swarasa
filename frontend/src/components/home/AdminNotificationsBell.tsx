@@ -17,6 +17,7 @@
 // account menu and would otherwise push a 320px panel off-screen.
 import { useEffect, useId, useRef, useState, type FocusEvent, type SVGProps } from "react";
 import Link from "next/link";
+import { announceMenuOpen, onOtherMenuOpen } from "@/lib/nav/exclusiveMenu";
 import type { AdminNotifications } from "@/types/adminNotifications";
 import type { ReportCategory } from "@/types/listingReport";
 
@@ -73,7 +74,8 @@ function SectionHeader({
       {href && count > 0 && (
         <Link
           href={href}
-          className="text-xs font-semibold text-brand-accent hover:text-brand-accent-hover focus:underline focus:outline-none"
+          // -my-3: 44px tap height without growing the header row.
+          className="-my-3 inline-flex min-h-[44px] min-w-[44px] items-center justify-end text-xs font-semibold text-brand-accent hover:text-brand-accent-hover focus:underline focus:outline-none"
         >
           View all
         </Link>
@@ -91,6 +93,13 @@ export default function AdminNotificationsBell({ data }: { data: AdminNotificati
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelId = useId();
+
+  // Only one top-bar menu open at a time: announce this one, close on another's.
+  const menuId = useId();
+  useEffect(() => {
+    if (open) announceMenuOpen(menuId);
+  }, [open, menuId]);
+  useEffect(() => onOtherMenuOpen(menuId, () => setOpen(false)), [menuId]);
 
   const total = data?.total ?? 0;
   const label = data
