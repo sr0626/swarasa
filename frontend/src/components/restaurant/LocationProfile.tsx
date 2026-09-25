@@ -26,7 +26,6 @@ import TopBar from "@/components/home/TopBar";
 import { isMenuEmpty } from "@/lib/menu/format";
 import {
   buildJumpLinks,
-  hasDealsSection,
   hasKnownHours,
 } from "@/lib/restaurant/jumpLinks";
 import { brandHref, reportHref } from "@/lib/restaurant/urls";
@@ -68,7 +67,6 @@ export default function LocationProfile({
   const hasMenu = menu !== null && !isMenuEmpty(menu);
   const jumpLinks = location
     ? buildJumpLinks({
-        deals: hasDealsSection(location),
         menu: hasMenu,
         hours: hasKnownHours(location.hours),
       })

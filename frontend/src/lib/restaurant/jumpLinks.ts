@@ -1,14 +1,16 @@
 // The jump-link row under the restaurant name on a location page:
-// "Deals · Menu · Hours", each ONLY when that section exists for the location
+// "Menu · Hours", each ONLY when that section exists for the location
 // (so the anchor always lands somewhere) and ONLY when there are at least two
 // (a row with a single pill is pointless — e.g. a lone "Hours" chip under the
 // name when the location has no deals and no menu; product feedback
 // 2026-09-25). The section ids are set by the
-// components that render them: RestaurantDeals / RestaurantUpcomingDeals
-// (`deals`), RestaurantMenu (`menu`), the Details card's hours block (`hours`).
+// components that render them: RestaurantMenu (`menu`), the Details card's
+// hours block (`hours`). Deals is deliberately NOT a jump target (product
+// feedback 2026-09-25): the deals section / sign-in banner sits directly under
+// the restaurant name, so a "Deals" pill would jump to where the reader already is.
 // Pure: unit-tested with `node --test`.
 
-export type JumpTarget = "deals" | "menu" | "hours";
+export type JumpTarget = "menu" | "hours";
 
 export interface JumpLinkItem {
   id: JumpTarget;
@@ -16,8 +18,8 @@ export interface JumpLinkItem {
   href: string;
 }
 
-const LABELS: Record<JumpTarget, string> = { deals: "Deals", menu: "Menu", hours: "Hours" };
-const ORDER: JumpTarget[] = ["deals", "menu", "hours"];
+const LABELS: Record<JumpTarget, string> = { menu: "Menu", hours: "Hours" };
+const ORDER: JumpTarget[] = ["menu", "hours"];
 
 /** Minimum number of sections before the jump row is worth showing at all. */
 export const MIN_JUMP_LINKS = 2;
@@ -29,15 +31,6 @@ export function buildJumpLinks(sections: Record<JumpTarget, boolean>): JumpLinkI
     href: `#${id}`,
   }));
   return links.length >= MIN_JUMP_LINKS ? links : [];
-}
-
-/** Does the location have a deals section for THIS viewer? Today's deals show for everyone
- * (badge/banner/cards); "More deals & specials" is content-gated (null for signed-out viewers). */
-export function hasDealsSection(location: {
-  has_deal_today: boolean;
-  upcoming_deals?: readonly unknown[] | null;
-}): boolean {
-  return location.has_deal_today || (location.upcoming_deals?.length ?? 0) > 0;
 }
 
 /** Does the hours block render? Same rule as RestaurantHours: at least one day with known hours. */
