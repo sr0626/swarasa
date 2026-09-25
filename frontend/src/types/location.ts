@@ -1,6 +1,7 @@
 // Types for `restaurant_location` and its sub-resources (hours, photos),
 // matching docs/API_CONTRACTS.md "Locations (`restaurant_location`)".
 import type { ConsoleTodayStatus } from "@/lib/consoleLocationStatus";
+import type { CuisineTag } from "@/types/cuisine";
 import type { DealPublic, DealUpcoming } from "@/types/deal";
 
 /** 0=Monday..6=Sunday, per docs/API_CONTRACTS.md GET /locations/{id} notes. */
@@ -72,6 +73,8 @@ export interface LocationSummary {
   is_active: boolean;
   /** true / false / null (hours unknown) — a display lookup, never a filter. */
   is_open_now: boolean | null;
+  /** THIS location's own cuisine/dietary tags (per-location, additive). */
+  cuisine_tags: CuisineTag[];
 }
 
 /**
@@ -146,6 +149,8 @@ export interface LocationDetail {
    * re-checked server-side (422 `listing_incomplete`).
    */
   setup_missing: string[];
+  /** THIS location's own cuisine/dietary/type tags (never inherited from the brand). */
+  cuisine_tags: CuisineTag[];
   is_open_now: boolean | null;
   hours: LocationHour[];
   cover_photo_url: string | null;
@@ -206,6 +211,11 @@ export interface CreateLocationInput {
    * stays out of geo search until an admin sets a position. */
   latitude?: number | null;
   longitude?: number | null;
+  /**
+   * Tags for the NEW location. Omitted/null: the backend copies the tags of the
+   * brand's first existing location (empty for a brand's first location). `[]`: none.
+   */
+  cuisine_tag_ids?: number[] | null;
 }
 
 /**
@@ -219,13 +229,22 @@ export interface CreateLocationInput {
  * explicitly clears.
  */
 export type UpdateLocationInput = Partial<
-  Omit<CreateLocationInput, "brand_id">
+  Omit<CreateLocationInput, "brand_id" | "cuisine_tag_ids">
 > & {
   /** null / "" clears the stored value (unlike the other fields). */
   about?: string | null;
   /** null / [] clears the stored value. */
   specialties?: string[] | null;
 };
+
+/** Body for PUT /locations/{id}/cuisine-tags — a full replace of this location's tags. */
+export interface UpdateLocationCuisineTagsInput {
+  cuisine_tag_ids: number[];
+}
+
+export interface LocationCuisineTagsResponse {
+  results: CuisineTag[];
+}
 
 /** Body for PUT /locations/{id}/hours. */
 export interface UpdateLocationHoursInput {

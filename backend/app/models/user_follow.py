@@ -6,8 +6,7 @@ JUDGMENT CALLS (flagged for review):
    table exists in the Phase 1 entity list; Cognito is the identity
    source of truth.
 2. Follow target is the **brand**, not a specific location — consistent
-   with `restaurant_cuisine`'s brand-level tagging and DECISIONS.md
-   "Brand-level search results" (the public-facing card is the brand;
+   with DECISIONS.md "Brand-level search results" (the public-facing card is the brand;
    a location is an implementation detail of "X locations near you").
 
 No follow cap (DECISIONS.md "No follow cap for registered users").

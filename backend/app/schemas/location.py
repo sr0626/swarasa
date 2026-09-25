@@ -9,6 +9,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
 from app.core.phone import US_PHONE_ERROR, normalize_us_phone
+from app.schemas.cuisine import CuisineTagOut
 from app.schemas.deal import DealPublicOut, DealUpcomingOut
 
 ABOUT_MAX_LENGTH = 1000
@@ -104,6 +105,10 @@ class LocationOut(BaseModel):
     # Computed on every read from data already loaded there (no extra query);
     # the SERVER re-checks on the transition itself, so this is display-only.
     setup_missing: list[str]
+    # THIS location's cuisine/dietary/type/signature/dining-time tags
+    # (`location_cuisine`) — tags are per location, never inherited from the
+    # brand. Additive; empty when untagged.
+    cuisine_tags: list[CuisineTagOut] = []
     is_open_now: bool | None
     hours: list[HoursOut]
     cover_photo_url: str | None
@@ -159,6 +164,12 @@ class LocationCreate(BaseModel):
     timezone: str = "America/Chicago"
     latitude: float | None = None
     longitude: float | None = None
+    # Tags for the NEW location (`cuisine_tag.id`s). `null`/omitted: the new
+    # location starts with a COPY of the tags of the brand's first existing
+    # location (empty when it is the brand's first location). `[]`: start
+    # with no tags. A non-empty list: exactly those (unknown/inactive ids are
+    # ignored). See `cuisine_service.copy_first_location_tags`.
+    cuisine_tag_ids: list[int] | None = None
 
     @field_validator("phone")
     @classmethod
@@ -256,3 +267,14 @@ class LocationStatusUpdate(BaseModel):
     shape."""
 
     status: LocationStatusValue
+
+
+class LocationCuisineTagsUpdate(BaseModel):
+    """Body for `PUT /locations/{id}/cuisine-tags` — a FULL replace of this
+    location's tag set (`[]` clears it)."""
+
+    cuisine_tag_ids: list[int]
+
+
+class LocationCuisineTagsResponse(BaseModel):
+    results: list[CuisineTagOut]

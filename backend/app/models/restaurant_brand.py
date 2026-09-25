@@ -20,7 +20,6 @@ from app.db.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
     from app.models.owner_account import OwnerAccount
-    from app.models.restaurant_cuisine import RestaurantCuisine
     from app.models.restaurant_location import RestaurantLocation
     from app.models.user_follow import UserFollow
 
@@ -47,10 +46,8 @@ class RestaurantBrand(TimestampMixin, Base):
     # Restaurant's own website URL. Added for the CSV bulk-import feature
     # (docs/PROJECT_PLAN.csv "CSV bulk restaurant import") — brand-level,
     # not location-level: a restaurant's website describes the concept as
-    # a whole, the same rationale `restaurant_cuisine.py` already uses for
-    # keeping cuisine tags at the brand level rather than per-location (see
-    # that model's docstring and docs/DATA_MODEL.md's matching judgment
-    # call). String(500) matches `claim_request.google_business_profile_url`'s
+    # a whole. (Cuisine/dietary tags, by contrast, are per LOCATION -- see
+    # `location_cuisine`.) String(500) matches `claim_request.google_business_profile_url`'s
     # sizing convention for a URL column in this schema.
     website: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
@@ -76,9 +73,6 @@ class RestaurantBrand(TimestampMixin, Base):
 
     owner: Mapped["OwnerAccount | None"] = relationship(back_populates="brands")
     locations: Mapped[list["RestaurantLocation"]] = relationship(
-        back_populates="brand"
-    )
-    cuisines: Mapped[list["RestaurantCuisine"]] = relationship(
         back_populates="brand"
     )
     followers: Mapped[list["UserFollow"]] = relationship(back_populates="brand")

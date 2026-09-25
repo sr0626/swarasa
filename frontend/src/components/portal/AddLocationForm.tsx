@@ -10,29 +10,41 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { addLocationAction } from "@/app/portal/locations/new/actions";
+import CuisineTagPicker from "@/components/portal/CuisineTagPicker";
 import {
   EMPTY_LOCATION_VALUES,
   LocationFields,
   type LocationFieldValues,
 } from "@/components/portal/formFields";
+import { toggleTagId } from "@/lib/cuisine/tags";
 import { fieldErrorsFromZod, type FieldErrors } from "@/lib/validation/fieldErrors";
 import { addLocationSchema } from "@/lib/validation/restaurant";
+import type { CuisineTag } from "@/types/cuisine";
 
 export default function AddLocationForm({
   brandId,
   brandName,
   cancelHref,
+  cuisineTags = [],
+  initialTagIds = [],
 }: {
   brandId: number;
   brandName: string;
   /** Where "Cancel" goes back to (the caller's home for brands). */
   cancelHref: string;
+  /** The active tag taxonomy for the picker; empty hides the picker (the backend then copies the first location's tags). */
+  cuisineTags?: CuisineTag[];
+  /** Pre-selected tag ids: the tags of the brand's first location. */
+  initialTagIds?: number[];
 }) {
   const router = useRouter();
   const [values, setValues] = useState<LocationFieldValues>(EMPTY_LOCATION_VALUES);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [tagIds, setTagIds] = useState<number[]>(initialTagIds);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Only send tags when the picker was shown; otherwise the backend copies them itself.
+  const showTags = cuisineTags.length > 0;
 
   function set<K extends keyof LocationFieldValues>(key: K, value: LocationFieldValues[K]) {
     setValues((prev) => ({ ...prev, [key]: value }));
@@ -54,7 +66,8 @@ export default function AddLocationForm({
     e.preventDefault();
     setError(null);
 
-    const parsed = addLocationSchema.safeParse(values);
+    const input = showTags ? { ...values, cuisine_tag_ids: tagIds } : values;
+    const parsed = addLocationSchema.safeParse(input);
     if (!parsed.success) {
       const errors = fieldErrorsFromZod(parsed.error);
       setFieldErrors(errors);
@@ -66,7 +79,7 @@ export default function AddLocationForm({
 
     setSaving(true);
     try {
-      const result = await addLocationAction(brandId, values);
+      const result = await addLocationAction(brandId, input);
       if (result.ok) {
         router.push(`/portal/locations/${result.locationId}?new=${result.mapPosition}`);
         return;
@@ -91,6 +104,23 @@ export default function AddLocationForm({
       </p>
 
       <LocationFields values={values} errors={fieldErrors} onChange={set} />
+
+      {showTags && (
+        <div>
+          <p className="text-sm font-semibold text-brand-ink">Cuisine &amp; dietary tags</p>
+          <p className="mt-1 text-xs text-brand-ink-subtle">
+            For this branch only — we started you with the tags of your first location.
+          </p>
+          <div className="mt-2">
+            <CuisineTagPicker
+              tags={cuisineTags}
+              selectedIds={new Set(tagIds)}
+              onToggle={(id) => setTagIds((prev) => toggleTagId(prev, id))}
+              disabled={saving}
+            />
+          </div>
+        </div>
+      )}
 
       {error && (
         <p

@@ -31,10 +31,11 @@ audit_log: written for every created `restaurant_brand` and
 `restaurant_location` row (root CLAUDE.md "ALWAYS write an audit_log entry
 for every write on: restaurant_brand, restaurant_location, ..."), same
 shape as `seed_dev_data.py`'s and `restaurant_service.py`'s own writes.
-`restaurant_cuisine` (the cuisine-tag link the CSV path below can also
-write) is NOT in that required list -- `cuisine_service.set_brand_cuisine_tags`,
-the only other writer of that table, doesn't audit it either, so this
-stays consistent with the existing pattern rather than inventing one.
+`location_cuisine` (the cuisine-tag link the CSV path below can also
+write, per LOCATION -- tags are per location, docs/DECISIONS.md
+"Cuisine/dietary tags are per location") is NOT in that required list --
+the row's `restaurant_location` create audit already covers the location, and
+this stays consistent with the existing pattern rather than inventing one.
 
 -------------------------------------------------------------------------
 CSV import path (`parse_csv_rows` + `bulk_import_restaurants_csv`)
@@ -94,7 +95,7 @@ from app.core.phone import US_PHONE_ERROR, normalize_us_phone
 from app.models.cuisine_tag import CuisineTag
 from app.models.owner_account import OwnerAccount
 from app.models.restaurant_brand import RestaurantBrand
-from app.models.restaurant_cuisine import RestaurantCuisine
+from app.models.location_cuisine import LocationCuisine
 from app.models.restaurant_location import RestaurantLocation
 from app.schemas.restaurant_bulk_import import RestaurantBasicDetailIn, RestaurantCsvRowIn
 from app.services import audit_service, location_slug
@@ -566,21 +567,22 @@ async def _match_cuisine_tag(db: AsyncSession, type_text: str) -> CuisineTag | N
     return result.scalars().first()
 
 
-async def _link_cuisine_tag(db: AsyncSession, *, brand_id: int, cuisine_tag_id: int) -> None:
-    """Idempotent insert into `restaurant_cuisine` -- mirrors the unique
-    constraint on (`brand_id`, `cuisine_tag_id`) with a check-before-insert
+async def _link_cuisine_tag(db: AsyncSession, *, location_id: int, cuisine_tag_id: int) -> None:
+    """Idempotent insert into `location_cuisine` -- mirrors the composite
+    primary key on (`location_id`, `cuisine_tag_id`) with a check-before-insert
     rather than relying on catching an `IntegrityError`, consistent with
-    every other natural-key check in this module.
+    every other natural-key check in this module. The tag applies to the
+    row's LOCATION only, never to the brand's other locations.
     """
     existing = await db.execute(
-        select(RestaurantCuisine.id).where(
-            RestaurantCuisine.brand_id == brand_id,
-            RestaurantCuisine.cuisine_tag_id == cuisine_tag_id,
+        select(LocationCuisine.location_id).where(
+            LocationCuisine.location_id == location_id,
+            LocationCuisine.cuisine_tag_id == cuisine_tag_id,
         )
     )
     if existing.scalar_one_or_none() is not None:
         return
-    db.add(RestaurantCuisine(brand_id=brand_id, cuisine_tag_id=cuisine_tag_id))
+    db.add(LocationCuisine(location_id=location_id, cuisine_tag_id=cuisine_tag_id))
     await db.flush()
 
 
@@ -629,7 +631,7 @@ async def _import_one_csv_row(
             tag = await _match_cuisine_tag(db, row.cuisine_type)
             if tag is not None:
                 cuisine_match = tag.name
-                await _link_cuisine_tag(db, brand_id=brand.id, cuisine_tag_id=tag.id)
+                await _link_cuisine_tag(db, location_id=location.id, cuisine_tag_id=tag.id)
 
     if brand_created or location_created:
         return RowResult(

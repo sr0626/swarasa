@@ -46,7 +46,8 @@ Optional columns:
 
 `type` is free-text regional/dietary/type cuisine, e.g. "south indian",
 "vegetarian", "biryani" -- matched case-insensitively against
-`cuisine_tag.name`/`display_name` server-side; no match is reported per
+`cuisine_tag.name`/`display_name` server-side and applied to that row's
+LOCATION (tags are per location); no match is reported per
 row, not treated as a failure. `owner_email` must belong to an EXISTING
 `owner_account` -- a typo'd email is a per-row error, not silently
 provisioned (root CLAUDE.md doesn't allow this script to create Cognito

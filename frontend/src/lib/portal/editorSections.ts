@@ -5,7 +5,8 @@
 // panel -- it is owner-only, see /portal/locations/[id]/page.tsx).
 //
 // Order is by how often each section is used (user request 2026-09-24):
-// Deals first, then Hours, then Menu, Photos, About, Info, Managers last.
+// Deals first, then Hours, then Menu, Photos, About, Tags (this location's cuisine &
+// dietary tags), Info, Managers last.
 // The page renders its panels in this same order (it maps over this list's
 // ids), so the link row and the page can't drift apart.
 
@@ -15,6 +16,7 @@ export type EditorSectionId =
   | "menu"
   | "photos"
   | "about"
+  | "tags"
   | "info"
   | "managers";
 
@@ -34,6 +36,7 @@ const ALL_SECTIONS: readonly EditorSection[] = [
   { id: "menu", anchorId: "menu", label: "Menu" },
   { id: "photos", anchorId: "sec-photos", label: "Photos" },
   { id: "about", anchorId: "sec-about", label: "About" },
+  { id: "tags", anchorId: "sec-tags", label: "Tags" },
   { id: "info", anchorId: "sec-info", label: "Info" },
   { id: "managers", anchorId: "sec-managers", label: "Managers" },
 ];

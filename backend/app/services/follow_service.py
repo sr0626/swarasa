@@ -242,7 +242,7 @@ async def list_my_follows(
 
     # Follows are brand-level, but a tile represents ONE location (see
     # `_choose_location`). Everything below is batched over the whole page —
-    # one query each for locations, cuisine tags, hours and cover photos — so
+    # one query each for locations, the chosen locations' cuisine tags, hours and cover photos — so
     # the total query count is constant, independent of page size.
     brand_ids = [brand.id for _, brand in rows]
     locations_by_brand = await _active_locations_by_brand(db, brand_ids)
@@ -253,7 +253,7 @@ async def list_my_follows(
         for _, brand in rows
     }
     chosen_ids = [loc.id for loc in chosen_by_brand.values() if loc is not None]
-    tags_by_brand = await cuisine_service.get_brand_cuisine_tags_bulk(db, brand_ids)
+    tags_by_location = await cuisine_service.get_location_cuisine_tags_bulk(db, chosen_ids)
     hours_by_location = await hours_service.get_hours_map_for_locations(db, chosen_ids)
     covers_by_location = await photo_service.get_cover_photos_bulk(db, chosen_ids)
 
@@ -270,7 +270,8 @@ async def list_my_follows(
                 is_claimed=brand.is_claimed,
                 followed_at=follow.created_at,
                 cuisine_tags=[
-                    CuisineTagOut.model_validate(t) for t in tags_by_brand.get(brand.id, [])
+                    CuisineTagOut.model_validate(t)
+                    for t in (tags_by_location.get(chosen.id, []) if chosen is not None else [])
                 ],
                 nearest_location=(
                     _nearest_location_out(

@@ -52,7 +52,7 @@ Idempotency
 Every write below is check-before-insert on a natural key (cognito_sub for
 owner_account, slug for restaurant_brand, (brand_id, address_line1) for
 restaurant_location, name for cuisine_tag, the unique/partial-unique
-constraints already on restaurant_cuisine / location_manager / claim_request
+constraints already on location_cuisine / location_manager / claim_request
 for those, (location_id, day_of_week) for restaurant_hours via
 `hours_service.replace_hours`, which is itself upsert-safe). Re-running
 this script is always safe and creates zero duplicate rows; it prints a
@@ -122,7 +122,7 @@ from app.models.claim_request import ClaimRequest
 from app.models.cuisine_tag import CuisineTag
 from app.models.location_manager import LocationManager
 from app.models.restaurant_brand import RestaurantBrand
-from app.models.restaurant_cuisine import RestaurantCuisine
+from app.models.location_cuisine import LocationCuisine
 from app.models.restaurant_location import RestaurantLocation
 from app.schemas.hours import HourEntryIn
 from app.services import audit_service, auth_service, cognito_service, hours_service, location_slug
@@ -438,16 +438,19 @@ async def ensure_cuisine_tag(db: AsyncSession, *, name: str, display_name: str, 
     return tag, True
 
 
-async def ensure_brand_cuisine_link(db: AsyncSession, brand_id: int, cuisine_tag_id: int) -> bool:
+async def ensure_location_cuisine_link(
+    db: AsyncSession, location_id: int, cuisine_tag_id: int
+) -> bool:
+    """Tags are per LOCATION (`location_cuisine`); idempotent."""
     result = await db.execute(
-        select(RestaurantCuisine).where(
-            RestaurantCuisine.brand_id == brand_id,
-            RestaurantCuisine.cuisine_tag_id == cuisine_tag_id,
+        select(LocationCuisine).where(
+            LocationCuisine.location_id == location_id,
+            LocationCuisine.cuisine_tag_id == cuisine_tag_id,
         )
     )
     if result.scalar_one_or_none() is not None:
         return False
-    db.add(RestaurantCuisine(brand_id=brand_id, cuisine_tag_id=cuisine_tag_id))
+    db.add(LocationCuisine(location_id=location_id, cuisine_tag_id=cuisine_tag_id))
     await db.flush()
     return True
 
@@ -579,7 +582,7 @@ async def run_seed(identities_path: str | Path | None = None) -> dict:
         "restaurant_location": 0,
         "restaurant_hours_sets": 0,
         "cuisine_tag": 0,
-        "restaurant_cuisine": 0,
+        "location_cuisine": 0,
         "location_manager": 0,
         "claim_request": 0,
     }
@@ -659,9 +662,17 @@ async def run_seed(identities_path: str | Path | None = None) -> dict:
         counts["restaurant_location"] += int(created)
         await db.commit()
 
-        for tag_name in ("andhra", "hyderabadi", "biryani"):
-            created = await ensure_brand_cuisine_link(db, brand_a.id, tags_by_name[tag_name].id)
-            counts["restaurant_cuisine"] += int(created)
+        # Per-location tags: the Irving branch is vegetarian and has no
+        # Hyderabadi menu, so the two branches of one brand deliberately differ.
+        for location, tag_names in (
+            (loc_plano, ("andhra", "hyderabadi", "biryani")),
+            (loc_irving, ("andhra", "vegetarian", "dosa")),
+        ):
+            for tag_name in tag_names:
+                created = await ensure_location_cuisine_link(
+                    db, location.id, tags_by_name[tag_name].id
+                )
+                counts["location_cuisine"] += int(created)
         await db.commit()
 
         if await ensure_hours(db, loc_plano.id, _WEEKDAY_HOURS):
@@ -738,9 +749,12 @@ async def run_seed(identities_path: str | Path | None = None) -> dict:
         counts["restaurant_location"] += int(created)
         await db.commit()
 
-        for tag_name in ("north_indian", "vegetarian", "dine_in"):
-            created = await ensure_brand_cuisine_link(db, brand_b.id, tags_by_name[tag_name].id)
-            counts["restaurant_cuisine"] += int(created)
+        for location in (loc_frisco, loc_richardson):
+            for tag_name in ("north_indian", "vegetarian", "dine_in"):
+                created = await ensure_location_cuisine_link(
+                    db, location.id, tags_by_name[tag_name].id
+                )
+                counts["location_cuisine"] += int(created)
         await db.commit()
 
         if await ensure_hours(db, loc_frisco.id, _WEEKDAY_HOURS):
@@ -818,9 +832,12 @@ async def run_seed(identities_path: str | Path | None = None) -> dict:
         counts["restaurant_location"] += int(created)
         await db.commit()
 
-        for tag_name in ("north_indian", "dosa", "dinner"):
-            created = await ensure_brand_cuisine_link(db, brand_c.id, tags_by_name[tag_name].id)
-            counts["restaurant_cuisine"] += int(created)
+        for location in (loc_arlington, loc_garland):
+            for tag_name in ("north_indian", "dosa", "dinner"):
+                created = await ensure_location_cuisine_link(
+                    db, location.id, tags_by_name[tag_name].id
+                )
+                counts["location_cuisine"] += int(created)
         await db.commit()
 
         if await ensure_hours(db, loc_arlington.id, _WEEKDAY_HOURS):

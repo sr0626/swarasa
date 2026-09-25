@@ -26,6 +26,7 @@ function location(overrides: Record<string, unknown> = {}): LocationDetail {
     latitude: 32.85,
     longitude: -96.95,
     cover_photo_url: "https://cdn.example.com/c.jpg",
+    cuisine_tags: [{ id: 5, name: "andhra", display_name: "Andhra", category: "regional" }],
     hours: [
       { day_of_week: 0, open_time: "11:00:00", close_time: "22:00:00", is_closed: false },
       { day_of_week: 1, is_closed: true },
@@ -48,7 +49,8 @@ test("location Restaurant carries THAT location's address, phone, hours, geo and
   });
   assert.equal(schema["@type"], "Restaurant");
   assert.equal(schema.url, "https://www.swarasa.com/restaurant/namaste-grill/irving");
-  assert.deepEqual(schema.servesCuisine, ["North Indian"]);
+  // THIS location's cuisines (per-location tags), not the brand union.
+  assert.deepEqual(schema.servesCuisine, ["Andhra"]);
   assert.equal((schema as { telephone?: string }).telephone, "+19725550142");
   assert.equal(
     (schema as { address?: { addressLocality: string } }).address?.addressLocality,
@@ -67,12 +69,14 @@ test("a brand with no location still yields valid markup without an address", ()
   assert.equal("address" in schema, false);
   assert.equal("hasMenu" in schema, false);
   assert.equal("url" in schema, false);
+  // No location: falls back to the brand-level union.
+  assert.deepEqual(schema.servesCuisine, ["North Indian"]);
 });
 
 test("landing page is an ItemList of Restaurants, one per location, each with its own url", () => {
   const cards = [
-    { slug: "irving", city: "Irving", location_name: null, address_line1: "1 A St", state: "TX", postal_code: "75038", phone: "+19725550100" },
-    { slug: "plano", city: "Plano", location_name: "Legacy", address_line1: "2 B St", state: "TX", postal_code: "75024", phone: null },
+    { slug: "irving", city: "Irving", location_name: null, address_line1: "1 A St", state: "TX", postal_code: "75038", phone: "+19725550100", cuisine_tags: [{ id: 5, name: "andhra", display_name: "Andhra", category: "regional" }] },
+    { slug: "plano", city: "Plano", location_name: "Legacy", address_line1: "2 B St", state: "TX", postal_code: "75024", phone: null, cuisine_tags: [{ id: 6, name: "mughlai", display_name: "Mughlai", category: "regional" }] },
   ] as unknown as BrandLocationCard[];
   const schema = buildLandingSchema({
     restaurant: brand,
@@ -87,4 +91,7 @@ test("landing page is an ItemList of Restaurants, one per location, each with it
   assert.equal(first?.item.name, "Namaste Grill — Irving");
   assert.equal(second?.item.name, "Namaste Grill — Legacy");
   assert.equal(second?.item.address.addressLocality, "Plano");
+  // Each entry advertises its own location's cuisines.
+  assert.deepEqual(first?.item.servesCuisine, ["Andhra"]);
+  assert.deepEqual(second?.item.servesCuisine, ["Mughlai"]);
 });

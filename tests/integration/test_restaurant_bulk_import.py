@@ -31,7 +31,7 @@ from sqlalchemy import func, select
 from app.models.audit_log import AuditLog
 from app.models.cuisine_tag import CuisineTag
 from app.models.restaurant_brand import RestaurantBrand
-from app.models.restaurant_cuisine import RestaurantCuisine
+from app.models.location_cuisine import LocationCuisine
 from app.models.restaurant_location import RestaurantLocation
 from app.schemas.restaurant_bulk_import import RestaurantBasicDetailIn
 from app.services.restaurant_bulk_import_service import (
@@ -341,11 +341,13 @@ async def test_bulk_import_csv_cuisine_type_matched_case_insensitively(db_sessio
     assert result.rows[0].cuisine_type_input == "south indian"
     assert result.rows[0].cuisine_match == "south_indian"
 
-    brand = (await db_session.execute(select(RestaurantBrand))).scalar_one()
+    # Tags are per LOCATION: the link is on the imported row's location.
+    location = (await db_session.execute(select(RestaurantLocation))).scalar_one()
     link = (
         await db_session.execute(
-            select(RestaurantCuisine).where(
-                RestaurantCuisine.brand_id == brand.id, RestaurantCuisine.cuisine_tag_id == tag.id
+            select(LocationCuisine).where(
+                LocationCuisine.location_id == location.id,
+                LocationCuisine.cuisine_tag_id == tag.id,
             )
         )
     ).scalar_one_or_none()
@@ -372,7 +374,7 @@ async def test_bulk_import_csv_cuisine_type_unmatched_is_reported_not_failed(db_
     assert result.rows[0].cuisine_match is None
 
     count = (
-        await db_session.execute(select(func.count()).select_from(RestaurantCuisine))
+        await db_session.execute(select(func.count()).select_from(LocationCuisine))
     ).scalar_one()
     assert count == 0
 

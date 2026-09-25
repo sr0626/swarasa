@@ -46,7 +46,10 @@ export function buildLocationRestaurantSchema(input: {
     "@type": "Restaurant",
     name: restaurant.name,
     ...(url ? { url } : {}),
-    servesCuisine: restaurant.cuisine_tags.map((tag) => tag.display_name),
+    // Per-location tags: THIS location's cuisines (brand union only when there is no location).
+    servesCuisine: (location ? location.cuisine_tags : restaurant.cuisine_tags).map(
+      (tag) => tag.display_name
+    ),
     ...(hasMenu ? { hasMenu } : {}),
     ...(location
       ? {
@@ -96,7 +99,7 @@ export function buildLandingSchema(input: {
           ? `${restaurant.name} — ${location.location_name}`
           : `${restaurant.name} — ${location.city}`,
         url: locationUrl(location.slug),
-        servesCuisine: restaurant.cuisine_tags.map((tag) => tag.display_name),
+        servesCuisine: location.cuisine_tags.map((tag) => tag.display_name),
         address: {
           "@type": "PostalAddress",
           streetAddress: location.address_line1,

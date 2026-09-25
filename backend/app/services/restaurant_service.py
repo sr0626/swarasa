@@ -99,7 +99,12 @@ def _caller_may_view_follower_count(brand: RestaurantBrand, current_user) -> boo
 
 
 async def _brand_to_out(db: AsyncSession, brand: RestaurantBrand, current_user=None) -> RestaurantOut:
-    tags = await cuisine_service.get_brand_cuisine_tags(db, brand.id)
+    # Brand-level tag summary = union of its locations' tags. Public callers
+    # (`current_user is None`) only see ACTIVE locations' tags; the owner/admin
+    # views include hidden/setup locations too.
+    tags = await cuisine_service.get_brand_union_tags(
+        db, brand.id, only_active=current_user is None
+    )
     count_result = await db.execute(
         select(func.count())
         .select_from(RestaurantLocation)
@@ -187,6 +192,7 @@ async def _active_location_cards(db: AsyncSession, brand_id: int) -> list[BrandL
     hours_by_location = await hours_service.get_hours_map_for_locations(db, ids)
     covers = await photo_service.get_cover_photos_bulk(db, ids)
     deals_by_location = await deal_service.get_active_deals_map(db, ids)
+    tags_by_location = await cuisine_service.get_location_cuisine_tags_bulk(db, ids)
 
     cards: list[BrandLocationCardOut] = []
     for row in rows:
@@ -223,6 +229,9 @@ async def _active_location_cards(db: AsyncSession, brand_id: int) -> list[BrandL
                     if cover
                     else None
                 ),
+                cuisine_tags=[
+                    CuisineTagOut.model_validate(t) for t in tags_by_location.get(row.id, [])
+                ],
             )
         )
     return cards
@@ -495,9 +504,6 @@ async def create_restaurant(db: AsyncSession, body: RestaurantCreate, current_us
     db.add(brand)
     await db.flush()
 
-    if body.cuisine_tag_ids:
-        await cuisine_service.set_brand_cuisine_tags(db, brand.id, body.cuisine_tag_ids)
-
     await audit_service.log(
         db,
         table_name="restaurant_brand",
@@ -535,8 +541,6 @@ async def update_restaurant(
         brand.description = body.description
     if body.website is not None:
         brand.website = body.website
-    if body.cuisine_tag_ids is not None:
-        await cuisine_service.set_brand_cuisine_tags(db, brand.id, body.cuisine_tag_ids)
 
     new_val = {"name": brand.name, "description": brand.description, "website": brand.website}
 

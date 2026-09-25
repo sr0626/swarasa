@@ -18,7 +18,7 @@ from datetime import datetime, time, timezone
 import pytest
 from sqlalchemy import event
 
-from app.models.restaurant_cuisine import RestaurantCuisine
+from app.models.location_cuisine import LocationCuisine
 from app.models.restaurant_hours import RestaurantHours
 from factories import (
     create_brand,
@@ -49,7 +49,6 @@ async def test_item_is_search_tile_shaped(client, db_session, as_user):
     sub = str(uuid.uuid4())
     brand = await _follow(db_session, sub, name="Spice Garden")
     tag = await create_cuisine_tag(db_session, display_name="Hyderabadi")
-    db_session.add(RestaurantCuisine(brand_id=brand.id, cuisine_tag_id=tag.id))
     loc = await create_location(
         db_session,
         brand_id=brand.id,
@@ -60,6 +59,7 @@ async def test_item_is_search_tile_shaped(client, db_session, as_user):
         phone="9725550100",
         is_paid=True,
     )
+    db_session.add(LocationCuisine(location_id=loc.id, cuisine_tag_id=tag.id))
     for day in range(7):  # open all day, every day: is_open_now is deterministic
         db_session.add(
             RestaurantHours(

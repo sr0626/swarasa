@@ -24,6 +24,11 @@ export interface NewLocationValues {
   state: string;
   postal_code: string;
   phone: string;
+  /**
+   * Tags for the new location. Omitted: the backend copies the brand's first
+   * location's tags. `[]`: none.
+   */
+  cuisine_tag_ids?: number[];
 }
 
 export type CreateLocationStepResult =
@@ -70,6 +75,7 @@ export async function geocodeAndCreateLocation(
         // Never fabricated: null when geocoding found nothing.
         latitude: coordinates?.latitude ?? null,
         longitude: coordinates?.longitude ?? null,
+        ...(values.cuisine_tag_ids !== undefined ? { cuisine_tag_ids: values.cuisine_tag_ids } : {}),
       },
       accessToken
     );

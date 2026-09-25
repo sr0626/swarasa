@@ -53,7 +53,8 @@ own machine), and invokes the `bulk_import_restaurants` management
 command's CSV path with the result. Each row resolves its own
 `owner_email` to an EXISTING `owner_account` (never creates one) and
 matches `type` against `cuisine_tag.name`/`display_name` case-insensitively
-(unmatched is reported, not a failure). Geocoding happens here rather than
+and tags the row's own LOCATION with it (tags are per location; unmatched
+is reported, not a failure). Geocoding happens here rather than
 inside the Lambda deliberately — see the script's own module docstring
 "Why geocoding happens HERE, not inside the Lambda" (the Lambda has no
 NAT Gateway, so no route to the public internet at all).

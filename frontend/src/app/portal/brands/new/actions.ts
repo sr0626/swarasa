@@ -7,12 +7,13 @@
 // re-checked here even though the backend enforces it too.
 //
 // One submit creates a usable listing in up to three steps:
-//   1. POST /restaurants  (the brand — name, description, website, tags)
+//   1. POST /restaurants  (the brand — name, description, website)
 //   2. geocode the address (US Census, Nominatim fallback: lib/geocode). Done HERE
 //      because the API Lambda has no internet access (no NAT Gateway), so
 //      it cannot geocode. Best-effort: never blocks creation.
 //   3. POST /locations    (the first location — address, phone, timezone,
-//      and lat/lng when geocoding succeeded; the backend syncs the PostGIS
+//      the cuisine tags picked in the form — they are per LOCATION — and lat/lng
+//      when geocoding succeeded; the backend syncs the PostGIS
 //      `geom` column search queries from them on create). Steps 2-3 live in
 //      lib/portal/createLocationStep.ts, shared with the "Add location" flow.
 //
@@ -90,7 +91,6 @@ export async function addRestaurantAction(
           name: values.name,
           description: values.description,
           website: values.website,
-          cuisine_tag_ids: values.cuisine_tag_ids,
         },
         session.accessToken
       );
@@ -112,6 +112,8 @@ export async function addRestaurantAction(
       state: values.state,
       postal_code: values.postal_code,
       phone: values.phone,
+      // Tags describe the first LOCATION (per-location tags), so they ride on POST /locations.
+      cuisine_tag_ids: values.cuisine_tag_ids,
     },
     session.accessToken
   );

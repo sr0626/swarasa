@@ -24,6 +24,8 @@ from app.dependencies.db import get_db
 from app.schemas.hours import HoursReplaceRequest, HoursResponse
 from app.schemas.location import (
     LocationCreate,
+    LocationCuisineTagsResponse,
+    LocationCuisineTagsUpdate,
     LocationOut,
     LocationStatusUpdate,
     LocationUpdate,
@@ -154,6 +156,22 @@ async def replace_location_hours(
     current_user: CurrentUser = Depends(require_location_write_access),
 ) -> HoursResponse:
     return await location_service.replace_location_hours(db, location_id, body.hours, current_user)
+
+
+@router.put("/{location_id}/cuisine-tags", response_model=LocationCuisineTagsResponse)
+async def replace_location_cuisine_tags(
+    location_id: int,
+    body: LocationCuisineTagsUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_location_write_access),
+) -> LocationCuisineTagsResponse:
+    """Replace THIS location's cuisine/dietary/type tags (tags are per
+    location — see docs/DECISIONS.md "Cuisine/dietary tags are per
+    location"). Owner of the brand, an actively-assigned manager, or admin
+    (`require_location_write_access`, re-validated server-side)."""
+    return await location_service.replace_location_cuisine_tags(
+        db, location_id, body.cuisine_tag_ids, current_user
+    )
 
 
 @router.post("/{location_id}/photos/upload-url", response_model=UploadUrlResponse)

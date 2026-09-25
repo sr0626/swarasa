@@ -15,7 +15,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
-    from app.models.restaurant_cuisine import RestaurantCuisine
+    from app.models.location_cuisine import LocationCuisine
 
 
 class CuisineTag(TimestampMixin, Base):
@@ -35,7 +35,7 @@ class CuisineTag(TimestampMixin, Base):
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
-    brand_links: Mapped[list["RestaurantCuisine"]] = relationship(
+    location_links: Mapped[list["LocationCuisine"]] = relationship(
         back_populates="cuisine_tag"
     )
 

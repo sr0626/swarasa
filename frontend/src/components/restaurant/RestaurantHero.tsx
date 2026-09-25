@@ -147,6 +147,9 @@ export default function RestaurantHero({
   jumpLinks = [],
 }: RestaurantHeroProps) {
   const photos = collectPhotos(restaurant.name, location);
+  // Tags are per location: show THIS branch's own tags (the brand union only when the
+  // page has no location at all).
+  const cuisineTags = location ? location.cuisine_tags : restaurant.cuisine_tags;
 
   return (
     <section aria-label={`${restaurant.name} photos and summary`}>
@@ -212,9 +215,9 @@ export default function RestaurantHero({
 
         <JumpLinks links={jumpLinks} />
 
-        {restaurant.cuisine_tags.length > 0 && (
+        {cuisineTags.length > 0 && (
           <div className="flex flex-col gap-1.5">
-            {groupCuisineTagsByCategory(restaurant.cuisine_tags).map((group) => (
+            {groupCuisineTagsByCategory(cuisineTags).map((group) => (
               <div key={group.label} className="flex flex-wrap items-center gap-1.5">
                 <span className="text-xs font-semibold text-brand-ink-muted">
                   {group.label}:

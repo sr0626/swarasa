@@ -99,8 +99,8 @@ def _deal(**overrides) -> Deal:
     return Deal(**defaults)
 
 
-async def _no_tags(db, brand_ids):
-    return {bid: [] for bid in brand_ids}
+async def _no_tags(db, location_ids):
+    return {lid: [] for lid in location_ids}
 
 
 async def _not_open(db, location_id, tz):
@@ -113,7 +113,7 @@ async def _no_cover(db, location_id):
 
 @pytest.fixture(autouse=True)
 def _stub_side_lookups(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(search_service.cuisine_service, "get_brand_cuisine_tags_bulk", _no_tags)
+    monkeypatch.setattr(search_service.cuisine_service, "get_location_cuisine_tags_bulk", _no_tags)
     monkeypatch.setattr(search_service.hours_service, "today_status_for_location", _not_open)
     monkeypatch.setattr(search_service.photo_service, "get_cover_photo", _no_cover)
 

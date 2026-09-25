@@ -30,14 +30,14 @@ class _FakeSession:
         return self._results.pop(0)
 
 
-async def _no_tags(db, brand_id):
+async def _no_tags(db, brand_id, **kwargs):
     return []
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("pending_id,expected", [(None, False), (42, True)])
 async def test_has_pending_claim_reflects_pending_row(monkeypatch, pending_id, expected):
-    monkeypatch.setattr(restaurant_service.cuisine_service, "get_brand_cuisine_tags", _no_tags)
+    monkeypatch.setattr(restaurant_service.cuisine_service, "get_brand_union_tags", _no_tags)
     brand = RestaurantBrand(id=1, name="Dera Grill", slug="dera-grill", is_claimed=False, owner_id=None)
 
     out = await restaurant_service._brand_to_out(_FakeSession(pending_id), brand)

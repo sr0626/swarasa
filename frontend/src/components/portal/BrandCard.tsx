@@ -24,6 +24,7 @@ import { primaryLinkClass, secondaryLinkClass } from "@/components/account/accou
 import LocationStatusChip from "@/components/console/LocationStatusChip";
 import LocationTierBadge from "@/components/portal/LocationTierBadge";
 import LocationStatusBadge from "@/components/portal/LocationStatusBadge";
+import LocationTagChips from "@/components/portal/LocationTagChips";
 import LocationManagersSummary from "@/components/portal/LocationManagersSummary";
 import type { LocationWithManagers } from "@/types/location";
 import type { RestaurantBrand } from "@/types/restaurant";
@@ -43,45 +44,31 @@ export default function BrandCard({
   const brandLink = ownerBrandPageLink(brand.slug, activeCount);
   return (
     <div className="rounded-brand-card border border-brand-border bg-white p-5 shadow-brand-card sm:p-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
-          <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-brand-control bg-brand-chip text-brand-chip-ink">
+      {/* Header: the name with the two brand-level actions right next to it (same
+          line, pushed right; on a narrow screen the buttons wrap onto their own
+          line under the name) so they are seen first. Both are secondary buttons of
+          one shared 44px size. The description and follower count sit under the
+          row. Cuisine/dietary tags are NOT shown for the brand — they are per
+          LOCATION, so each location row below shows its own. */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
+        {/* The name block takes the leftover width (basis 0, min 14rem): a long name
+            wraps inside it instead of pushing the buttons onto their own line, and
+            the buttons only drop below the name when there is really no room
+            (a phone). */}
+        <div className="flex min-w-[14rem] max-w-full flex-1 basis-0 items-center gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-brand-control bg-brand-chip text-brand-chip-ink">
             <StoreIcon className="h-5 w-5" />
           </span>
-          <div>
-            <h3 className="font-display text-lg font-bold text-brand-ink">{brand.name}</h3>
-            {brand.description && (
-              <p className="mt-0.5 max-w-lg text-sm text-brand-ink-muted">{brand.description}</p>
-            )}
-            {/* Dashboard-only stat (backend RestaurantOut.follower_count) —
-                never shown on the public /restaurant/[brandSlug] pages or search
-                tiles, only here on the owner's own /account business page. */}
-            {brand.follower_count !== null && (
-              <p className="mt-1.5 flex items-center gap-1.5 text-xs text-brand-ink-subtle">
-                <HeartIcon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                {brand.follower_count} follower{brand.follower_count === 1 ? "" : "s"}
-              </p>
-            )}
-            {brand.cuisine_tags.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {brand.cuisine_tags.map((tag) => (
-                  <span
-                    key={tag.name}
-                    className="rounded-brand-pill bg-brand-chip px-2 py-0.5 text-xs font-medium text-brand-chip-ink"
-                  >
-                    {tag.display_name}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="min-w-0 break-words font-display text-lg font-bold text-brand-ink">
+            {brand.name}
+          </h3>
           {!brand.is_claimed && (
-            <span className="rounded-brand-pill bg-brand-bg px-2.5 py-1 text-xs font-semibold text-brand-ink-subtle">
+            <span className="shrink-0 rounded-brand-pill bg-brand-bg px-2.5 py-1 text-xs font-semibold text-brand-ink-subtle">
               Unclaimed
             </span>
           )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
           {/* Another branch of THIS restaurant — not "Add a restaurant", which
               always creates a new, unrelated brand. */}
           <Link
@@ -109,6 +96,18 @@ export default function BrandCard({
           )}
         </div>
       </div>
+      {brand.description && (
+        <p className="mt-2 max-w-lg text-sm text-brand-ink-muted">{brand.description}</p>
+      )}
+      {/* Dashboard-only stat (backend RestaurantOut.follower_count) — never shown on
+          the public /restaurant/[brandSlug] pages or search tiles, only here on the
+          owner's own /account business page. */}
+      {brand.follower_count !== null && (
+        <p className="mt-1.5 flex items-center gap-1.5 text-xs text-brand-ink-subtle">
+          <HeartIcon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          {brand.follower_count} follower{brand.follower_count === 1 ? "" : "s"}
+        </p>
+      )}
 
       <div className="mt-4 border-t border-brand-border pt-4">
         {locationsError && (
@@ -140,7 +139,8 @@ export default function BrandCard({
                     href={`/portal/locations/${location.id}`}
                     className="flex min-h-[44px] items-start justify-between gap-3 px-4 py-2.5 transition hover:bg-brand-bg"
                   >
-                    <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1.5">
+                    <span className="flex min-w-0 flex-1 flex-col gap-2">
+                    <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
                       <span className="flex min-w-0 items-center gap-2 text-sm text-brand-ink">
                         <LocationPinIcon className="h-4 w-4 shrink-0 text-brand-ink-subtle" />
                         <span className="break-words">
@@ -156,6 +156,10 @@ export default function BrandCard({
                         />
                         <LocationStatusChip status={todayStatus} />
                       </span>
+                    </span>
+                    {/* Second line: THIS location's own cuisine/dietary tags (tags are
+                        per location) — compact, wrapping, first 4 then "+N". */}
+                    <LocationTagChips tags={location.cuisine_tags ?? []} />
                     </span>
                     <PencilIcon className="mt-0.5 h-4 w-4 shrink-0 text-brand-ink-subtle" />
                   </Link>

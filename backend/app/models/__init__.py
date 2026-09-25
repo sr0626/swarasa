@@ -19,6 +19,7 @@ from app.models.restaurant_location import RestaurantLocation
 from app.models.restaurant_photo import RestaurantPhoto
 from app.models.cuisine_tag import CuisineTag
 from app.models.restaurant_cuisine import RestaurantCuisine
+from app.models.location_cuisine import LocationCuisine
 from app.models.location_manager import LocationManager
 from app.models.user_follow import UserFollow
 from app.models.claim_request import ClaimRequest
@@ -43,6 +44,7 @@ __all__ = [
     "RestaurantPhoto",
     "CuisineTag",
     "RestaurantCuisine",
+    "LocationCuisine",
     "LocationManager",
     "UserFollow",
     "ClaimRequest",
