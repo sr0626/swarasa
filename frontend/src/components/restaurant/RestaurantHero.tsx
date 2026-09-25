@@ -22,8 +22,6 @@ import RestaurantPhotoCarousel, {
 } from "@/components/restaurant/RestaurantPhotoCarousel";
 import type { RestaurantBrand } from "@/types/restaurant";
 import type { LocationDetail } from "@/types/location";
-import JumpLinks from "@/components/restaurant/JumpLinks";
-import type { JumpLinkItem } from "@/lib/restaurant/jumpLinks";
 import type { CuisineCategory, CuisineTag } from "@/types/cuisine";
 
 /** Short group label per `cuisine_tag.category` (backend/app/models/
@@ -117,8 +115,6 @@ interface RestaurantHeroProps {
   /** Muted line under the name naming the branch (e.g. "Irving, TX") — set on a location page
    * of a MULTI-location brand, where the brand name alone doesn't say which branch this is. */
   subtitle?: string | null;
-  /** "Deals · Menu · Hours" jump links (only the sections that exist); omitted/empty = none. */
-  jumpLinks?: readonly JumpLinkItem[];
 }
 
 /** Cover first, then gallery in display order; a cover that is also a
@@ -144,7 +140,6 @@ export default function RestaurantHero({
   currentPath,
   ownerPreview,
   subtitle = null,
-  jumpLinks = [],
 }: RestaurantHeroProps) {
   const photos = collectPhotos(restaurant.name, location);
   // Tags are per location: show THIS branch's own tags (the brand union only when the
@@ -215,8 +210,6 @@ export default function RestaurantHero({
         </div>
 
         {subtitle && <p className="-mt-1 text-base text-brand-ink-muted">{subtitle}</p>}
-
-        <JumpLinks links={jumpLinks} />
 
         {cuisineTags.length > 0 && (
           <div className="flex flex-col gap-1.5">
