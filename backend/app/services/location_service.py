@@ -755,6 +755,14 @@ async def list_locations_for_brand(
     tags_by_location = await cuisine_service.get_location_cuisine_tags_bulk(
         db, [row.id for row in rows]
     )
+    # Deal counts are content metadata: only the owning owner / an admin
+    # (the same callers `include_inactive` is true for) get them, from ONE
+    # grouped query for the page. Everyone else gets null.
+    deal_counts = (
+        await deal_service.live_deal_counts(db, [row.id for row in rows])
+        if include_inactive
+        else None
+    )
     results = []
     for row in rows:
         is_open_now = await hours_service.is_open_now_for_location(db, row.id, row.timezone)
@@ -777,6 +785,8 @@ async def list_locations_for_brand(
                 cuisine_tags=[
                     CuisineTagOut.model_validate(t) for t in tags_by_location.get(row.id, [])
                 ],
+                active_deals_count=deal_counts.get(row.id, 0) if deal_counts is not None else None,
+                deals_hidden=bool(row.deals_hidden) if deal_counts is not None else None,
             )
         )
 

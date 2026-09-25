@@ -19,9 +19,9 @@ import {
   PhoneIcon,
   PlusIcon,
   StoreIcon,
-  TagIcon,
 } from "@/components/ui/icons";
 import { primaryLinkClass, secondaryLinkClass } from "@/components/account/accountShared";
+import DealsButton from "@/components/portal/DealsButton";
 import LocationStatusChip from "@/components/console/LocationStatusChip";
 import LocationTierBadge from "@/components/portal/LocationTierBadge";
 import LocationStatusBadge from "@/components/portal/LocationStatusBadge";
@@ -190,15 +190,14 @@ export default function BrandCard({
                       )}
                       {/* Deals are the thing owners/managers update most often — a
                           one-tap shortcut to the editor's "Deals & specials"
-                          section (/deals redirects to it). */}
-                      <Link
-                        href={`/portal/locations/${location.id}/deals`}
-                        aria-label={`Deals for ${label}`}
-                        className={secondaryLinkClass}
-                      >
-                        <TagIcon className="h-4 w-4" />
-                        Deals
-                      </Link>
+                          section. Its look shows whether the location has live
+                          deals / none / "Hide all deals" on. */}
+                      <DealsButton
+                        locationId={location.id}
+                        locationLabel={label}
+                        activeDealsCount={location.active_deals_count}
+                        dealsHidden={location.deals_hidden}
+                      />
                       <Link
                         href={pageLink.href}
                         aria-label={`${pageLink.label} for ${label}`}

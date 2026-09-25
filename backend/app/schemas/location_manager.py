@@ -82,6 +82,12 @@ class ManagedLocationOut(BaseModel):
     # follower count — every location under the same brand reports the
     # same number.
     follower_count: int
+    # Console Deals-button state (2026-09-24). Never null for the same
+    # reason as `follower_count`: every row is one the caller may write.
+    # `active_deals_count` = live deals (is_active and not past end_at);
+    # `deals_hidden` = the location-level "Hide all deals" switch.
+    active_deals_count: int
+    deals_hidden: bool
 
 
 class ManagedLocationListResponse(BaseModel):

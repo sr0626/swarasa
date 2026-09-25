@@ -16,8 +16,8 @@ import {
   MenuBookIcon,
   PencilIcon,
   PhoneIcon,
-  TagIcon,
 } from "@/components/ui/icons";
+import DealsButton from "@/components/portal/DealsButton";
 import { formatPhone } from "@/lib/formatPhone";
 import LocationStatusChip from "@/components/console/LocationStatusChip";
 import {
@@ -119,15 +119,14 @@ export default function ManagedLocationsPanel({
                     Edit
                   </Link>
                   {/* Deals live in the location editor's "Deals & specials"
-                      section; /deals redirects to it (same pattern as Menu). */}
-                  <Link
-                    href={`/portal/locations/${location.id}/deals`}
-                    aria-label={`Deals for ${label}`}
-                    className={secondaryLinkClass}
-                  >
-                    <TagIcon className="h-4 w-4" />
-                    Deals
-                  </Link>
+                      section; /deals redirects to it (same pattern as Menu).
+                      The button's look shows live / none / hidden. */}
+                  <DealsButton
+                    locationId={location.id}
+                    locationLabel={label}
+                    activeDealsCount={location.active_deals_count}
+                    dealsHidden={location.deals_hidden}
+                  />
                   <Link
                     href={`/portal/locations/${location.id}/menu`}
                     aria-label={`Menu for ${label}`}

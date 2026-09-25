@@ -27,7 +27,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
@@ -136,6 +136,44 @@ async def list_deals_for_location(db: AsyncSession, location_id: int) -> list[De
         select(Deal).where(Deal.location_id == location_id).order_by(Deal.created_at.desc())
     )
     return [_deal_to_out(d) for d in result.scalars().all()]
+
+
+async def live_deal_counts(
+    db: AsyncSession, location_ids: list[int], *, now: datetime | None = None
+) -> dict[int, int]:
+    """Per-location count of LIVE deals, for the owner/manager console's
+    Deals button ("Deals · 2" vs "Add a deal") — ONE grouped query for all
+    the given locations (no N+1).
+
+    "Live" = `is_active` AND (`end_at` is NULL OR `end_at` > now): what an
+    owner would call a deal that is on, i.e. not switched off and not past
+    its end. Deliberately NOT time-of-week aware — `applicable_days` and a
+    future `start_at` do not exclude a deal (an owner who set up "Weekend
+    brunch" still has a deal; the button must not tell them to "Add a
+    deal"). Also independent of `restaurant_location.deals_hidden`: the
+    hide-all switch is surfaced separately so the console can show both.
+
+    Deal CONTENT metadata — only ever call this for a caller with write
+    access to the locations (never a public surface; see docs/API_CONTRACTS.md).
+    Locations with no live deals are present with `0`.
+    """
+    if not location_ids:
+        return {}
+    now = now or datetime.now(timezone.utc)
+    rows = (
+        await db.execute(
+            select(Deal.location_id, func.count())
+            .where(
+                Deal.location_id.in_(location_ids),
+                Deal.is_active == True,  # noqa: E712
+                or_(Deal.end_at.is_(None), Deal.end_at > now),
+            )
+            .group_by(Deal.location_id)
+        )
+    ).all()
+    counts = {lid: 0 for lid in location_ids}
+    counts.update({lid: n for lid, n in rows})
+    return counts
 
 
 async def deals_hidden_for_location(db: AsyncSession, location_id: int) -> bool:
