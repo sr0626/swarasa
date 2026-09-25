@@ -24,11 +24,6 @@ import RestaurantMenu from "@/components/restaurant/RestaurantMenu";
 import RestaurantUpcomingDeals from "@/components/restaurant/RestaurantUpcomingDeals";
 import TopBar from "@/components/home/TopBar";
 import { isMenuEmpty } from "@/lib/menu/format";
-import {
-  buildJumpLinks,
-  hasDealsSection,
-  hasKnownHours,
-} from "@/lib/restaurant/jumpLinks";
 import { brandHref, reportHref } from "@/lib/restaurant/urls";
 import type { ViewerFollowState } from "@/lib/follow/viewerFollowState";
 import type { Session } from "@/types/auth";
@@ -66,13 +61,6 @@ export default function LocationProfile({
 }: LocationProfileProps) {
   const isAdmin = session?.role === "admin";
   const hasMenu = menu !== null && !isMenuEmpty(menu);
-  const jumpLinks = location
-    ? buildJumpLinks({
-        deals: hasDealsSection(location),
-        menu: hasMenu,
-        hours: hasKnownHours(location.hours),
-      })
-    : [];
 
   return (
     <main className="min-h-screen bg-brand-bg">
@@ -110,7 +98,6 @@ export default function LocationProfile({
               currentPath={currentPath}
               ownerPreview={canEdit}
               subtitle={branchLabel}
-              jumpLinks={jumpLinks}
             />
           </div>
 
