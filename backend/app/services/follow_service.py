@@ -186,6 +186,7 @@ def _nearest_location_out(row, has_deal_today: bool, hours_rows: list) -> Neares
         open_time=status.open_time,
         close_time=status.close_time,
         is_closed=status.is_closed,
+        opens_later_today=status.opens_later_today,
         has_deal_today=has_deal_today,
     )
 

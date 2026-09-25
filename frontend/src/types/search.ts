@@ -53,6 +53,9 @@ export interface SearchNearestLocation {
   open_time?: string | null;
   close_time?: string | null;
   is_closed?: boolean | null;
+  /** Server-computed: now is BEFORE today's opening time (meaningful only when
+   * `is_open_now` is false). Absent on an older API -> generic closed label. */
+  opens_later_today?: boolean | null;
   /**
    * Public "does THIS nearest location have an active deal today" badge
    * signal — content-free by design (docs/DECISIONS.md "Deals: public

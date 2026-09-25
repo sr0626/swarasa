@@ -69,7 +69,8 @@ async def _location_to_out(
     hours_rows = await hours_service.get_hours_for_location(db, location.id)
     hours_by_day = {row.day_of_week: row for row in hours_rows}
     today = hours_service.today_weekday(location.timezone)
-    is_open_now = hours_service.compute_is_open_now(hours_by_day.get(today), location.timezone)
+    today_status = hours_service.compute_today_status(hours_by_day.get(today), location.timezone)
+    is_open_now = today_status.is_open_now
 
     cover = await photo_service.get_cover_photo(db, location.id)
     gallery = await photo_service.get_gallery_photos(db, location.id, location.is_paid)
@@ -128,6 +129,10 @@ async def _location_to_out(
         ),
         cuisine_tags=[CuisineTagOut.model_validate(t) for t in tags],
         is_open_now=is_open_now,
+        today_open_time=today_status.open_time,
+        today_close_time=today_status.close_time,
+        today_is_closed=today_status.is_closed,
+        opens_later_today=today_status.opens_later_today,
         hours=[
             HoursOut(
                 day_of_week=row.day_of_week,

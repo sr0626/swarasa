@@ -63,15 +63,21 @@ def _within(open_time: time, close_time: time, now_t: time) -> bool:
     return now_t >= open_time or now_t <= close_time
 
 
-def compute_is_open_now(today_hours: RestaurantHours | None, tz_name: str) -> bool | None:
-    """`None` = hours unknown for today ("call ahead") — never guessed."""
+def compute_is_open_now(
+    today_hours: RestaurantHours | None, tz_name: str, now: dt | None = None
+) -> bool | None:
+    """`None` = hours unknown for today ("call ahead") — never guessed.
+
+    `now` is for tests only (an aware or naive datetime already expressed in
+    the location's timezone); production callers omit it.
+    """
     if today_hours is None or today_hours.is_closed is None:
         return None
     if today_hours.is_closed:
         return False
     if today_hours.open_time is None or today_hours.close_time is None:
         return None
-    now_t = dt.now(safe_zone(tz_name)).time()
+    now_t = (now if now is not None else dt.now(safe_zone(tz_name))).time()
     return _within(today_hours.open_time, today_hours.close_time, now_t)
 
 
@@ -103,10 +109,19 @@ class TodayStatus:
     open_time: time | None
     close_time: time | None
     is_closed: bool | None
+    # Only meaningful when `is_open_now` is False on an open day with known
+    # times: True = "now" is BEFORE today's opening time ("Closed now · opens
+    # 10am"), False = already past closing ("Closed now"). None otherwise
+    # (open now, closed all day, hours unknown). Computed server-side in the
+    # location's timezone so the browser never needs a clock.
+    opens_later_today: bool | None = None
 
 
-def compute_today_status(today_hours: RestaurantHours | None, tz_name: str) -> TodayStatus:
-    is_open_now = compute_is_open_now(today_hours, tz_name)
+def compute_today_status(
+    today_hours: RestaurantHours | None, tz_name: str, now: dt | None = None
+) -> TodayStatus:
+    now = now if now is not None else dt.now(safe_zone(tz_name))
+    is_open_now = compute_is_open_now(today_hours, tz_name, now)
     if today_hours is None or today_hours.is_closed is None:
         return TodayStatus(is_open_now, None, None, None)
     if today_hours.is_closed:
@@ -114,7 +129,10 @@ def compute_today_status(today_hours: RestaurantHours | None, tz_name: str) -> T
     # Open day: only expose the times when both are present (never guess).
     if today_hours.open_time is None or today_hours.close_time is None:
         return TodayStatus(is_open_now, None, None, False)
-    return TodayStatus(is_open_now, today_hours.open_time, today_hours.close_time, False)
+    opens_later = None if is_open_now else now.time() < today_hours.open_time
+    return TodayStatus(
+        is_open_now, today_hours.open_time, today_hours.close_time, False, opens_later
+    )
 
 
 async def today_status_for_location(
