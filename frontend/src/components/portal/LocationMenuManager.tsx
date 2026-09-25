@@ -80,7 +80,7 @@ import { SECTION_ANCHOR_CLASS } from "@/components/portal/editorSectionAnchor";
 
 const errorTextClass = "mt-1 text-xs font-medium text-brand-closed";
 const inputClass =
-  "mt-1.5 w-full rounded-brand-control border border-brand-border bg-white px-3 py-2.5 text-sm text-brand-ink placeholder:text-brand-placeholder focus:border-brand-accent focus:outline-none";
+  "mt-1.5 min-h-[44px] w-full rounded-brand-control border border-brand-border bg-white px-3 py-2.5 text-base text-brand-ink placeholder:text-brand-placeholder focus:border-brand-accent focus:outline-none sm:text-sm";
 const labelClass = "text-sm font-semibold text-brand-ink";
 const rowButton =
   "flex min-h-[44px] items-center gap-1.5 rounded-brand-control border border-brand-border bg-white px-3 text-xs font-semibold text-brand-ink transition hover:border-brand-ink-subtle disabled:cursor-not-allowed disabled:opacity-60";

@@ -21,7 +21,7 @@ interface LocationAboutFormProps {
 }
 
 const inputClass =
-  "mt-1.5 w-full rounded-brand-control border border-brand-border bg-white px-3 py-2.5 text-sm text-brand-ink placeholder:text-brand-placeholder focus:border-brand-accent focus:outline-none";
+  "mt-1.5 min-h-[44px] w-full rounded-brand-control border border-brand-border bg-white px-3 py-2.5 text-base text-brand-ink placeholder:text-brand-placeholder focus:border-brand-accent focus:outline-none sm:text-sm";
 const labelClass = "text-sm font-semibold text-brand-ink";
 
 export default function LocationAboutForm({
@@ -161,7 +161,9 @@ export default function LocationAboutForm({
                   type="button"
                   onClick={() => removeChip(index)}
                   aria-label={`Remove ${chip}`}
-                  className="flex h-5 w-5 items-center justify-center rounded-full text-brand-ink-subtle hover:text-brand-ink"
+                  // 44px tap area (h-11 w-11) pulled back into the chip with negative margins,
+                  // so the chip itself stays the same compact size.
+                  className="-my-3 -mr-3.5 flex h-11 w-11 items-center justify-center rounded-full text-brand-ink-subtle hover:text-brand-ink"
                 >
                   &times;
                 </button>
@@ -185,7 +187,7 @@ export default function LocationAboutForm({
               }}
               onKeyDown={handleDraftKeyDown}
               placeholder={chips.length === 0 ? "e.g. Hyderabadi biryani" : ""}
-              className="min-w-[10rem] flex-1 border-0 bg-transparent p-1 text-sm text-brand-ink placeholder:text-brand-placeholder focus:outline-none"
+              className="min-h-[44px] min-w-[10rem] flex-1 border-0 bg-transparent px-1 text-base text-brand-ink sm:text-sm placeholder:text-brand-placeholder focus:outline-none"
             />
           </div>
           <p className="mt-1 text-xs text-brand-ink-subtle">

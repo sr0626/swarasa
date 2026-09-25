@@ -10,6 +10,7 @@
 // details forms call `router.refresh()` after a save, which re-renders this with
 // the new list. Server Component — no state.
 import { CheckIcon } from "@/components/ui/icons";
+import { SECTION_ANCHOR_CLASS } from "@/components/portal/editorSectionAnchor";
 import { isInSetup, setupChecklist } from "@/lib/portal/listingSetup";
 import type { LocationStatus } from "@/types/location";
 
@@ -31,9 +32,10 @@ export default function ListingSetupBanner({
 
   return (
     <section
+      id="setup-checklist"
       aria-labelledby="setup-heading"
       data-testid="listing-setup-banner"
-      className="mt-4 rounded-brand-card border border-brand-border bg-white p-5 shadow-brand-card sm:p-6"
+      className={`${SECTION_ANCHOR_CLASS} mt-4 rounded-brand-card border border-brand-border bg-white p-5 shadow-brand-card sm:p-6`}
     >
       <h2 id="setup-heading" className="font-display text-lg font-bold text-brand-ink">
         This listing isn&rsquo;t live yet
@@ -63,7 +65,7 @@ export default function ListingSetupBanner({
             {!item.done && (
               <a
                 href={`#${ANCHOR[item.sectionId]}`}
-                className="ml-auto text-sm font-semibold text-brand-accent underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent"
+                className="ml-auto inline-flex min-h-[44px] min-w-[44px] items-center justify-center text-sm font-semibold text-brand-accent underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent"
               >
                 Add
               </a>

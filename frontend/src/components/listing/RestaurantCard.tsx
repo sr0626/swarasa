@@ -186,7 +186,9 @@ export default function RestaurantCard({
             href={googleMapsSearchUrl(fullAddress)}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-start gap-1 text-sm leading-5 text-brand-ink-subtle hover:text-brand-ink hover:underline"
+            // py-3 + -my-3: a 44px-tall tap area around the 20px text line with NO change
+            // to the tile's layout height (tiles stay equal height, PR #214).
+            className="-my-3 flex items-start gap-1 py-3 text-sm leading-5 text-brand-ink-subtle hover:text-brand-ink hover:underline"
           >
             <LocationPinIcon className="mt-0.5 h-4 w-4 shrink-0" />
             <span className="min-w-0 truncate" title={fullAddress}>

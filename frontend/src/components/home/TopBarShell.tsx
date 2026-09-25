@@ -30,6 +30,7 @@ export default function TopBarShell({
   greetingName,
   role = null,
   notifications = null,
+  stickyOnMobile = true,
 }: {
   greetingName: string | null;
   /**
@@ -45,6 +46,13 @@ export default function TopBarShell({
    * state). Ignored unless `role === "admin"`; app/error.tsx omits it.
    */
   notifications?: AdminNotifications | null;
+  /**
+   * Default true (sticky at every width). The location editor passes false: below
+   * `md` the header then scrolls away (`relative`, so its dropdown panels still
+   * anchor to it) and only the editor's own slim section bar stays pinned --
+   * from `md` up it is sticky as everywhere else.
+   */
+  stickyOnMobile?: boolean;
 }) {
   const links = topBarLinksFor(greetingName ? role : null);
   return (
@@ -58,11 +66,13 @@ export default function TopBarShell({
     // context) is never clipped because the header has no `overflow` set.
     // `bg-brand-bg/95 backdrop-blur` keeps scrolled content from showing
     // through legibly.
-    <header className="sticky top-0 z-40 border-b border-brand-border bg-brand-bg/95 backdrop-blur">
+    <header
+      className={`${stickyOnMobile ? "sticky" : "relative md:sticky"} top-0 z-40 border-b border-brand-border bg-brand-bg/95 backdrop-blur`}
+    >
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-4 sm:gap-4 sm:px-6">
         <Link
           href="/"
-          className="flex shrink-0 flex-col leading-tight focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent"
+          className="flex min-h-[44px] shrink-0 flex-col justify-center leading-tight focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent"
         >
           <span className="flex items-center gap-1.5 font-display text-xl font-bold text-brand-ink sm:text-2xl">
             <SwarasaMark className="h-5 w-auto text-brand-accent sm:h-6" />

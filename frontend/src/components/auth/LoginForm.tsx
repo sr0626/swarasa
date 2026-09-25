@@ -222,7 +222,7 @@ export default function LoginForm({
         </label>
         <Link
           href="/forgot-password"
-          className="text-sm font-medium text-brand-accent transition hover:text-brand-accent-hover"
+          className="inline-flex min-h-[44px] items-center text-sm font-medium text-brand-accent transition hover:text-brand-accent-hover"
         >
           Forgot password?
         </Link>

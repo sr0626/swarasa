@@ -81,7 +81,13 @@ async function resolveNotifications(accessToken: string): Promise<AdminNotificat
   }
 }
 
-export default async function TopBar() {
+export default async function TopBar({
+  stickyOnMobile = true,
+}: {
+  /** `false` lets the header scroll away below `md` (the location editor does this to give the
+   * form back ~77px of a phone screen -- see TopBarShell). Sticky from `md` up either way. */
+  stickyOnMobile?: boolean;
+} = {}) {
   const session = await getServerSession();
   // Run the two independent backend calls concurrently; the admin fetch is
   // skipped entirely for every other role.
@@ -97,6 +103,7 @@ export default async function TopBar() {
       greetingName={greetingName}
       role={session?.role ?? null}
       notifications={notifications}
+      stickyOnMobile={stickyOnMobile}
     />
   );
 }

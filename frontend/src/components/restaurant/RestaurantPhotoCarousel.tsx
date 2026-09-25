@@ -12,10 +12,11 @@
 // pointless controls. The first slide loads eagerly (it is the LCP image);
 // the rest are lazy.
 //
-// Touch-target note: the prev/next buttons are 44px. The dot indicators are
-// 24px hit areas (WCAG 2.2 AA minimum) -- they are a redundant secondary
-// control next to swipe and the 44px arrows, and a 44px-tall dot row would
-// eat a strip of the photo.
+// Touch-target note: the prev/next buttons are 44px. The dot indicators keep
+// their compact look (a 24px-tall pill) but each has a 44px-tall tap area (a
+// ::before pseudo-element extending above/below the pill, so the photo isn't
+// covered by a taller strip) and is 32px wide (44px from `sm`): a paid listing
+// can have 10 photos and 10 x 44px would not fit a 343px phone.
 import { useCallback, useRef, useState, type KeyboardEvent } from "react";
 
 export interface CarouselPhoto {
@@ -155,7 +156,7 @@ export default function RestaurantPhotoCarousel({
               onClick={() => goTo(index)}
               aria-label={`Go to photo ${index + 1}`}
               aria-current={index === active ? "true" : undefined}
-              className="flex h-6 w-6 items-center justify-center rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+              className="relative flex h-6 w-8 items-center justify-center rounded-full before:absolute before:-inset-y-2.5 before:inset-x-0 before:content-[''] focus:outline-none focus-visible:ring-2 focus-visible:ring-white sm:w-11"
             >
               <span
                 className={`block rounded-full transition-all ${

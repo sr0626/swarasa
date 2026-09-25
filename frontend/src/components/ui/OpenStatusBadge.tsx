@@ -31,7 +31,7 @@ export default function OpenStatusBadge({
         ? "bg-brand-closed-bg text-brand-closed"
         : isOpenNow === true
           ? "bg-brand-success-bg text-brand-success"
-          : "bg-brand-chip text-brand-ink-subtle";
+          : "bg-brand-chip text-brand-ink-muted";
     const nowCue =
       isOpenNow === true ? " (open now)" : isOpenNow === false ? " (closed now)" : "";
     return (

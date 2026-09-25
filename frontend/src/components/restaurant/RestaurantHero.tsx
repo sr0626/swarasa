@@ -169,8 +169,11 @@ export default function RestaurantHero({
       )}
 
       <div className="mt-5 flex flex-col gap-3">
-        <div className="flex items-start gap-3">
-          <h1 className="font-display text-3xl font-bold text-brand-ink sm:text-4xl">
+        {/* flex-wrap: the owner-preview marker below is ~245px wide, so on a
+            375px phone it drops to its own line under the name instead of
+            squeezing the name into 3 lines and overflowing the page. */}
+        <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
+          <h1 className="min-w-0 break-words font-display text-3xl font-bold text-brand-ink sm:text-4xl">
             {restaurant.name}
           </h1>
           {showFollowButton && (
@@ -193,7 +196,7 @@ export default function RestaurantHero({
               the only thing a screen reader announces here, so it reads as
               descriptive copy, never as a broken control. */}
           {!showFollowButton && ownerPreview && (
-            <span className="mt-1 flex shrink-0 flex-wrap items-center gap-2">
+            <span className="flex max-w-full items-center gap-2 sm:mt-1">
               <span
                 aria-hidden="true"
                 title="Diners see a follow button here"
@@ -201,7 +204,7 @@ export default function RestaurantHero({
               >
                 <HeartIcon className="h-5 w-5" />
               </span>
-              <span className="rounded-brand-pill bg-brand-chip px-2.5 py-1 text-xs font-medium text-brand-chip-ink">
+              <span className="min-w-0 rounded-brand-pill bg-brand-chip px-2.5 py-1 text-xs font-medium text-brand-chip-ink">
                 Diners see a follow button here
               </span>
             </span>

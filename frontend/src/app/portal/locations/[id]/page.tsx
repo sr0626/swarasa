@@ -231,8 +231,10 @@ export default async function PortalLocationPage({ params, searchParams }: Locat
 
   return (
     <main className="min-h-screen bg-brand-bg">
-      <TopBar />
-      <section className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
+      {/* Header scrolls away on phones here: the editor's own sticky section bar
+          (+ Go-live bar) is the only pinned chrome below `md`, ~100px instead of ~194px. */}
+      <TopBar stickyOnMobile={false} />
+      <section className="mx-auto max-w-3xl px-4 pb-10 pt-2 sm:px-6 md:py-10">
         {/* The "Back to ..." link lives in the sticky bar (EditorSectionNav),
             so it stays reachable while scrolling. */}
         <EditorSectionNav

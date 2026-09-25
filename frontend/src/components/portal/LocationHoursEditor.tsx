@@ -152,7 +152,7 @@ export default function LocationHoursEditor({
                     required
                     value={day.open_time}
                     onChange={(e) => updateDay(index, { open_time: e.target.value })}
-                    className="rounded-brand-control border border-brand-border bg-white px-2 py-1.5 text-sm text-brand-ink focus:border-brand-accent focus:outline-none"
+                    className="h-11 rounded-brand-control border border-brand-border bg-white px-2 text-base text-brand-ink focus:border-brand-accent focus:outline-none sm:text-sm"
                   />
                   <span className="text-brand-ink-subtle">to</span>
                   <label className="sr-only" htmlFor={`close-${day.day_of_week}`}>
@@ -164,7 +164,7 @@ export default function LocationHoursEditor({
                     required
                     value={day.close_time}
                     onChange={(e) => updateDay(index, { close_time: e.target.value })}
-                    className="rounded-brand-control border border-brand-border bg-white px-2 py-1.5 text-sm text-brand-ink focus:border-brand-accent focus:outline-none"
+                    className="h-11 rounded-brand-control border border-brand-border bg-white px-2 text-base text-brand-ink focus:border-brand-accent focus:outline-none sm:text-sm"
                   />
                 </div>
               )}
