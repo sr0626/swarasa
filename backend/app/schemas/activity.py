@@ -5,10 +5,11 @@ clicks)".
 """
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
+
+from app.schemas.utc import UtcDatetime
 
 # The UI surface a tile was clicked on. A closed set (not free text) so a
 # client can't stuff arbitrary strings into the log via this field.
@@ -28,7 +29,7 @@ class TileClickIn(BaseModel):
 class ActivityEventOut(BaseModel):
     id: int
     event_type: str
-    created_at: datetime
+    created_at: UtcDatetime
     # The stored (already size-bounded) payload. `search`: `q`, `cuisine`,
     # `dietary`, `type`, `loc`, `has_deals_today`, `result_count` (keys
     # omitted when empty). `tile_click`: `brand_id`, `location_id`, `source`.

@@ -2,8 +2,8 @@
 
 // Admin listings management UI. Owns the whole "find + moderate a
 // listing" experience: the filter bar (GET form, URL-driven — see
-// docs/API_CONTRACTS.md "GET /restaurants" filters), the active-filter
-// chip row, the brand list (+ already SSR-loaded locations), pagination,
+// docs/API_CONTRACTS.md "GET /admin/listings" filters), the active-filter
+// chip row, the brand list with EVERY location of each brand, pagination,
 // and the real moderation actions (`deleteRestaurantAction`,
 // `restoreRestaurantAction`, `deactivateLocationAction` in `actions.ts`)
 // against `DELETE /restaurants/{id}` (a SOFT delete that also deactivates
@@ -16,10 +16,15 @@
 // every filter change is a real navigation that re-runs
 // `admin/listings/page.tsx`'s SSR fetch against the new query string.
 //
-// Locations are not lazily fetched here — the page Server Component
-// already loaded each brand's locations (same N+1-but-bounded-by-page-size
-// pattern as `portal/dashboard/page.tsx`), so expand/collapse below is
-// pure client-side UI state, no extra network round trip.
+// Location-level detail: `GET /admin/listings` returns each brand's locations
+// in every status, each flagged `matches_filter`. While a location filter
+// (status / tier / city) is active, every brand starts expanded and the
+// matching location(s) are highlighted with a "Matches filter" tag — so
+// "Status: Coming soon" shows WHICH location is coming soon, not just a brand.
+//
+// Provenance (admin-only, from the same endpoint): each brand shows its
+// owner ("Owner: <email>" / "Unclaimed") and each brand AND location shows
+// "Created <date> by <who> (<role>)".
 import Link from "next/link";
 import { useState } from "react";
 import {
@@ -27,37 +32,45 @@ import {
   deleteRestaurantAction,
   restoreRestaurantAction,
 } from "@/app/admin/listings/actions";
-import { deleteListingWarning, type ListingStatusFilter } from "@/lib/adminListings";
-import OpenStatusBadge from "@/components/ui/OpenStatusBadge";
+import {
+  LOCATION_STATUS_LABELS,
+  addressLine,
+  creatorText,
+  deleteListingWarning,
+  hasLocationFilter,
+  matchSummary,
+  ownerLine,
+  type ListingStatusFilter,
+} from "@/lib/adminListings";
+import LocalDateTime from "@/components/ui/LocalDateTime";
 import { PencilIcon, PlusIcon, TrashIcon } from "@/components/ui/icons";
-import type { LocationSummary } from "@/types/location";
-import type { RestaurantBrand } from "@/types/restaurant";
+import type {
+  AdminListing,
+  AdminListingLocation,
+  AdminListingSort,
+  ListingCreator,
+} from "@/types/adminListings";
 import { ownerBrandPageLink, ownerLocationPageLink } from "@/lib/restaurant/urls";
-
-export interface BrandWithLocations {
-  brand: RestaurantBrand;
-  locations: LocationSummary[];
-  locationsError: string | null;
-}
 
 /** Parsed, URL-derived filter state — see `admin/listings/page.tsx`'s
  * `searchParams` parsing. `undefined` means "no filter" for every field
  * (never an empty string), so `Object.entries` + `!== undefined` is a
  * reliable "is this filter active" check throughout this file. */
 export interface AdminListingsFilters {
+  /** From the Owners report link (`?owner_id=`). */
+  ownerId?: number;
+  /** From the Managers report links (`?brand_id=`): exactly one restaurant. */
+  brandId?: number;
   ownerEmail?: string;
   name?: string;
   status?: ListingStatusFilter;
   isPaid?: boolean;
   city?: string;
   isClaimed?: boolean;
-  /** `GET /restaurants`'s `sort` param (docs/API_CONTRACTS.md "GET
-   * /restaurants") -- not a filter (doesn't narrow the result set), but
-   * lives alongside the filters here since it's driven by the same URL
-   * query string / `<form method="get">`. Omitted keeps the default
-   * (newest/id) order. Deliberately excluded from `activeFilterChips`
-   * below -- it's a sort choice, not a "narrowed by" chip. */
-  sort?: "followers";
+  /** Not a filter (doesn't narrow the result set), but lives alongside the
+   * filters since it's driven by the same URL query string / form. Omitted
+   * = `newest`, the default. Deliberately excluded from `activeFilterChips`. */
+  sort?: AdminListingSort;
 }
 
 const STATUS_OPTIONS: ReadonlyArray<{ value: ListingStatusFilter; label: string }> = [
@@ -76,19 +89,23 @@ const STATUS_LABELS: Record<ListingStatusFilter, string> = {
   deleted: "Deleted listings",
 };
 
+const INPUT_CLASS =
+  "mt-2 min-h-[44px] w-full rounded-brand-control border border-brand-border bg-white px-3 text-sm text-brand-ink placeholder:text-brand-placeholder focus:border-brand-accent focus:outline-none";
+
 /** Builds `/admin/listings?...` for the given filters + page, omitting
- * every unset filter and `page` when it's the default (1) — same
- * "no query string for the default state" convention as the old
- * `owner_id`-only `PageLink` this replaces. */
+ * every unset filter, the default sort, and `page` when it's the default
+ * (1) — "no query string for the default state". */
 function buildListingsHref(filters: AdminListingsFilters, page: number): string {
   const params = new URLSearchParams();
+  if (filters.ownerId) params.set("owner_id", String(filters.ownerId));
+  if (filters.brandId) params.set("brand_id", String(filters.brandId));
   if (filters.ownerEmail) params.set("owner_email", filters.ownerEmail);
   if (filters.name) params.set("name", filters.name);
   if (filters.status) params.set("status", filters.status);
   if (filters.isPaid !== undefined) params.set("is_paid", String(filters.isPaid));
   if (filters.city) params.set("city", filters.city);
   if (filters.isClaimed !== undefined) params.set("is_claimed", String(filters.isClaimed));
-  if (filters.sort) params.set("sort", filters.sort);
+  if (filters.sort && filters.sort !== "newest") params.set("sort", filters.sort);
   if (page > 1) params.set("page", String(page));
   const qs = params.toString();
   return qs ? `/admin/listings?${qs}` : "/admin/listings";
@@ -101,6 +118,8 @@ interface ActiveFilterChip {
 
 function activeFilterChips(filters: AdminListingsFilters): ActiveFilterChip[] {
   const chips: ActiveFilterChip[] = [];
+  if (filters.ownerId) chips.push({ key: "ownerId", label: `Owner #${filters.ownerId}` });
+  if (filters.brandId) chips.push({ key: "brandId", label: `Restaurant #${filters.brandId}` });
   if (filters.ownerEmail) chips.push({ key: "ownerEmail", label: `Owner: ${filters.ownerEmail}` });
   if (filters.name) chips.push({ key: "name", label: `Name: ${filters.name}` });
   if (filters.status) chips.push({ key: "status", label: `Status: ${STATUS_LABELS[filters.status]}` });
@@ -121,15 +140,23 @@ export default function AdminListingsPanel({
   page,
   totalPages,
 }: {
-  initialBrands: BrandWithLocations[];
+  initialBrands: AdminListing[];
   filters: AdminListingsFilters;
   total: number;
   page: number;
   totalPages: number;
 }) {
-  const [brands, setBrands] = useState<BrandWithLocations[]>(initialBrands);
-  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const [brands, setBrands] = useState<AdminListing[]>(initialBrands);
+  // With a location-level filter (or a single-restaurant link) every brand
+  // starts open, so the matching location is visible without another click.
+  const [expanded, setExpanded] = useState<Set<number>>(
+    () =>
+      new Set(
+        hasLocationFilter(filters) || filters.brandId ? initialBrands.map((brand) => brand.id) : []
+      )
+  );
   const chips = activeFilterChips(filters);
+  const locationFilterActive = hasLocationFilter(filters);
 
   function toggleExpanded(brandId: number) {
     setExpanded((prev) => {
@@ -144,20 +171,26 @@ export default function AdminListingsPanel({
   }
 
   function removeBrand(brandId: number) {
-    setBrands((prev) => prev.filter((b) => b.brand.id !== brandId));
+    setBrands((prev) => prev.filter((b) => b.id !== brandId));
   }
 
-  function removeLocation(brandId: number, locationId: number) {
+  // A deactivated location stays in the list (an admin still needs to see it)
+  // but flips to `owner_deactivated`; the brand's ACTIVE count drops with it.
+  function markLocationDeactivated(brandId: number, locationId: number) {
     setBrands((prev) =>
-      prev.map((entry) =>
-        entry.brand.id === brandId
-          ? {
-              ...entry,
-              locations: entry.locations.filter((loc) => loc.id !== locationId),
-              brand: { ...entry.brand, location_count: Math.max(0, entry.brand.location_count - 1) },
-            }
-          : entry
-      )
+      prev.map((entry) => {
+        if (entry.id !== brandId) return entry;
+        const wasActive = entry.locations.some(
+          (loc) => loc.id === locationId && loc.status === "active"
+        );
+        return {
+          ...entry,
+          location_count: wasActive ? Math.max(0, entry.location_count - 1) : entry.location_count,
+          locations: entry.locations.map((loc) =>
+            loc.id === locationId ? { ...loc, status: "owner_deactivated" as const } : loc
+          ),
+        };
+      })
     );
   }
 
@@ -165,8 +198,11 @@ export default function AdminListingsPanel({
     <div>
       <form
         method="get"
-        className="flex flex-wrap items-end gap-3 rounded-brand-card border border-brand-border bg-white p-4"
+        className="grid grid-cols-1 gap-3 rounded-brand-card border border-brand-border bg-white p-4 sm:flex sm:flex-wrap sm:items-end"
       >
+        {/* Carried through the form so Apply doesn't drop a link-supplied scope. */}
+        {filters.ownerId ? <input type="hidden" name="owner_id" value={filters.ownerId} /> : null}
+        {filters.brandId ? <input type="hidden" name="brand_id" value={filters.brandId} /> : null}
         <div>
           <label htmlFor="owner_email" className="text-sm font-semibold text-brand-ink">
             Owner email
@@ -177,7 +213,7 @@ export default function AdminListingsPanel({
             type="text"
             defaultValue={filters.ownerEmail ?? ""}
             placeholder="owner@example.com"
-            className="mt-2 w-48 rounded-brand-control border border-brand-border bg-white px-3 py-2 text-sm text-brand-ink placeholder:text-brand-placeholder focus:border-brand-accent focus:outline-none"
+            className={`${INPUT_CLASS} sm:w-48`}
           />
         </div>
         <div>
@@ -190,7 +226,7 @@ export default function AdminListingsPanel({
             type="text"
             defaultValue={filters.name ?? ""}
             placeholder="e.g. Spice Route"
-            className="mt-2 w-48 rounded-brand-control border border-brand-border bg-white px-3 py-2 text-sm text-brand-ink placeholder:text-brand-placeholder focus:border-brand-accent focus:outline-none"
+            className={`${INPUT_CLASS} sm:w-48`}
           />
         </div>
         <div>
@@ -203,7 +239,7 @@ export default function AdminListingsPanel({
             type="text"
             defaultValue={filters.city ?? ""}
             placeholder="e.g. Plano"
-            className="mt-2 w-36 rounded-brand-control border border-brand-border bg-white px-3 py-2 text-sm text-brand-ink placeholder:text-brand-placeholder focus:border-brand-accent focus:outline-none"
+            className={`${INPUT_CLASS} sm:w-36`}
           />
         </div>
         <div>
@@ -214,7 +250,7 @@ export default function AdminListingsPanel({
             id="status"
             name="status"
             defaultValue={filters.status ?? ""}
-            className="mt-2 min-h-[40px] rounded-brand-control border border-brand-border bg-white px-3 text-sm text-brand-ink focus:border-brand-accent focus:outline-none"
+            className={`${INPUT_CLASS} sm:w-auto`}
           >
             <option value="">Any</option>
             {STATUS_OPTIONS.map((option) => (
@@ -232,7 +268,7 @@ export default function AdminListingsPanel({
             id="is_paid"
             name="is_paid"
             defaultValue={filters.isPaid === undefined ? "" : String(filters.isPaid)}
-            className="mt-2 min-h-[40px] rounded-brand-control border border-brand-border bg-white px-3 text-sm text-brand-ink focus:border-brand-accent focus:outline-none"
+            className={`${INPUT_CLASS} sm:w-auto`}
           >
             <option value="">Any</option>
             <option value="true">Paid</option>
@@ -247,7 +283,7 @@ export default function AdminListingsPanel({
             id="is_claimed"
             name="is_claimed"
             defaultValue={filters.isClaimed === undefined ? "" : String(filters.isClaimed)}
-            className="mt-2 min-h-[40px] rounded-brand-control border border-brand-border bg-white px-3 text-sm text-brand-ink focus:border-brand-accent focus:outline-none"
+            className={`${INPUT_CLASS} sm:w-auto`}
           >
             <option value="">Any</option>
             <option value="true">Claimed</option>
@@ -261,27 +297,30 @@ export default function AdminListingsPanel({
           <select
             id="sort"
             name="sort"
-            defaultValue={filters.sort ?? ""}
-            className="mt-2 min-h-[40px] rounded-brand-control border border-brand-border bg-white px-3 text-sm text-brand-ink focus:border-brand-accent focus:outline-none"
+            defaultValue={filters.sort ?? "newest"}
+            className={`${INPUT_CLASS} sm:w-auto`}
           >
-            <option value="">Newest</option>
+            <option value="newest">Newest</option>
+            <option value="oldest">Oldest</option>
             <option value="followers">Most followed</option>
           </select>
         </div>
-        <button
-          type="submit"
-          className="flex min-h-[40px] items-center justify-center rounded-brand-control bg-brand-ink px-4 text-sm font-semibold text-brand-bg transition hover:bg-brand-ink/90"
-        >
-          Apply
-        </button>
-        {chips.length > 0 && (
-          <Link
-            href="/admin/listings"
-            className="flex min-h-[40px] items-center justify-center rounded-brand-control border border-brand-border px-4 text-sm font-semibold text-brand-ink-muted transition hover:bg-brand-chip"
+        <div className="flex items-center gap-3">
+          <button
+            type="submit"
+            className="flex min-h-[44px] flex-1 items-center justify-center rounded-brand-control bg-brand-ink px-5 text-sm font-semibold text-brand-bg transition hover:bg-brand-ink/90 sm:flex-none"
           >
-            Clear all
-          </Link>
-        )}
+            Apply
+          </button>
+          {chips.length > 0 && (
+            <Link
+              href="/admin/listings"
+              className="flex min-h-[44px] items-center justify-center rounded-brand-control border border-brand-border px-4 text-sm font-semibold text-brand-ink-muted transition hover:bg-brand-chip"
+            >
+              Clear all
+            </Link>
+          )}
+        </div>
       </form>
 
       {chips.length > 0 && (
@@ -295,9 +334,9 @@ export default function AdminListingsPanel({
               key={chip.key}
               href={buildListingsHref({ ...filters, [chip.key]: undefined }, 1)}
               aria-label={`Remove filter ${chip.label}`}
-              className="flex min-h-[36px] items-center gap-1.5 rounded-brand-pill border border-brand-border bg-white px-3 text-xs font-medium text-brand-ink transition hover:bg-brand-chip"
+              className="flex min-h-[44px] max-w-full items-center gap-1.5 rounded-brand-pill border border-brand-border bg-white px-3 text-xs font-medium text-brand-ink transition hover:bg-brand-chip"
             >
-              {chip.label}
+              <span className="break-all">{chip.label}</span>
               <span aria-hidden="true" className="text-base leading-none text-brand-ink-subtle">
                 &times;
               </span>
@@ -318,14 +357,15 @@ export default function AdminListingsPanel({
         ) : (
           <ul className="flex flex-col gap-4">
             {brands.map((entry) => (
-              <li key={entry.brand.id}>
+              <li key={entry.id}>
                 <BrandRow
                   entry={entry}
-                  expanded={expanded.has(entry.brand.id)}
-                  onToggleExpanded={() => toggleExpanded(entry.brand.id)}
-                  onDeleted={() => removeBrand(entry.brand.id)}
-                  onRestored={() => removeBrand(entry.brand.id)}
-                  onLocationDeactivated={(locationId) => removeLocation(entry.brand.id, locationId)}
+                  highlightMatches={locationFilterActive}
+                  expanded={expanded.has(entry.id)}
+                  onToggleExpanded={() => toggleExpanded(entry.id)}
+                  onDeleted={() => removeBrand(entry.id)}
+                  onRestored={() => removeBrand(entry.id)}
+                  onLocationDeactivated={(locationId) => markLocationDeactivated(entry.id, locationId)}
                 />
               </li>
             ))}
@@ -364,39 +404,58 @@ function PageLink({
   disabled: boolean;
   children: React.ReactNode;
 }) {
+  const base =
+    "flex min-h-[44px] items-center rounded-brand-control border border-brand-border px-4";
   if (disabled) {
-    return (
-      <span className="rounded-brand-control border border-brand-border px-3 py-2 text-brand-ink-subtle/40">
-        {children}
-      </span>
-    );
+    return <span className={`${base} text-brand-ink-subtle/40`}>{children}</span>;
   }
   return (
     <Link
       href={buildListingsHref(filters, page)}
-      className="rounded-brand-control border border-brand-border px-3 py-2 text-brand-ink-muted transition hover:bg-brand-chip"
+      className={`${base} text-brand-ink-muted transition hover:bg-brand-chip`}
     >
       {children}
     </Link>
   );
 }
 
+/** "Created Sep 24, 2026 by root@example.com (admin)" — the date is the
+ * viewer's local calendar date; the "by" part is dropped when the creator is
+ * unknown (no audit row). */
+function CreatedLine({ creator, className }: { creator: ListingCreator; className?: string }) {
+  const by = creatorText(creator);
+  return (
+    <p className={className}>
+      Created <LocalDateTime value={creator.created_at} variant="date" fallback="(date unknown)" />
+      {by ? (
+        <>
+          {" by "}
+          <span className="break-all font-medium text-brand-ink-muted">{by}</span>
+        </>
+      ) : null}
+    </p>
+  );
+}
+
 function BrandRow({
   entry,
+  highlightMatches,
   expanded,
   onToggleExpanded,
   onDeleted,
   onRestored,
   onLocationDeactivated,
 }: {
-  entry: BrandWithLocations;
+  entry: AdminListing;
+  highlightMatches: boolean;
   expanded: boolean;
   onToggleExpanded: () => void;
   onDeleted: () => void;
   onRestored: () => void;
   onLocationDeactivated: (locationId: number) => void;
 }) {
-  const { brand, locations, locationsError } = entry;
+  const brand = entry;
+  const locations = entry.locations;
   const isDeleted = Boolean(brand.deleted_at);
   // `brand.location_count` is the ACTIVE location count.
   const brandLink = ownerBrandPageLink(brand.slug, brand.location_count);
@@ -431,11 +490,13 @@ function BrandRow({
   }
 
   return (
-    <div className="rounded-brand-card border border-brand-border bg-white p-5 shadow-brand-card">
+    <div className="rounded-brand-card border border-brand-border bg-white p-4 shadow-brand-card sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="font-display text-lg font-bold text-brand-ink">{brand.name}</h2>
+            <h2 className="break-words font-display text-lg font-bold text-brand-ink">
+              {brand.name}
+            </h2>
             {isDeleted && (
               <span className="inline-flex items-center rounded-brand-pill bg-brand-closed-bg px-2.5 py-1 text-xs font-semibold text-brand-closed">
                 Deleted
@@ -450,20 +511,34 @@ function BrandRow({
                 Unclaimed
               </span>
             )}
-          </div>
-          <p className="mt-1 text-sm text-brand-ink-subtle">
-            /{brand.slug} &middot; owner {brand.owner_id ?? "none"} &middot; {brand.location_count}{" "}
-            location{brand.location_count === 1 ? "" : "s"}
-            {/* Admin-only field (see restaurant_service._caller_may_view_follower_count,
-                PR #174) — null only if the backend response somehow predates that PR.
-                Now doubles as the visible number behind the sort=followers "Most
-                followed" control below. */}
-            {brand.follower_count !== null && brand.follower_count !== undefined && (
-              <>
-                {" "}
-                &middot; {brand.follower_count} follower{brand.follower_count === 1 ? "" : "s"}
-              </>
+            {brand.has_pending_claim && (
+              <span className="inline-flex items-center rounded-brand-pill bg-brand-chip px-2.5 py-1 text-xs font-semibold text-brand-chip-ink">
+                Claim pending
+              </span>
             )}
+          </div>
+          <p className="mt-1 break-all text-sm font-medium text-brand-ink">
+            {brand.owner_email ? (
+              <>
+                Owner:{" "}
+                <Link
+                  href={`/admin/owners?q=${encodeURIComponent(brand.owner_email)}`}
+                  className="text-brand-accent underline-offset-2 hover:underline"
+                >
+                  {brand.owner_email}
+                </Link>
+              </>
+            ) : (
+              ownerLine(brand)
+            )}
+          </p>
+          <CreatedLine creator={brand} className="mt-0.5 text-xs text-brand-ink-subtle" />
+          <p className="mt-1 text-sm text-brand-ink-subtle">
+            /{brand.slug} &middot; {brand.location_count} active of {locations.length} location
+            {locations.length === 1 ? "" : "s"}
+            {/* Admin-only stat, also the number behind the "Most followed" sort. */}
+            {" "}
+            &middot; {brand.follower_count} follower{brand.follower_count === 1 ? "" : "s"}
           </p>
           {brand.cuisine_tags.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1.5">
@@ -485,7 +560,7 @@ function BrandRow({
               type="button"
               onClick={handleRestore}
               disabled={restoring}
-              className="flex min-h-[40px] items-center justify-center rounded-brand-control bg-brand-ink px-3 text-xs font-semibold text-brand-bg transition hover:bg-brand-ink/90 disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex min-h-[44px] items-center justify-center rounded-brand-control bg-brand-ink px-3 text-xs font-semibold text-brand-bg transition hover:bg-brand-ink/90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {restoring ? "Restoring..." : "Restore listing"}
             </button>
@@ -494,7 +569,7 @@ function BrandRow({
               <Link
                 href={`/portal/locations/new?brand=${brand.id}`}
                 aria-label={`Add a location to ${brand.name}`}
-                className="flex min-h-[40px] items-center gap-1.5 rounded-brand-control border border-brand-border px-3 text-xs font-semibold text-brand-ink-muted transition hover:bg-brand-chip"
+                className="flex min-h-[44px] items-center gap-1.5 rounded-brand-control border border-brand-border px-3 text-xs font-semibold text-brand-ink-muted transition hover:bg-brand-chip"
               >
                 <PlusIcon className="h-3.5 w-3.5" />
                 Add location
@@ -506,7 +581,7 @@ function BrandRow({
                   href={brandLink.href}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex min-h-[40px] items-center justify-center rounded-brand-control border border-brand-border px-3 text-xs font-semibold text-brand-ink-muted transition hover:bg-brand-chip"
+                  className="flex min-h-[44px] items-center justify-center rounded-brand-control border border-brand-border px-3 text-xs font-semibold text-brand-ink-muted transition hover:bg-brand-chip"
                 >
                   {brandLink.label}
                 </a>
@@ -515,7 +590,7 @@ function BrandRow({
                 <button
                   type="button"
                   onClick={() => setConfirming(true)}
-                  className="flex min-h-[40px] items-center gap-1.5 rounded-brand-control border border-brand-closed px-3 text-xs font-semibold text-brand-closed transition hover:bg-brand-closed-bg"
+                  className="flex min-h-[44px] items-center gap-1.5 rounded-brand-control border border-brand-closed px-3 text-xs font-semibold text-brand-closed transition hover:bg-brand-closed-bg"
                 >
                   <TrashIcon className="h-3.5 w-3.5" />
                   Delete listing
@@ -547,7 +622,7 @@ function BrandRow({
               type="button"
               onClick={handleDelete}
               disabled={deleting}
-              className="flex min-h-[40px] items-center gap-1.5 rounded-brand-control bg-brand-closed px-3 text-xs font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex min-h-[44px] items-center gap-1.5 rounded-brand-control bg-brand-closed px-3 text-xs font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <TrashIcon className="h-3.5 w-3.5" />
               {deleting ? "Deleting..." : "Confirm delete"}
@@ -556,7 +631,7 @@ function BrandRow({
               type="button"
               onClick={() => setConfirming(false)}
               disabled={deleting}
-              className="flex min-h-[40px] items-center justify-center rounded-brand-control border border-brand-border bg-white px-3 text-xs font-semibold text-brand-ink transition hover:bg-brand-chip disabled:opacity-60"
+              className="flex min-h-[44px] items-center justify-center rounded-brand-control border border-brand-border bg-white px-3 text-xs font-semibold text-brand-ink transition hover:bg-brand-chip disabled:opacity-60"
             >
               Cancel
             </button>
@@ -570,29 +645,31 @@ function BrandRow({
         </p>
       )}
 
-      <button
-        type="button"
-        onClick={onToggleExpanded}
-        className="mt-3 text-sm font-semibold text-brand-accent underline-offset-2 hover:underline"
-      >
-        {expanded ? "Hide locations" : `Show locations (${locations.length})`}
-      </button>
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1">
+        <button
+          type="button"
+          onClick={onToggleExpanded}
+          aria-expanded={expanded}
+          className="min-h-[44px] text-sm font-semibold text-brand-accent underline-offset-2 hover:underline"
+        >
+          {expanded ? "Hide locations" : `Show locations (${locations.length})`}
+        </button>
+        {highlightMatches && locations.length > 0 && (
+          <span className="text-xs font-medium text-brand-ink-muted">{matchSummary(locations)}</span>
+        )}
+      </div>
 
       {expanded && (
-        <div className="mt-3 flex flex-col gap-2 border-t border-brand-border pt-3">
-          {locationsError && (
-            <p className="rounded-brand-control bg-brand-closed-bg px-3 py-2.5 text-sm text-brand-closed">
-              {locationsError}
-            </p>
-          )}
-          {!locationsError && locations.length === 0 && (
-            <p className="text-sm text-brand-ink-subtle">This brand has no active locations.</p>
+        <div className="mt-1 flex flex-col gap-2 border-t border-brand-border pt-3">
+          {locations.length === 0 && (
+            <p className="text-sm text-brand-ink-subtle">This restaurant has no locations.</p>
           )}
           {locations.map((location) => (
             <LocationRow
               key={location.id}
               location={location}
               brandSlug={brand.slug}
+              highlight={highlightMatches && location.matches_filter}
               onDeactivated={() => onLocationDeactivated(location.id)}
             />
           ))}
@@ -602,19 +679,29 @@ function BrandRow({
   );
 }
 
+const STATUS_TAG_CLASS: Record<AdminListingLocation["status"], string> = {
+  active: "bg-brand-success-bg text-brand-success",
+  owner_deactivated: "bg-brand-closed-bg text-brand-closed",
+  coming_soon: "bg-brand-accent-gold/30 text-brand-chip-ink",
+  closed_pending_reopen: "bg-brand-closed-bg text-brand-closed",
+};
+
 function LocationRow({
   location,
   brandSlug,
+  highlight,
   onDeactivated,
 }: {
-  location: LocationSummary;
+  location: AdminListingLocation;
   brandSlug: string;
+  highlight: boolean;
   onDeactivated: () => void;
 }) {
   const pageLink = ownerLocationPageLink(brandSlug, location);
   const [confirming, setConfirming] = useState(false);
   const [deactivating, setDeactivating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isActive = location.status === "active";
 
   async function handleDeactivate() {
     if (!confirming) {
@@ -633,22 +720,34 @@ function LocationRow({
     }
   }
 
+  const tag = "inline-flex items-center rounded-brand-pill px-2 py-0.5 text-xs font-semibold";
+
   return (
-    <div className="flex flex-col gap-2 rounded-brand-control bg-brand-bg p-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="text-sm">
-        <p className="font-medium text-brand-ink">
+    <div
+      data-matches-filter={highlight ? "true" : undefined}
+      className={
+        "flex flex-col gap-2 rounded-brand-control p-3 sm:flex-row sm:items-start sm:justify-between " +
+        (highlight ? "bg-white ring-2 ring-brand-accent" : "bg-brand-bg")
+      }
+    >
+      <div className="min-w-0 text-sm">
+        <p className="break-words font-medium text-brand-ink">
           {location.location_name ?? location.address_line1}
         </p>
-        <p className="text-brand-ink-subtle">
-          {location.address_line1}, {location.city}, {location.state} {location.postal_code}
-        </p>
-        <div className="mt-1 flex flex-wrap items-center gap-1.5">
-          <OpenStatusBadge isOpenNow={location.is_open_now} />
+        <p className="break-words text-brand-ink-subtle">{addressLine(location)}</p>
+        {location.phone && <p className="text-xs text-brand-ink-subtle">{location.phone}</p>}
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          {highlight && (
+            <span className={`${tag} bg-brand-accent text-white`}>Matches filter</span>
+          )}
+          <span className={`${tag} ${STATUS_TAG_CLASS[location.status]}`}>
+            {LOCATION_STATUS_LABELS[location.status]}
+          </span>
           <span
             className={
               location.is_verified
-                ? "inline-flex items-center rounded-brand-pill bg-brand-success-bg px-2 py-0.5 text-xs font-semibold text-brand-success"
-                : "inline-flex items-center rounded-brand-pill bg-brand-chip px-2 py-0.5 text-xs font-semibold text-brand-chip-ink"
+                ? `${tag} bg-brand-success-bg text-brand-success`
+                : `${tag} bg-brand-chip text-brand-chip-ink`
             }
           >
             {location.is_verified ? "Verified" : "Unverified"}
@@ -656,20 +755,21 @@ function LocationRow({
           <span
             className={
               location.is_paid
-                ? "inline-flex items-center rounded-brand-pill bg-brand-accent-gold/30 px-2 py-0.5 text-xs font-semibold text-brand-chip-ink"
-                : "inline-flex items-center rounded-brand-pill bg-brand-bg px-2 py-0.5 text-xs font-semibold text-brand-ink-subtle"
+                ? `${tag} bg-brand-accent-gold/30 text-brand-chip-ink`
+                : `${tag} bg-brand-bg text-brand-ink-subtle ring-1 ring-brand-border`
             }
           >
             {location.is_paid ? "Paid" : "Free"}
           </span>
         </div>
+        <CreatedLine creator={location} className="mt-1.5 text-xs text-brand-ink-subtle" />
         {error && <p className="mt-1 text-xs text-brand-closed">{error}</p>}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
         <Link
           href={`/portal/locations/${location.id}`}
-          className="flex min-h-[36px] items-center gap-1.5 rounded-brand-control border border-brand-border px-3 text-xs font-semibold text-brand-ink transition hover:bg-brand-chip"
+          className="flex min-h-[44px] items-center gap-1.5 rounded-brand-control border border-brand-border px-3 text-xs font-semibold text-brand-ink transition hover:bg-brand-chip"
         >
           <PencilIcon className="h-3.5 w-3.5" />
           Edit
@@ -678,27 +778,31 @@ function LocationRow({
           href={pageLink.href}
           target="_blank"
           rel="noreferrer"
-          className="flex min-h-[36px] items-center justify-center rounded-brand-control border border-brand-border px-3 text-xs font-semibold text-brand-ink-muted transition hover:bg-brand-chip"
+          className="flex min-h-[44px] items-center justify-center rounded-brand-control border border-brand-border px-3 text-xs font-semibold text-brand-ink-muted transition hover:bg-brand-chip"
         >
           {pageLink.label}
         </a>
-        <button
-          type="button"
-          onClick={handleDeactivate}
-          disabled={deactivating}
-          className={
-            confirming
-              ? "flex min-h-[36px] items-center justify-center rounded-brand-control bg-brand-closed px-3 text-xs font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-              : "flex min-h-[36px] items-center justify-center rounded-brand-control border border-brand-closed px-3 text-xs font-semibold text-brand-closed transition hover:bg-brand-closed-bg disabled:cursor-not-allowed disabled:opacity-60"
-          }
-        >
-          {deactivating ? "Deactivating..." : confirming ? "Confirm deactivate" : "Deactivate"}
-        </button>
-        {confirming && (
+        {/* Deactivating only makes sense for a live location; the others are
+            already hidden (their status tag says why). */}
+        {isActive && (
+          <button
+            type="button"
+            onClick={handleDeactivate}
+            disabled={deactivating}
+            className={
+              confirming
+                ? "flex min-h-[44px] items-center justify-center rounded-brand-control bg-brand-closed px-3 text-xs font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                : "flex min-h-[44px] items-center justify-center rounded-brand-control border border-brand-closed px-3 text-xs font-semibold text-brand-closed transition hover:bg-brand-closed-bg disabled:cursor-not-allowed disabled:opacity-60"
+            }
+          >
+            {deactivating ? "Deactivating..." : confirming ? "Confirm deactivate" : "Deactivate"}
+          </button>
+        )}
+        {isActive && confirming && (
           <button
             type="button"
             onClick={() => setConfirming(false)}
-            className="text-xs font-medium text-brand-ink-subtle underline"
+            className="min-h-[44px] px-1 text-xs font-medium text-brand-ink-subtle underline"
           >
             Cancel
           </button>

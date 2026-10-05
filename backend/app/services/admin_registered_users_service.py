@@ -10,16 +10,18 @@ Combines two independent sources, joined in application code by
     signup date. Source of truth for "who signed up" (same reasoning as
     `GET /admin/registered-user-count` — see that endpoint's docstring for
     why a local table can't answer this).
-  - `user_profile.last_seen_at` — local, throttled activity timestamp (see
-    `app/services/auth_service.py::touch_last_seen`). `NULL`/missing row
-    when the user has never had an authenticated request tracked yet.
+  - `user_profile` — `last_seen_at` (local, throttled activity timestamp,
+    see `app/services/auth_service.py::touch_last_seen`) and `full_name`
+    (the display name a diner set). Missing row when the user has never had
+    an authenticated request tracked and never set a name.
 
-Pagination is applied in Python, after fetching every Cognito group member
-(see `cognito_service.list_registered_users`'s own docstring for why —
+Search (`q`), sort and pagination are all applied in Python, after
+fetching every Cognito group member (see
+`cognito_service.list_registered_users`'s own docstring for why —
 `ListUsersInGroup`'s cursor pagination doesn't map onto this project's
-`page`/`page_size` convention) — not pushed down to either data source
-individually, since the join needs the full row set to sort/paginate
-consistently either way.
+`page`/`page_size` convention). Search and the `last_seen` sort need
+every user's profile row, so the local half is ONE query (chunked to keep
+the bind-parameter count bounded) over the whole group, not a per-page one.
 """
 from __future__ import annotations
 
@@ -30,17 +32,52 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies.pagination import Pagination
 from app.models.user_profile import UserProfile
-from app.schemas.admin_registered_users import RegisteredUserOut, RegisteredUsersResponse
+from app.schemas.admin_registered_users import (
+    RegisteredUserOut,
+    RegisteredUserSort,
+    RegisteredUsersResponse,
+)
 from app.services import cognito_service
 
-# Sort fallback for the (unexpected) case Cognito returns no
-# `UserCreateDate` for a member — sorts those last rather than raising on
-# a `None` comparison.
-_EPOCH = datetime.fromtimestamp(0, tz=timezone.utc)
+_CHUNK = 500
+
+
+def _ts(value: datetime | None) -> float | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.timestamp()
+
+
+def _sorted_missing_last(items: list[RegisteredUserOut], key, *, reverse: bool):
+    """Sort by `key` (asc, or desc with `reverse`), rows whose key is
+    `None` always last; `cognito_sub` is the final tiebreaker so pages
+    never reshuffle."""
+    present = [u for u in items if key(u) is not None]
+    missing = [u for u in items if key(u) is None]
+    present.sort(key=lambda u: (key(u), u.cognito_sub), reverse=reverse)
+    missing.sort(key=lambda u: u.cognito_sub)
+    return present + missing
+
+
+def _apply_sort(items: list[RegisteredUserOut], sort: RegisteredUserSort):
+    if sort == "oldest":
+        return _sorted_missing_last(items, lambda u: _ts(u.signup_at), reverse=False)
+    if sort == "email":
+        return _sorted_missing_last(
+            items, lambda u: u.email.lower() if u.email else None, reverse=False
+        )
+    if sort == "last_seen":
+        return _sorted_missing_last(items, lambda u: _ts(u.last_seen_at), reverse=True)
+    return _sorted_missing_last(items, lambda u: _ts(u.signup_at), reverse=True)
 
 
 async def get_registered_users(
-    db: AsyncSession, pagination: Pagination
+    db: AsyncSession,
+    pagination: Pagination,
+    search: str | None = None,
+    sort: RegisteredUserSort = "newest",
 ) -> RegisteredUsersResponse:
     """Raises whatever `cognito_service.list_registered_users` raises
     (`RuntimeError`/`ClientError`/`BotoCoreError`) — the router turns that
@@ -50,44 +87,44 @@ async def get_registered_users(
     """
     cognito_users = cognito_service.list_registered_users()
 
-    # Newest signup first — the natural "who just joined" reading for an
-    # admin report, and a stable sort key (Cognito's own UserCreateDate)
-    # so paginated pages don't reshuffle between requests the way sorting
-    # by a live, ever-changing last_seen_at would.
-    cognito_users.sort(
-        key=lambda user: user.signup_at or _EPOCH,
-        reverse=True,
-    )
-
-    total = len(cognito_users)
-    start = pagination.offset
-    page_slice = cognito_users[start : start + pagination.page_size]
-
-    last_seen_by_sub: dict[str, object] = {}
-    subs = [user.cognito_sub for user in page_slice if user.cognito_sub]
-    if subs:
+    profiles: dict[str, tuple[str | None, datetime | None]] = {}
+    subs = [user.cognito_sub for user in cognito_users if user.cognito_sub]
+    for start in range(0, len(subs), _CHUNK):
         rows = (
             await db.execute(
-                select(UserProfile.cognito_sub, UserProfile.last_seen_at).where(
-                    UserProfile.cognito_sub.in_(subs)
-                )
+                select(
+                    UserProfile.cognito_sub, UserProfile.full_name, UserProfile.last_seen_at
+                ).where(UserProfile.cognito_sub.in_(subs[start : start + _CHUNK]))
             )
         ).all()
-        last_seen_by_sub = {sub: last_seen_at for sub, last_seen_at in rows}
+        profiles.update({sub: (name, seen) for sub, name, seen in rows})
 
-    results = [
+    users = [
         RegisteredUserOut(
             cognito_sub=user.cognito_sub,
             email=user.email,
+            full_name=profiles.get(user.cognito_sub, (None, None))[0],
             status=user.status,
             signup_at=user.signup_at,
-            last_seen_at=last_seen_by_sub.get(user.cognito_sub),
+            last_seen_at=profiles.get(user.cognito_sub, (None, None))[1],
         )
-        for user in page_slice
+        for user in cognito_users
     ]
 
+    term = (search or "").strip().lower()
+    if term:
+        users = [
+            u
+            for u in users
+            if term in (u.email or "").lower() or term in (u.full_name or "").lower()
+        ]
+
+    users = _apply_sort(users, sort)
+    total = len(users)
+    page_slice = users[pagination.offset : pagination.offset + pagination.page_size]
+
     return RegisteredUsersResponse(
-        results=results,
+        results=page_slice,
         page=pagination.page,
         page_size=pagination.page_size,
         total=total,

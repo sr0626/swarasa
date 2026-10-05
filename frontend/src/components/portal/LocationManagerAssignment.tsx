@@ -20,18 +20,11 @@ import {
   removeLocationManagerAction,
 } from "@/app/portal/locations/[id]/actions";
 import { inputClass } from "@/components/portal/formFields";
+import LocalDateTime from "@/components/ui/LocalDateTime";
 import { PlusIcon, TrashIcon, UsersIcon } from "@/components/ui/icons";
 import type { LocationManager } from "@/types/location";
 
 const PAID_MANAGER_CAP = 2;
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
 
 export default function LocationManagerAssignment({
   locationId,
@@ -131,8 +124,8 @@ export default function LocationManagerAssignment({
                 </p>
                 <p className="text-xs text-brand-ink-subtle">
                   {manager.is_active
-                    ? `Assigned ${formatDate(manager.assigned_at)}`
-                    : `Removed${manager.revoked_at ? ` ${formatDate(manager.revoked_at)}` : ""}`}
+                    ? <>Assigned <LocalDateTime value={manager.assigned_at} variant="date" /></>
+                    : <>Removed{manager.revoked_at ? <> <LocalDateTime value={manager.revoked_at} variant="date" /></> : null}</>}
                 </p>
               </div>
 

@@ -23,19 +23,10 @@
 import { useState } from "react";
 import { getMyActivityAction } from "@/app/account/actions";
 import { cardClass } from "@/components/account/accountShared";
+import LocalDateTime from "@/components/ui/LocalDateTime";
 import { ClockIcon } from "@/components/ui/icons";
 import type { OwnerActivity } from "@/types/activity";
 import type { PaginatedResponse } from "@/types/common";
-
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
 
 const ACTION_BADGE: Record<string, string> = {
   create: "bg-brand-success-bg text-brand-success",
@@ -114,7 +105,7 @@ export default function OwnerActivitySection({
                   {row.actor_label}
                   {!row.actor_resolved && " (name unavailable)"}
                   {" — "}
-                  {formatDateTime(row.created_at)}
+                  <LocalDateTime value={row.created_at} />
                 </p>
               </div>
               <span

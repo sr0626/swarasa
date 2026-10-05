@@ -13,19 +13,10 @@
 // destructive-*feeling* action still gets an explicit confirm step even
 // though nothing irreversible happens synchronously (task brief).
 import { useState } from "react";
+import LocalDateTime from "@/components/ui/LocalDateTime";
 import { exportMyDataAction, requestDataDeletionAction } from "@/app/account/actions";
 import { DownloadIcon, TrashIcon } from "@/components/ui/icons";
 import type { DataDeletionRequest } from "@/types/privacy";
-
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
 
 function statusCopy(status: string): string {
   switch (status) {
@@ -146,7 +137,7 @@ export default function DataPrivacySection({
         {request && (
           <p className="mt-2 text-sm text-brand-ink-muted">
             Latest request: <span className="font-semibold text-brand-ink">{statusCopy(request.status)}</span>
-            {" "}— submitted {formatDateTime(request.submitted_at)}.
+            {" "}— submitted <LocalDateTime value={request.submitted_at} />.
             {request.status === "pending_review" &&
               " An admin will review it before anything is removed."}
             {request.status === "rejected" && request.reviewer_notes && (

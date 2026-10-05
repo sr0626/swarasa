@@ -156,6 +156,14 @@ export default async function AdminOverviewPage({ searchParams }: AdminOverviewP
               value={overview.owners.total_owners}
               href="/admin/owners"
             />
+            {/* Distinct people with an ACTIVE manager assignment; the Managers
+                report (GET /admin/managers) also lists managers whose
+                assignments were all revoked, so its total can be higher. */}
+            <StatTile
+              label="Managers"
+              value={overview.manager_count ?? 0}
+              href="/admin/managers"
+            />
             {/* Sourced from a separate endpoint (GET /admin/registered-user-count,
                 a live Cognito call), not GET /admin/overview's own
                 registered_user_count field (which stays null by design -- see

@@ -18,6 +18,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies.pagination import Pagination
+from app.models.location_manager import LocationManager
 from app.models.owner_account import OwnerAccount
 from app.models.restaurant_brand import RestaurantBrand
 from app.models.restaurant_location import RestaurantLocation
@@ -184,4 +185,16 @@ async def get_admin_overview(db: AsyncSession, owner_pagination: Pagination) -> 
     tier counts are always platform-wide totals."""
     restaurants = await _restaurant_overview(db)
     owners = await _owner_overview(db, owner_pagination)
-    return AdminOverviewResponse(restaurants=restaurants, owners=owners, registered_user_count=None)
+    manager_count = (
+        await db.execute(
+            select(func.count(func.distinct(LocationManager.user_id))).where(
+                LocationManager.is_active.is_(True)
+            )
+        )
+    ).scalar_one()
+    return AdminOverviewResponse(
+        restaurants=restaurants,
+        owners=owners,
+        registered_user_count=None,
+        manager_count=manager_count,
+    )

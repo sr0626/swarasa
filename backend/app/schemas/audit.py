@@ -15,9 +15,9 @@ activity-feed row / page", not "owner-only" despite the name.
 """
 from __future__ import annotations
 
-from datetime import datetime
-
 from pydantic import BaseModel
+
+from app.schemas.utc import UtcDatetime
 
 
 class OwnerActivityOut(BaseModel):
@@ -43,7 +43,7 @@ class OwnerActivityOut(BaseModel):
     # dump").
     summary: str
 
-    created_at: datetime
+    created_at: UtcDatetime
 
 
 class OwnerActivityListResponse(BaseModel):
