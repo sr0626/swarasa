@@ -25,9 +25,7 @@ def test_revision_ids_fit_alembic_version_column():
     module = _load()
     assert module.revision == "0018_user_profile_location"
     assert len(module.revision) <= 32
-    # Revises 0016 until the parallel 0017_admin_message PR merges (see the
-    # migration docstring) -- the orchestrator re-points this after merge.
-    assert module.down_revision in {"0016_location_cuisine", "0017_admin_message"}
+    assert module.down_revision == "0017_admin_message"
 
 
 def test_upgrade_adds_nullable_city_and_postal_code():
