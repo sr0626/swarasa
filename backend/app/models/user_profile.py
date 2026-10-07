@@ -69,6 +69,15 @@ class UserProfile(Base):
     # See module docstring "last_seen_at" note above.
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Home location of a `registered_user` (diner) — city + ZIP are mandatory
+    # for diners (user decision 2026-10-07) and used to find restaurants and
+    # deals near them. Nullable at the DB level: existing diners have none
+    # yet; "mandatory" is enforced at signup + on `PATCH /auth/me`, and
+    # existing diners are nudged by a non-blocking banner. Only ever written
+    # for `registered_user` callers (manager has no use for it).
+    city: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    postal_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
+
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

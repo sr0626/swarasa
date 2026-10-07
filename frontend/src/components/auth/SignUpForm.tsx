@@ -48,9 +48,11 @@ import { signUpSchema, type SignUpFormValues } from "@/lib/validation/auth";
 import { withNext } from "@/lib/auth/safeNext";
 import { messageForAuthError } from "@/lib/auth/errorMessages";
 import { PasswordInput } from "@/components/ui/PasswordInput";
+import { savePendingLocation } from "@/lib/auth/pendingLocation";
+import { LOCATION_HELPER_TEXT, userLocationSchema } from "@/lib/validation/userLocation";
 
 type Role = SignUpFormValues["role"];
-type FieldErrors = Partial<Record<keyof SignUpFormValues, string>>;
+type FieldErrors = Partial<Record<keyof SignUpFormValues | "city" | "postal_code", string>>;
 
 const ROLE_OPTIONS: Array<{ value: Role; label: string; hint: string }> = [
   {
@@ -79,6 +81,8 @@ export default function SignUpForm({
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [role, setRole] = useState<Role>(initialRole);
+  const [city, setCity] = useState("");
+  const [postalCode, setPostalCode] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -93,11 +97,23 @@ export default function SignUpForm({
       confirmPassword,
       role,
     });
-    if (!parsed.success) {
+    // City + ZIP are mandatory for diners only (owner signup is unchanged).
+    const isDiner = role === "registered_user";
+    const location = isDiner ? userLocationSchema.safeParse({ city, postal_code: postalCode }) : null;
+
+    if (!parsed.success || (location && !location.success)) {
       const errors: FieldErrors = {};
-      for (const issue of parsed.error.issues) {
-        const key = issue.path[0] as keyof SignUpFormValues;
-        if (!errors[key]) errors[key] = issue.message;
+      if (!parsed.success) {
+        for (const issue of parsed.error.issues) {
+          const key = issue.path[0] as keyof SignUpFormValues;
+          if (!errors[key]) errors[key] = issue.message;
+        }
+      }
+      if (location && !location.success) {
+        for (const issue of location.error.issues) {
+          const key = issue.path[0] as "city" | "postal_code";
+          if (!errors[key]) errors[key] = issue.message;
+        }
       }
       setFieldErrors(errors);
       return;
@@ -119,6 +135,12 @@ export default function SignUpForm({
           },
         },
       });
+
+      // Park the diner's city/ZIP for the first sign-in (no session exists
+      // yet) -- see lib/auth/pendingLocation.ts. Only after signUp succeeded.
+      if (location?.success) {
+        savePendingLocation(parsed.data.email, location.data);
+      }
 
       if (!isSignUpComplete && nextStep.signUpStep === "CONFIRM_SIGN_UP") {
         router.push(
@@ -216,6 +238,58 @@ export default function SignUpForm({
           <p className="text-sm text-brand-closed">{fieldErrors.email}</p>
         )}
       </div>
+
+      {role === "registered_user" && (
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="city" className="text-sm font-medium text-brand-ink-muted">
+              City
+            </label>
+            <input
+              id="city"
+              name="city"
+              type="text"
+              autoComplete="address-level2"
+              required
+              maxLength={100}
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+              aria-invalid={Boolean(fieldErrors.city)}
+              aria-describedby="location-hint"
+              className="min-h-[44px] rounded-brand-control border border-brand-border bg-white px-3 text-sm text-brand-ink placeholder:text-brand-placeholder focus:outline-none focus:ring-2 focus:ring-brand-accent"
+              placeholder="Plano"
+            />
+            {fieldErrors.city && <p className="text-sm text-brand-closed">{fieldErrors.city}</p>}
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="postal_code" className="text-sm font-medium text-brand-ink-muted">
+              ZIP code
+            </label>
+            <input
+              id="postal_code"
+              name="postal_code"
+              type="text"
+              inputMode="numeric"
+              autoComplete="postal-code"
+              required
+              maxLength={10}
+              value={postalCode}
+              onChange={(e) => setPostalCode(e.target.value)}
+              aria-invalid={Boolean(fieldErrors.postal_code)}
+              aria-describedby="location-hint"
+              className="min-h-[44px] rounded-brand-control border border-brand-border bg-white px-3 text-sm text-brand-ink placeholder:text-brand-placeholder focus:outline-none focus:ring-2 focus:ring-brand-accent"
+              placeholder="75093"
+            />
+            {fieldErrors.postal_code && (
+              <p className="text-sm text-brand-closed">{fieldErrors.postal_code}</p>
+            )}
+            <p id="location-hint" className="text-sm text-brand-ink-subtle">
+              {LOCATION_HELPER_TEXT}
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-col gap-1.5">
         <label

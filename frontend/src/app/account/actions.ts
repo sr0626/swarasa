@@ -17,11 +17,13 @@ import {
   getMyActivity,
   requestDataDeletion,
   updateCurrentUser,
+  updateMyLocation,
   updateMyProfile,
 } from "@/lib/api/auth";
 import { getServerSession } from "@/lib/auth/session";
 import { requestDataDeletionSchema } from "@/lib/validation/account";
 import { updateAuthMeSchema, updateDisplayNameSchema } from "@/lib/validation/auth";
+import { userLocationSchema } from "@/lib/validation/userLocation";
 import type { OwnerActivity } from "@/types/activity";
 import type { AuthMe, UpdateProfileResult } from "@/types/auth";
 import type { PaginatedResponse } from "@/types/common";
@@ -110,6 +112,34 @@ export async function updateDisplayNameAction(
       };
     }
     return { ok: false, error: messageFor(error, "Something went wrong saving your name.") };
+  }
+}
+
+/**
+ * PATCH /auth/me — a diner's home city + ZIP (mandatory for registered
+ * users). Backs the account-page location form and the post-signup flush in
+ * LoginForm. Re-validated here with the same rule the backend enforces
+ * (lib/validation/userLocation.ts); the backend remains the source of truth.
+ */
+export async function updateLocationAction(
+  input: unknown
+): Promise<ActionResult<UpdateProfileResult>> {
+  const auth = await requireAccountSession();
+  if (!auth.ok) return auth;
+
+  const parsed = userLocationSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Please check your city and ZIP and try again.",
+    };
+  }
+
+  try {
+    const result = await updateMyLocation(parsed.data, auth.accessToken);
+    return { ok: true, data: result };
+  } catch (error) {
+    return { ok: false, error: messageFor(error, "Something went wrong saving your location.") };
   }
 }
 

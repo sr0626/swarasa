@@ -150,7 +150,7 @@ async def test_registered_user_and_manager_can_set_and_read_back_full_name(clien
 
     patch_response = await client.patch("/auth/me", json={"full_name": "Asha Verma"})
     assert patch_response.status_code == 200, patch_response.text
-    assert patch_response.json() == {"full_name": "Asha Verma"}
+    assert patch_response.json()["full_name"] == "Asha Verma"
 
     get_response = await client.get("/auth/me")
     assert get_response.status_code == 200, get_response.text

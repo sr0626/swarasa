@@ -8,6 +8,7 @@ import type { PaginatedResponse, PaginationParams } from "@/types/common";
 import type {
   AuthMe,
   UpdateAuthMeInput,
+  UpdateDinerLocationInput,
   UpdateProfileInput,
   UpdateProfileResult,
 } from "@/types/auth";
@@ -66,6 +67,22 @@ export async function updateCurrentUser(
  */
 export async function updateMyProfile(
   input: UpdateProfileInput,
+  accessToken: string
+): Promise<UpdateProfileResult> {
+  return apiFetch<UpdateProfileResult>(
+    "/auth/me",
+    { method: "PATCH", body: JSON.stringify(input) },
+    { accessToken }
+  );
+}
+
+/**
+ * PATCH /auth/me — a registered_user's home city + ZIP (both required,
+ * validated server-side; no full_name needed). The backend ignores these
+ * fields for every other role.
+ */
+export async function updateMyLocation(
+  input: UpdateDinerLocationInput,
   accessToken: string
 ): Promise<UpdateProfileResult> {
   return apiFetch<UpdateProfileResult>(

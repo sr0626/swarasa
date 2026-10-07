@@ -49,3 +49,14 @@ def test_updated_at_is_not_nullable_and_has_a_default():
 def test_repr_includes_cognito_sub():
     profile = UserProfile(cognito_sub="abc-123", full_name="Asha Verma")
     assert "abc-123" in repr(profile)
+
+
+def test_location_columns_are_nullable_and_sized():
+    # Home city + ZIP (migration 0018_user_profile_location): nullable at the
+    # DB level because existing diners have none; mandatory-ness is enforced
+    # by the API/signup, not the schema.
+    columns = UserProfile.__table__.c
+    assert columns["city"].nullable is True
+    assert columns["city"].type.length == 100
+    assert columns["postal_code"].nullable is True
+    assert columns["postal_code"].type.length == 10

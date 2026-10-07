@@ -15,6 +15,8 @@ export async function loadConsoleIdentity(session: Session): Promise<AuthMe> {
       email: session.email,
       full_name: null,
       owner_account: null,
+      city: null,
+      postal_code: null,
     };
   }
 }

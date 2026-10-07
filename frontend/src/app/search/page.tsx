@@ -20,6 +20,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import TopBar from "@/components/home/TopBar";
+import LocationPromptBanner from "@/components/account/LocationPromptBanner";
 import SearchFilterBar from "@/components/search/SearchFilterBar";
 import SearchEmptyState from "@/components/search/SearchEmptyState";
 import SearchResults from "@/components/search/SearchResults";
@@ -122,6 +123,9 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   return (
     <main className="min-h-screen bg-brand-bg">
       <TopBar />
+      <Suspense fallback={null}>
+        <LocationPromptBanner />
+      </Suspense>
 
       <section className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
         <h1 className="font-display text-2xl font-bold text-brand-ink sm:text-3xl">

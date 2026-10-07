@@ -64,16 +64,21 @@ async def get_registered_users(
     page_slice = cognito_users[start : start + pagination.page_size]
 
     last_seen_by_sub: dict[str, object] = {}
+    location_by_sub: dict[str, tuple[str | None, str | None]] = {}
     subs = [user.cognito_sub for user in page_slice if user.cognito_sub]
     if subs:
         rows = (
             await db.execute(
-                select(UserProfile.cognito_sub, UserProfile.last_seen_at).where(
-                    UserProfile.cognito_sub.in_(subs)
-                )
+                select(
+                    UserProfile.cognito_sub,
+                    UserProfile.last_seen_at,
+                    UserProfile.city,
+                    UserProfile.postal_code,
+                ).where(UserProfile.cognito_sub.in_(subs))
             )
         ).all()
-        last_seen_by_sub = {sub: last_seen_at for sub, last_seen_at in rows}
+        last_seen_by_sub = {sub: last_seen_at for sub, last_seen_at, _c, _z in rows}
+        location_by_sub = {sub: (city, postal) for sub, _l, city, postal in rows}
 
     results = [
         RegisteredUserOut(
@@ -82,6 +87,8 @@ async def get_registered_users(
             status=user.status,
             signup_at=user.signup_at,
             last_seen_at=last_seen_by_sub.get(user.cognito_sub),
+            city=location_by_sub.get(user.cognito_sub, (None, None))[0],
+            postal_code=location_by_sub.get(user.cognito_sub, (None, None))[1],
         )
         for user in page_slice
     ]

@@ -37,6 +37,8 @@ import { signInSchema, type SignInFormValues } from "@/lib/validation/auth";
 import { withNext, pathAllowedForRole } from "@/lib/auth/safeNext";
 import { messageForAuthError, messageForNextStep } from "@/lib/auth/errorMessages";
 import { PasswordInput } from "@/components/ui/PasswordInput";
+import { takePendingLocation } from "@/lib/auth/pendingLocation";
+import { updateLocationAction } from "@/app/account/actions";
 import type { UserRole } from "@/types/auth";
 
 /**
@@ -141,6 +143,19 @@ export default function LoginForm({
       const { role } = (await res.json()) as { role: UserRole };
       if (rememberMe) {
         startSessionKeepAlive();
+      }
+      // A new diner's city/ZIP, parked by the signup form (this tab), is
+      // saved to their profile now that a session exists. Best-effort: on
+      // any failure the home/account banner asks for it again.
+      if (role === "registered_user") {
+        const pending = takePendingLocation(parsed.data.email);
+        if (pending) {
+          try {
+            await updateLocationAction(pending);
+          } catch {
+            // swallow -- never block sign-in on this
+          }
+        }
       }
       // `nextPath` only if this role can use it (a diner signing in from an
       // owner-only link goes to the normal landing, not a guard bounce).

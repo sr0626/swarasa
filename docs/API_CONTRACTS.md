@@ -2509,6 +2509,8 @@ Response:
   "role": "owner",
   "email": "owner@example.com",
   "full_name": "Priya Rao",
+  "city": null,
+  "postal_code": null,
   "owner_account": {
     "id": 55,
     "full_name": "Priya Rao",
@@ -2529,6 +2531,12 @@ display name regardless of which table it's actually stored in:
 `admin` (no local profile source for admin yet). Added so a frontend
 caller never needs to branch on role/backing table to show "the user's
 name" — it just reads this one field.
+
+`city` / `postal_code` (added 2026-10-07; in the response alongside
+`full_name`) are a `registered_user`'s saved home location from
+`user_profile`; always `null` for every other role, and `null` for an
+existing diner until they set them (that `null` is the frontend's "please
+add your city and ZIP" signal). See `PATCH /auth/me`.
 
 `owner_account` is still `null` for `manager`/`admin`/`registered_user`
 roles (they have no local *business* record in this schema — see
@@ -2590,12 +2598,32 @@ Lambda management command (`backend/app/scripts/set_user_name.py`,
 `docs/SCRIPTS.md`) — audit-logged for `owner_account`; it only changes an
 already-set name.
 
+**Diner home location (added 2026-10-07 — user decision: city and ZIP are
+mandatory for registered users):** a `registered_user` body may carry
+`{ "city": "Plano", "postal_code": "75093" }` (alone, or alongside
+`full_name`). Rules (`backend/app/schemas/auth.py`): `city` is trimmed,
+inner whitespace collapsed, 2–100 chars; `postal_code` is a US 5-digit ZIP
+or ZIP+4 (`12345` / `12345-6789`); **both or neither** — one without the
+other is `422`. Unlike `full_name` this is always editable (no lock). A
+location-only body does not need `full_name` (no `400 full_name_required`),
+and a rejected rename (`409 name_locked`) applies nothing, including the
+location. `manager`/`admin`/`owner` callers: the fields are ignored (a
+manager body with only a location is still `400 full_name_required`). Stored
+on nullable `user_profile.city` / `user_profile.postal_code` (migration
+`0018_user_profile_location`) — NOT a Cognito attribute: the signup form
+parks the values client-side and PATCHes them after first sign-in, and an
+existing diner with `null`s is prompted on the home/search/account pages
+(browsing is never blocked). No geocoding/validation against a ZIP
+database yet.
+
 Response for an `owner` caller: `200`, `owner_account` shape from `GET
 /auth/me` (unchanged by this generalization — still lazily provisions
 `owner_account` on first write, still audit-logged).
 
 Response for a `registered_user`/`manager` caller: `200`,
-`{ "full_name": "Priya Rao" }` — upserts into `user_profile`
+`{ "full_name": "Priya Rao", "city": "Plano", "postal_code": "75093" }`
+(`city`/`postal_code` are `null` for a manager, and for a diner who hasn't
+set them) — upserts into `user_profile`
 (`cognito_sub` primary key; see `docs/DATA_MODEL.md`). `full_name` is
 required for these two roles specifically (omitting it entirely is a `400
 full_name_required` — there's nothing else in the body for them to write).
@@ -2872,8 +2900,9 @@ Response: `200`
 (same condition as `GET /auth/me`). `user_profile` (added 2026-09-23) is the
 display name + last-seen record a `registered_user`/`manager` has (the
 counterpart of `owner_account` for those roles):
-`{ "full_name": "Asha Menon", "last_seen_at": "2026-09-20T12:00:00Z", "updated_at": "..." }`
-(`full_name`/`last_seen_at` may each be `null`); `null` when the caller has no
+`{ "full_name": "Asha Menon", "city": "Plano", "postal_code": "75093", "last_seen_at": "2026-09-20T12:00:00Z", "updated_at": "..." }`
+(`full_name`/`city`/`postal_code`/`last_seen_at` may each be `null`; `city`/
+`postal_code` added 2026-10-07 — see `PATCH /auth/me`); `null` when the caller has no
 `user_profile` row (e.g. an owner, or a diner who never set a name and has not
 been seen since tracking shipped). `listing_reports` covers "report a
 problem" submissions matched by `reporter_user_id` (the caller's Cognito
@@ -3095,6 +3124,10 @@ Combines two sources, joined by `cognito_sub`:
 - Cognito (`cognito-idp:ListUsersInGroup` on the `registered_user` group —
   the SAME grant `GET /admin/registered-user-count` already uses, no new
   IAM) for `email`, `status`, `signup_at`.
+- The local `user_profile.city` / `user_profile.postal_code` columns
+  (added 2026-10-07, read-only here): the diner's home location, each `null`
+  until they set it (existing diners, or sign-ups confirmed on another
+  device — see `PATCH /auth/me`).
 - The local `user_profile.last_seen_at` column for `last_seen_at`. `null`
   when the user has never had a tracked authenticated request (either
   never returned, or returned only before this tracking shipped) — the
@@ -3126,7 +3159,9 @@ Response: `200`
       "email": "diner@example.com",
       "status": "CONFIRMED",
       "signup_at": "2026-09-10T14:22:03Z",
-      "last_seen_at": "2026-09-23T08:05:11Z"
+      "last_seen_at": "2026-09-23T08:05:11Z",
+      "city": "Plano",
+      "postal_code": "75093"
     }
   ],
   "page": 1,

@@ -205,6 +205,8 @@ async def export_my_data(db: AsyncSession, current_user) -> DataExportOut:
         profile_out = UserProfileExportOut(
             full_name=p.full_name,
             last_seen_at=p.last_seen_at,
+            city=p.city,
+            postal_code=p.postal_code,
             updated_at=p.updated_at,
         )
 
