@@ -24,6 +24,7 @@ import Link from "next/link";
 import { requireSession } from "@/lib/auth/guards";
 import { ApiError } from "@/lib/api/client";
 import { getAdminOverview } from "@/lib/api/adminOverview";
+import { listAdminMessages } from "@/lib/api/adminMessages";
 import { getRegisteredUserCount } from "@/lib/api/adminStats";
 import type { LocationStatus } from "@/types/location";
 
@@ -90,6 +91,17 @@ export default async function AdminOverviewPage({ searchParams }: AdminOverviewP
     registeredUserCountUnavailable = true;
   }
 
+  // Open "Contact admin" messages (GET /admin/messages `open_count`). Also its
+  // own endpoint and failure mode, so a hiccup only hides this one tile.
+  let openMessageCount: number | null = null;
+  try {
+    openMessageCount = (
+      await listAdminMessages({ status: "open", page: 1, page_size: 1 }, session.accessToken)
+    ).open_count;
+  } catch {
+    openMessageCount = null;
+  }
+
   const totalOwnerPages = overview ? Math.max(1, Math.ceil(overview.owners.total_owners / PAGE_SIZE)) : 1;
 
   return (
@@ -107,6 +119,12 @@ export default async function AdminOverviewPage({ searchParams }: AdminOverviewP
         </Link>{" "}
         page for the underlying rows.
       </p>
+
+      {openMessageCount !== null && (
+        <div aria-label="Inbox" className="mt-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">
+          <StatTile label="Open messages" value={openMessageCount} href="/admin/messages" />
+        </div>
+      )}
 
       {loadError || !overview ? (
         <p className="mt-6 rounded-brand-control bg-brand-closed-bg px-3 py-2.5 text-sm text-brand-closed">

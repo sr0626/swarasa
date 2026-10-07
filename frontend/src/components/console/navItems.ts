@@ -1,7 +1,7 @@
 // Menu definitions for the role consoles. Plain serializable data (an icon
 // *key*, not a component) so Server Components can hand it to the client-side
 // ConsoleSidebarNav. Add a row here when a new page lands in a console.
-export type ConsoleNavIcon = "user" | "claims" | "reports" | "store" | "plus" | "clock" | "chart";
+export type ConsoleNavIcon = "user" | "claims" | "reports" | "store" | "plus" | "clock" | "chart" | "mail";
 
 /** An in-page anchor link ("/account#profile") shown under an active item. */
 export interface ConsoleNavSubItem {
@@ -17,6 +17,9 @@ export interface ConsoleNavItem {
   subItems?: ReadonlyArray<ConsoleNavSubItem>;
 }
 
+/** The owner/manager "Contact admin" form page. */
+export const CONTACT_ADMIN_HREF = "/portal/contact-admin";
+
 export const ADMIN_NAV_ITEMS: ReadonlyArray<ConsoleNavItem> = [
   { href: "/account", label: "Profile", icon: "user" },
   { href: "/admin/overview", label: "Overview", icon: "chart" },
@@ -30,6 +33,8 @@ export const ADMIN_NAV_ITEMS: ReadonlyArray<ConsoleNavItem> = [
   { href: "/admin/reports", label: "Reports", icon: "reports" },
   { href: "/admin/reopen-requests", label: "Reopen requests", icon: "clock" },
   { href: "/admin/listings", label: "Listings", icon: "store" },
+  // "Contact admin" messages from owners/managers (GET /admin/messages).
+  { href: "/admin/messages", label: "Messages", icon: "mail" },
 ];
 
 export const OWNER_NAV_ITEMS: ReadonlyArray<ConsoleNavItem> = [
@@ -48,6 +53,8 @@ export const OWNER_NAV_ITEMS: ReadonlyArray<ConsoleNavItem> = [
   // and rendered when this item is selected -- see app/account/activity.
   { href: "/account/activity", label: "Activity", icon: "clock" },
   { href: "/portal/brands/new", label: "Add a restaurant", icon: "plus" },
+  // Write to the platform admins (POST /contact-admin) -- /portal/contact-admin.
+  { href: CONTACT_ADMIN_HREF, label: "Contact admin", icon: "mail" },
 ];
 
 // Three flat items rather than one item with subItems (contrast with
@@ -64,6 +71,7 @@ export const MANAGER_NAV_ITEMS: ReadonlyArray<ConsoleNavItem> = [
   { href: "/account", label: "My locations", icon: "store" },
   { href: "/account/activity", label: "Activity", icon: "clock" },
   { href: "/account#profile", label: "Profile", icon: "user" },
+  { href: CONTACT_ADMIN_HREF, label: "Contact admin", icon: "mail" },
 ];
 
 function isActive(pathname: string, href: string): boolean {

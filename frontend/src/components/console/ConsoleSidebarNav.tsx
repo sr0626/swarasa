@@ -15,6 +15,7 @@ import {
   ClipboardCheckIcon,
   ClockIcon,
   FlagIcon,
+  MailIcon,
   PlusIcon,
   StoreIcon,
   UserIcon,
@@ -32,6 +33,7 @@ const ICONS: Record<ConsoleNavIcon, (props: IconProps) => JSX.Element> = {
   plus: PlusIcon,
   clock: ClockIcon,
   chart: BarChartIcon,
+  mail: MailIcon,
 };
 
 export default function ConsoleSidebarNav({

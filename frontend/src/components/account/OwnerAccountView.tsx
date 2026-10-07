@@ -9,6 +9,7 @@
 // (#restaurants, #profile, #security, #privacy) back the in-page menu links
 // (see OWNER_NAV_ITEMS in components/console/navItems.ts). Server Component.
 import AccountDetailsCard from "@/components/account/AccountDetailsCard";
+import ContactAdminCard from "@/components/account/ContactAdminCard";
 import DataPrivacySection from "@/components/account/DataPrivacySection";
 import OwnerStatTiles from "@/components/account/OwnerStatTiles";
 import ProfileEditForm from "@/components/account/ProfileEditForm";
@@ -53,6 +54,8 @@ export default function OwnerAccountView({
           <SecurityCard />
         </div>
       </div>
+
+      <ContactAdminCard />
 
       <div id="privacy" className="scroll-mt-24">
         <DataPrivacySection latestDeletionRequest={latestDeletionRequest} />
