@@ -81,6 +81,8 @@ export interface AuditLogExport {
  */
 export interface UserProfileExport {
   full_name: string | null;
+  city: string | null;
+  postal_code: string | null;
   last_seen_at: string | null;
   updated_at: string;
 }

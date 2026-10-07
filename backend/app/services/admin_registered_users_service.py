@@ -87,26 +87,32 @@ async def get_registered_users(
     """
     cognito_users = cognito_service.list_registered_users()
 
-    profiles: dict[str, tuple[str | None, datetime | None]] = {}
+    profiles: dict[str, tuple[str | None, datetime | None, str | None, str | None]] = {}
     subs = [user.cognito_sub for user in cognito_users if user.cognito_sub]
     for start in range(0, len(subs), _CHUNK):
         rows = (
             await db.execute(
                 select(
-                    UserProfile.cognito_sub, UserProfile.full_name, UserProfile.last_seen_at
+                    UserProfile.cognito_sub,
+                    UserProfile.full_name,
+                    UserProfile.last_seen_at,
+                    UserProfile.city,
+                    UserProfile.postal_code,
                 ).where(UserProfile.cognito_sub.in_(subs[start : start + _CHUNK]))
             )
         ).all()
-        profiles.update({sub: (name, seen) for sub, name, seen in rows})
+        profiles.update({sub: (name, seen, city, postal) for sub, name, seen, city, postal in rows})
 
     users = [
         RegisteredUserOut(
             cognito_sub=user.cognito_sub,
             email=user.email,
-            full_name=profiles.get(user.cognito_sub, (None, None))[0],
+            full_name=profiles.get(user.cognito_sub, (None, None, None, None))[0],
             status=user.status,
             signup_at=user.signup_at,
-            last_seen_at=profiles.get(user.cognito_sub, (None, None))[1],
+            last_seen_at=profiles.get(user.cognito_sub, (None, None, None, None))[1],
+            city=profiles.get(user.cognito_sub, (None, None, None, None))[2],
+            postal_code=profiles.get(user.cognito_sub, (None, None, None, None))[3],
         )
         for user in cognito_users
     ]

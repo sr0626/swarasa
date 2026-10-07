@@ -16,6 +16,9 @@ export interface RegisteredUserRow {
   signup_at: string | null;
   /** ISO timestamp (UTC). `null` means never tracked yet -- render as "Never", not a fake date. */
   last_seen_at: string | null;
+  /** Home location from the diner's profile; null until they set it. */
+  city: string | null;
+  postal_code: string | null;
 }
 
 export interface RegisteredUsersResponse {

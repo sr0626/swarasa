@@ -151,7 +151,7 @@ export default async function RegisteredUsersPage({ searchParams }: RegisteredUs
           </p>
 
           <div className="mt-3 overflow-x-auto rounded-brand-card border border-brand-border bg-white shadow-brand-card">
-            <table className="w-full min-w-[760px] text-left text-sm">
+            <table className="w-full min-w-[900px] text-left text-sm">
               <thead>
                 <tr className="border-b border-brand-border text-xs font-semibold uppercase tracking-wide text-brand-ink-subtle">
                   <th scope="col" className="px-4 py-3">
@@ -159,6 +159,9 @@ export default async function RegisteredUsersPage({ searchParams }: RegisteredUs
                   </th>
                   <th scope="col" className="px-4 py-3">
                     Status
+                  </th>
+                  <th scope="col" className="px-4 py-3">
+                    Location
                   </th>
                   <th scope="col" className="px-4 py-3">
                     Signed up
@@ -174,7 +177,7 @@ export default async function RegisteredUsersPage({ searchParams }: RegisteredUs
               <tbody>
                 {data.results.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-6 text-center text-brand-ink-subtle">
+                    <td colSpan={6} className="px-4 py-6 text-center text-brand-ink-subtle">
                       {q ? "No registered users match this search." : "No registered users yet."}
                     </td>
                   </tr>
@@ -190,6 +193,13 @@ export default async function RegisteredUsersPage({ searchParams }: RegisteredUs
                         )}
                       </td>
                       <td className="px-4 py-3 text-brand-ink-muted">{statusLabel(user.status)}</td>
+                      <td className="px-4 py-3 text-brand-ink-muted">
+                        {user.city && user.postal_code ? (
+                          `${user.city} ${user.postal_code}`
+                        ) : (
+                          <span className="text-brand-ink-subtle">Not set</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-brand-ink-muted">
                         <LocalDateTime value={user.signup_at} fallback="Unknown" />
                       </td>

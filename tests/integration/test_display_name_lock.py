@@ -101,7 +101,7 @@ async def test_profile_role_first_set_then_change_is_rejected(client, db_session
 
     first = await client.patch("/auth/me", json={"full_name": "Asha Verma"})
     assert first.status_code == 200, first.text
-    assert first.json() == {"full_name": "Asha Verma"}
+    assert first.json()["full_name"] == "Asha Verma"
 
     second = await client.patch("/auth/me", json={"full_name": "Asha V."})
     assert second.status_code == 409, second.text
@@ -121,7 +121,7 @@ async def test_profile_role_same_name_is_a_noop(client, role, as_user):
 
     again = await client.patch("/auth/me", json={"full_name": "Asha Verma"})
     assert again.status_code == 200, again.text
-    assert again.json() == {"full_name": "Asha Verma"}
+    assert again.json()["full_name"] == "Asha Verma"
 
 
 @pytest.mark.asyncio
@@ -134,7 +134,7 @@ async def test_profile_row_without_a_name_can_still_be_set(client, db_session, a
 
     response = await client.patch("/auth/me", json={"full_name": "Asha Verma"})
     assert response.status_code == 200, response.text
-    assert response.json() == {"full_name": "Asha Verma"}
+    assert response.json()["full_name"] == "Asha Verma"
 
 
 # ------------------------------------------------------ admin path (command)

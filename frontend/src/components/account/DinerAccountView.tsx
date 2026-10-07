@@ -8,9 +8,11 @@ import AccountAvatar from "@/components/account/AccountAvatar";
 import AccountDetailsCard from "@/components/account/AccountDetailsCard";
 import DisplayNameForm from "@/components/account/DisplayNameForm";
 import FollowedRestaurantsGrid from "@/components/account/FollowedRestaurantsGrid";
+import LocationForm from "@/components/account/LocationForm";
 import SecurityCard from "@/components/account/SecurityCard";
 import { firstNameFor, isNameLocked, primaryLinkClass } from "@/components/account/accountShared";
 import { SearchIcon } from "@/components/ui/icons";
+import { hasLocation } from "@/lib/validation/userLocation";
 import type { AuthMe } from "@/types/auth";
 import type { FollowedBrand } from "@/types/follow";
 
@@ -25,9 +27,16 @@ export default function DinerAccountView({
 }) {
   const firstName = firstNameFor(me);
   const followCount = follows.length;
+  const locationSet = hasLocation(me);
 
   return (
     <div className="flex flex-col gap-6">
+      {/* Existing diners with no city/ZIP yet: the prompt IS the form, pinned
+          above everything else, and stays until both fields are saved. */}
+      {!locationSet && (
+        <LocationForm initialCity={me.city} initialPostalCode={me.postal_code} required />
+      )}
+
       <header className="overflow-hidden rounded-brand-card border border-brand-border bg-white shadow-brand-card">
         <div aria-hidden="true" className="h-24 bg-brand-warm-gradient sm:h-28" />
         <div className="flex flex-col gap-4 px-5 pb-5 sm:flex-row sm:items-end sm:justify-between sm:px-6 sm:pb-6">
@@ -61,6 +70,13 @@ export default function DinerAccountView({
           {/* Set-once: the editable card only shows until a name exists; after
               that the name is read-only in Account details below. */}
           {!isNameLocked(me.full_name) && <DisplayNameForm initialFullName={me.full_name} />}
+          {locationSet && (
+            <LocationForm
+              initialCity={me.city}
+              initialPostalCode={me.postal_code}
+              required={false}
+            />
+          )}
           <AccountDetailsCard me={me} stacked nameEditableElsewhere />
           <SecurityCard />
         </div>

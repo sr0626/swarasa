@@ -28,6 +28,11 @@ export interface AuthMe {
   // (id/phone/stripe_customer_id).
   full_name: string | null;
   owner_account: OwnerAccount | null;
+  // Home location of a registered_user (mandatory for diners since
+  // 2026-10-07). null for every other role, and for an existing diner who
+  // hasn't set it yet -- null is the "please add your city and ZIP" signal.
+  city: string | null;
+  postal_code: string | null;
 }
 
 /** Body for PATCH /auth/me (owner form). Always scoped to the authenticated caller. */
@@ -50,6 +55,14 @@ export interface UpdateProfileInput {
  * caller only ever gets `full_name` back (no owner_account fields apply). */
 export interface UpdateProfileResult {
   full_name: string | null;
+  city: string | null;
+  postal_code: string | null;
+}
+
+/** Body for PATCH /auth/me carrying a diner's home location (always both fields). */
+export interface UpdateDinerLocationInput {
+  city: string;
+  postal_code: string;
 }
 
 /**

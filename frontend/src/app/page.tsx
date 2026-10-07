@@ -8,6 +8,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import TopBar from "@/components/home/TopBar";
+import LocationPromptBanner from "@/components/account/LocationPromptBanner";
 import Hero from "@/components/home/Hero";
 import PopularNearYou from "@/components/home/PopularNearYou";
 import PopularNearYouSkeleton from "@/components/home/PopularNearYouSkeleton";
@@ -23,6 +24,9 @@ export default function HomePage() {
   return (
     <main className="min-h-screen bg-brand-bg">
       <TopBar />
+      <Suspense fallback={null}>
+        <LocationPromptBanner />
+      </Suspense>
       <Hero />
 
       <section className="mx-auto max-w-6xl px-4 pb-16 sm:px-6">

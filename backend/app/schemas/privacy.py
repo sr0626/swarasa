@@ -27,6 +27,8 @@ class UserProfileExportOut(BaseModel):
 
     full_name: str | None
     last_seen_at: datetime | None
+    city: str | None = None
+    postal_code: str | None = None
     updated_at: datetime
 
 

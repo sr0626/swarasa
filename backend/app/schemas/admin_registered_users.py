@@ -34,6 +34,10 @@ class RegisteredUserOut(BaseModel):
     # or returned only before it shipped) — rendered as "Never" by the
     # frontend, not the same as a `0`/epoch value.
     last_seen_at: UtcDatetime | None
+    # Home location from `user_profile` (null until the diner sets it —
+    # existing diners predating the mandatory-location rule show blank).
+    city: str | None = None
+    postal_code: str | None = None
 
 
 class RegisteredUsersResponse(BaseModel):

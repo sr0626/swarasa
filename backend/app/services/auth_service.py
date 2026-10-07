@@ -156,6 +156,8 @@ def _owner_out(owner: OwnerAccount) -> OwnerAccountOut:
 async def get_me(db: AsyncSession, current_user) -> MeResponse:
     owner_out = None
     full_name: str | None = None
+    city: str | None = None
+    postal_code: str | None = None
 
     if current_user.role == "owner":
         owner = await get_or_create_owner_account(db, current_user.cognito_sub, current_user.email)
@@ -165,6 +167,10 @@ async def get_me(db: AsyncSession, current_user) -> MeResponse:
     elif current_user.role in _PROFILE_TABLE_ROLES:
         profile = await get_user_profile_by_sub(db, current_user.cognito_sub)
         full_name = profile.full_name if profile is not None else None
+        # Home location is a diner-only concept (manager rows never get it).
+        if profile is not None and current_user.role == "registered_user":
+            city = profile.city
+            postal_code = profile.postal_code
     # admin: no local profile source yet, full_name stays None.
 
     return MeResponse(
@@ -173,6 +179,8 @@ async def get_me(db: AsyncSession, current_user) -> MeResponse:
         email=current_user.email,
         full_name=full_name,
         owner_account=owner_out,
+        city=city,
+        postal_code=postal_code,
     )
 
 
@@ -222,6 +230,12 @@ async def update_me(
       The only way to change a locked name is an admin running the
       `set_user_name` management command (app/scripts/set_user_name.py).
       Enforced here, server-side — the account UI just hides the form.
+    - **Home location** (2026-10-07): a `registered_user` may also (or only)
+      send `city` + `postal_code` (always together, validated in
+      `MeUpdateRequest`) — written to `user_profile.city`/`.postal_code`,
+      freely editable (unlike the name there is no lock). A location-only
+      PATCH needs no `full_name`. Not audit-logged, same as the name
+      (user_profile isn't an audited entity — see above).
     - `admin`: still no local record to write to — `404
       no_editable_profile`, unchanged from before this change. The
       distinction matters: it is not a permissions problem (every role may
@@ -261,19 +275,34 @@ async def update_me(
         return _owner_out(owner)
 
     if current_user.role in _PROFILE_TABLE_ROLES:
-        if body.full_name is None:
+        # Home location is honoured for diners only (a manager has no use
+        # for it); for a manager it is silently ignored, like `phone`.
+        wants_location = current_user.role == "registered_user" and body.city is not None
+        if body.full_name is None and not wants_location:
             raise AppError(400, "full_name is required", "full_name_required")
 
         profile = await get_user_profile_by_sub(db, current_user.cognito_sub)
         if profile is None:
-            profile = UserProfile(cognito_sub=current_user.cognito_sub, full_name=body.full_name)
+            profile = UserProfile(cognito_sub=current_user.cognito_sub)
             db.add(profile)
-        else:
+        elif body.full_name is not None:
+            # Checked before any field is touched so a rejected rename never
+            # half-applies (e.g. a location change riding in the same request).
             _reject_name_change_if_locked(profile.full_name, body.full_name)
+
+        if body.full_name is not None:
             profile.full_name = body.full_name
+        if wants_location:
+            profile.city = body.city
+            profile.postal_code = body.postal_code
 
         await db.commit()
-        return ProfileOut(full_name=profile.full_name)
+        is_diner = current_user.role == "registered_user"
+        return ProfileOut(
+            full_name=profile.full_name,
+            city=profile.city if is_diner else None,
+            postal_code=profile.postal_code if is_diner else None,
+        )
 
     raise AppError(
         404,
