@@ -16,6 +16,7 @@
 // The activity feed is NOT on this page: since 2026-09-24 it lives at
 // /account/activity (MANAGER_NAV_ITEMS' "Activity" item), fetched only there.
 import AccountDetailsCard from "@/components/account/AccountDetailsCard";
+import ContactAdminCard from "@/components/account/ContactAdminCard";
 import ManagedLocationsPanel from "@/components/account/ManagedLocationsPanel";
 import NameEditForm from "@/components/account/NameEditForm";
 import SecurityCard from "@/components/account/SecurityCard";
@@ -48,6 +49,8 @@ export default function ManagerAccountView({
         )}
         <SecurityCard />
       </div>
+
+      <ContactAdminCard />
     </div>
   );
 }

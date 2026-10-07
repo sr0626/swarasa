@@ -9,6 +9,7 @@
 // Section ids (#restaurants, #profile, #security) back the in-page menu links
 // (see OWNER_NAV_ITEMS in components/console/navItems.ts). Server Component.
 import AccountDetailsCard from "@/components/account/AccountDetailsCard";
+import ContactAdminCard from "@/components/account/ContactAdminCard";
 import OwnerStatTiles from "@/components/account/OwnerStatTiles";
 import ProfileEditForm from "@/components/account/ProfileEditForm";
 import SecurityCard from "@/components/account/SecurityCard";
@@ -49,6 +50,8 @@ export default function OwnerAccountView({
           <SecurityCard />
         </div>
       </div>
+
+      <ContactAdminCard />
     </div>
   );
 }
