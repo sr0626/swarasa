@@ -23,15 +23,15 @@
 // redesign PR): the page only fetches data and picks a view — each role has
 // its own layout under components/account/ (DinerAccountView,
 // OwnerAccountView, ManagerAccountView, AdminAccountView), sharing the
-// summary/details/security/privacy pieces. Admin, owner, and manager views
+// summary/details/security pieces. Admin, owner, and manager views
 // all render inside their own console shell (banner + left menu — see
 // components/console/ConsoleShell.tsx). For an owner this page is THE
-// business page (stat tiles + restaurants + profile + security + data &
-// privacy): the separate owner dashboard was folded in (2026-09-19). For a
+// business page (stat tiles + restaurants + profile + security): the separate owner dashboard was folded in (2026-09-19). For a
 // manager this page is THE manager console (locations I manage + profile).
 // /portal/dashboard now just redirects both owner and manager here. The
 // server actions (app/account/actions.ts) and the role gating are
-// otherwise unchanged.
+// otherwise unchanged. Data export / deletion request (CCPA) moved off these
+// pages to the signed-in-only /privacy page (footer link).
 import type { Metadata } from "next";
 import { requireSession } from "@/lib/auth/guards";
 import TopBar from "@/components/home/TopBar";
@@ -43,7 +43,6 @@ import {
 } from "@/lib/manager/loadManagedLocationStatuses";
 import {
   getCurrentUser,
-  getMyDataDeletionRequests,
   getMyFollows,
   getMyManagedLocations,
 } from "@/lib/api/auth";
@@ -57,7 +56,6 @@ import OwnerAccountView from "@/components/account/OwnerAccountView";
 import InfoPanel from "@/components/ui/InfoPanel";
 import type { AuthMe } from "@/types/auth";
 import type { FollowedBrand } from "@/types/follow";
-import type { DataDeletionRequest } from "@/types/privacy";
 
 export const metadata: Metadata = {
   title: "My Account",
@@ -112,28 +110,12 @@ export default async function AccountPage() {
     ownerRestaurants = await loadOwnerRestaurants(session.accessToken);
   }
 
-  // Best-effort — the privacy section still renders (just without a known
-  // "already pending" state) if this call fails, since it isn't essential
-  // to reading the page.
-  let latestDeletionRequest: DataDeletionRequest | null = null;
-  if (me) {
-    try {
-      const page = await getMyDataDeletionRequests({ page: 1, page_size: 5 }, session.accessToken);
-      latestDeletionRequest =
-        [...page.results].sort(
-          (a, b) => new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime()
-        )[0] ?? null;
-    } catch {
-      latestDeletionRequest = null;
-    }
-  }
-
   // Admins get the admin console frame (banner + left menu, Profile active)
   // -- the same AdminShell app/admin/layout.tsx uses for the other sections.
   if (me?.role === "admin") {
     return (
       <AdminShell me={me} profile>
-        <AdminAccountView me={me} latestDeletionRequest={latestDeletionRequest} />
+        <AdminAccountView me={me} />
       </AdminShell>
     );
   }
@@ -147,7 +129,6 @@ export default async function AccountPage() {
           me={me}
           brands={ownerRestaurants?.brands ?? []}
           restaurantsError={ownerRestaurants?.loadError ?? null}
-          latestDeletionRequest={latestDeletionRequest}
         />
       </OwnerShell>
     );
@@ -163,7 +144,6 @@ export default async function AccountPage() {
           me={me}
           locations={managedLocations}
           locationsError={managedLocationsError}
-          latestDeletionRequest={latestDeletionRequest}
         />
       </ManagerShell>
     );
@@ -189,7 +169,6 @@ export default async function AccountPage() {
             me={me}
             follows={follows}
             followsError={followsError}
-            latestDeletionRequest={latestDeletionRequest}
           />
         )}
       </div>
