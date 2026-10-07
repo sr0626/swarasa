@@ -47,7 +47,6 @@ export const OWNER_NAV_ITEMS: ReadonlyArray<ConsoleNavItem> = [
       { href: "/account#restaurants", label: "My restaurants" },
       { href: "/account#profile", label: "Profile" },
       { href: "/account#security", label: "Security" },
-      { href: "/account#privacy", label: "Data & privacy" },
     ],
   },
   // Its own page (not an in-page section): the activity feed is only fetched

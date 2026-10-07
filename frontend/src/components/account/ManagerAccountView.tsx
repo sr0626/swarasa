@@ -5,7 +5,7 @@
 // "Locations I manage" (the default view -- MANAGER_NAV_ITEMS' "My
 // locations" item points at plain /account, no anchor), then
 // the #profile section (MANAGER_NAV_ITEMS' "Profile" item) with the
-// editable name form and security side by side, then data & privacy last.
+// editable name form and security side by side. (Data export / deletion lives at /privacy.)
 //
 // REDESIGN (this PR): previously rendered standalone inside a plain <main>
 // with its own identity header and a "Go to the portal dashboard" link --
@@ -17,25 +17,21 @@
 // /account/activity (MANAGER_NAV_ITEMS' "Activity" item), fetched only there.
 import AccountDetailsCard from "@/components/account/AccountDetailsCard";
 import ContactAdminCard from "@/components/account/ContactAdminCard";
-import DataPrivacySection from "@/components/account/DataPrivacySection";
 import ManagedLocationsPanel from "@/components/account/ManagedLocationsPanel";
 import NameEditForm from "@/components/account/NameEditForm";
 import SecurityCard from "@/components/account/SecurityCard";
 import { ROLE_LABEL, cardClass, displayNameFor, isNameLocked } from "@/components/account/accountShared";
 import type { ManagedLocationWithStatus } from "@/lib/manager/loadManagedLocationStatuses";
 import type { AuthMe } from "@/types/auth";
-import type { DataDeletionRequest } from "@/types/privacy";
 
 export default function ManagerAccountView({
   me,
   locations,
   locationsError,
-  latestDeletionRequest,
 }: {
   me: AuthMe;
   locations: ManagedLocationWithStatus[];
   locationsError: string | null;
-  latestDeletionRequest: DataDeletionRequest | null;
 }) {
   return (
     <div className="flex flex-col gap-5">
@@ -55,8 +51,6 @@ export default function ManagerAccountView({
       </div>
 
       <ContactAdminCard />
-
-      <DataPrivacySection latestDeletionRequest={latestDeletionRequest} />
     </div>
   );
 }

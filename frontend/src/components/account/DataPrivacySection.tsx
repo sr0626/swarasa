@@ -1,6 +1,8 @@
 "use client";
 
-// CCPA data export / deletion UI — the natural home for it per the task
+// CCPA data export / deletion UI. Rendered on the signed-in-only /privacy
+// page (moved there from the account pages, 2026-10-07; admins see a note
+// instead). Original note: the natural home for it per the task
 // brief, since backend (PR #70) has been Done with zero frontend UI until
 // this page. Available to every role (own data only).
 //

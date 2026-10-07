@@ -7,12 +7,7 @@
 // user feedback — the header already carries the brand). No social links —
 // none are decided anywhere in the repo, so none are fabricated here.
 import Link from "next/link";
-
-const FOOTER_LINKS = [
-  { href: "/about", label: "About Us" },
-  { href: "/contact", label: "Contact Us" },
-  { href: "/terms", label: "Terms & Privacy" },
-] as const;
+import { FOOTER_LINKS } from "./footerLinks";
 
 export default function Footer() {
   const year = new Date().getFullYear();
