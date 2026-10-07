@@ -10,13 +10,7 @@
 // FLAGGED CONTRACT GAP on `LocationSummary.paid_until`
 // (frontend/src/types/location.ts): the backend doesn't serialize it yet.
 // The date renders automatically the moment it starts arriving.
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
+import LocalDateTime from "@/components/ui/LocalDateTime";
 
 export default function LocationTierBadge({
   isPaid,
@@ -34,7 +28,13 @@ export default function LocationTierBadge({
   }
   return (
     <span className="inline-flex items-center rounded-brand-pill bg-brand-success-bg px-2.5 py-1 text-xs font-semibold text-brand-success">
-      Paid{paidUntil ? ` until ${formatDate(paidUntil)}` : ""}
+      Paid
+      {paidUntil ? (
+        <>
+          {" until "}
+          <LocalDateTime value={paidUntil} variant="date" />
+        </>
+      ) : null}
     </span>
   );
 }

@@ -29,18 +29,67 @@ export function todayIndexInTimezone(timeZone: string, now: Date = new Date()): 
   }
 }
 
+export type OpenStatusTone = "open" | "opens_later" | "closed";
+
+export interface OpenStatusLabel {
+  text: string;
+  tone: OpenStatusTone;
+}
+
+export interface OpenStatusInput {
+  /** Server-computed "open right now" in the location's timezone. */
+  isOpenNow: boolean | null | undefined;
+  /** Today's `is_closed` (closed the ENTIRE day). */
+  isClosedToday?: boolean | null;
+  openTime?: string | null;
+  closeTime?: string | null;
+  /** Server-computed: "now" is before today's opening time. Only meaningful
+   * when `isOpenNow` is false; absent on an older API. */
+  opensLaterToday?: boolean | null;
+}
+
 /**
- * Today's-hours label, or `null` when hours are unknown (callers render
- * nothing then — never a "Hours unknown" placeholder).
+ * THE public open/closed pill copy, shared by every surface (search / home /
+ * favourites tiles, the brand-landing cards, the location page's Details
+ * card, the admin listing rows). Pure: every input is a server-computed
+ * value from the API payload (`is_open_now`, today's open/close,
+ * `opens_later_today`, all evaluated in the LOCATION's timezone) — never the
+ * viewer's clock, so SSR + the data cache can't make it wrong beyond the
+ * cache window itself.
+ *
+ *   closed all day                 -> "Closed today"
+ *   open right now                 -> "Open now · until 10pm"
+ *   closed now, opens later today  -> "Closed now · opens 10am"
+ *   closed now, already past close -> "Closed now"
+ *   closed now, phase unknown      -> "Closed now · today 10am–10pm"
+ *   hours unknown                  -> null (callers render nothing)
+ *
+ * "Closed today" is reserved for a location that is closed for the entire
+ * day (direct user feedback 2026-09-24).
  */
-export function describeTodayHours(
-  isClosed: boolean | null | undefined,
-  openTime: string | null | undefined,
-  closeTime: string | null | undefined,
-): string | null {
-  if (isClosed === true) return "Closed today";
-  if (isClosed === false && openTime && closeTime) {
-    return `Open today ${formatShortTime(openTime)}–${formatShortTime(closeTime)}`;
+export function describeOpenStatus(input: OpenStatusInput): OpenStatusLabel | null {
+  const { isOpenNow, isClosedToday, openTime, closeTime, opensLaterToday } = input;
+  if (isClosedToday === true) return { text: "Closed today", tone: "closed" };
+
+  if (isOpenNow === true) {
+    return {
+      text: closeTime ? `Open now · until ${formatShortTime(closeTime)}` : "Open now",
+      tone: "open",
+    };
   }
+
+  if (isOpenNow === false) {
+    if (opensLaterToday === true && openTime) {
+      return { text: `Closed now · opens ${formatShortTime(openTime)}`, tone: "opens_later" };
+    }
+    if (opensLaterToday !== false && openTime && closeTime) {
+      return {
+        text: `Closed now · today ${formatShortTime(openTime)}–${formatShortTime(closeTime)}`,
+        tone: "closed",
+      };
+    }
+    return { text: "Closed now", tone: "closed" };
+  }
+
   return null;
 }

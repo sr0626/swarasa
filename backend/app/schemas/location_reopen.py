@@ -9,10 +9,11 @@ pattern, same field names where the concept is the same (`reviewer_notes`,
 """
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
+
+from app.schemas.utc import UtcDatetime
 
 NOTES_MAX_LENGTH = 2000
 
@@ -35,8 +36,8 @@ class ReopenRequestOut(BaseModel):
     location_id: int
     status: ReopenRequestStatus
     notes: str | None = None
-    submitted_at: datetime
-    reviewed_at: datetime | None = None
+    submitted_at: UtcDatetime
+    reviewed_at: UtcDatetime | None = None
     reviewer_notes: str | None = None
 
 
@@ -60,9 +61,9 @@ class ReopenRequestQueueItem(BaseModel):
     requester_email: str | None = None
     notes: str | None = None
     status: ReopenRequestStatus
-    submitted_at: datetime
+    submitted_at: UtcDatetime
     reviewed_by: str | None = None
-    reviewed_at: datetime | None = None
+    reviewed_at: UtcDatetime | None = None
     reviewer_notes: str | None = None
 
 

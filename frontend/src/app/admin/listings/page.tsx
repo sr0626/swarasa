@@ -1,12 +1,18 @@
-// Admin listings management — auth-gated (admin only). Replaces the prior
-// "Under construction" placeholder with a real page against real,
-// already-documented endpoints: the admin-scoped `GET /restaurants`
-// (docs/API_CONTRACTS.md "GET /restaurants" — admin caller sees every
-// brand, with owner/name/status/tier/city/claimed filters) and the public
-// `GET /restaurants/{id}/locations` for each brand's locations, loaded
-// server-side the same way `portal/dashboard/page.tsx` loads an owner's
-// own brands' locations. Moderation actions (delete a brand, deactivate a
-// location) run through real Server Actions in `actions.ts` against
+// Admin listings management — auth-gated (admin only). Backed by the
+// dedicated `GET /admin/listings` endpoint (docs/API_CONTRACTS.md "GET
+// /admin/listings"), which replaces the old fan-out of the admin-scoped
+// `GET /restaurants` plus one public `GET /restaurants/{id}/locations` call
+// per brand. That fan-out had two defects this endpoint fixes: the
+// per-brand call was UNAUTHENTICATED, so it returned ACTIVE locations
+// only — filtering by "Coming soon" matched a brand through a location the
+// page could then never show — and it carried no admin-only provenance
+// (owner email, who created what). `GET /admin/listings` returns every
+// location of a brand, any status, each flagged `matches_filter` against
+// the active location-level filter, plus `owner_email` and
+// `created_by_*` (audit_log-derived) on both the brand and each location.
+//
+// Moderation actions (delete a brand, deactivate a location) still run
+// through the real Server Actions in `actions.ts` against
 // `DELETE /restaurants/{id}` and `DELETE /locations/{id}` — no fabricated
 // data, no invented backend endpoint.
 //
@@ -20,14 +26,12 @@
 import type { Metadata } from "next";
 import { requireSession } from "@/lib/auth/guards";
 import { ApiError } from "@/lib/api/client";
-import { mapWithConcurrency } from "@/lib/concurrency";
-import { getMyRestaurants, getRestaurantLocations } from "@/lib/api/restaurants";
+import { getAdminListings } from "@/lib/api/adminListings";
 import AdminListingsPanel, {
   type AdminListingsFilters,
-  type BrandWithLocations,
 } from "@/components/admin/AdminListingsPanel";
 import { parseListingStatusFilter } from "@/lib/adminListings";
-import type { RestaurantBrand } from "@/types/restaurant";
+import type { AdminListing, AdminListingSort } from "@/types/adminListings";
 
 export const metadata: Metadata = {
   title: "Listings Management",
@@ -35,14 +39,11 @@ export const metadata: Metadata = {
 
 const PAGE_SIZE = 20;
 
-// See portal/dashboard/page.tsx's DASHBOARD_FETCH_CONCURRENCY — same DB
-// connection-pool storm fix (PR #101), same reasoning.
-const LISTINGS_FETCH_CONCURRENCY = 5;
-
 interface AdminListingsPageProps {
   searchParams: {
     page?: string;
     owner_id?: string;
+    brand_id?: string;
     owner_email?: string;
     name?: string;
     status?: string;
@@ -59,8 +60,8 @@ function parsePositiveInt(value: string | undefined): number | undefined {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
-function parseSort(value: string | undefined): "followers" | undefined {
-  return value === "followers" ? "followers" : undefined;
+function parseSort(value: string | undefined): AdminListingSort {
+  return value === "followers" || value === "oldest" ? value : "newest";
 }
 
 /** "true"/"false" only — anything else (missing, malformed) is "no filter",
@@ -76,39 +77,15 @@ function trimmedOrUndefined(value: string | undefined): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
-/** Same N+1-but-bounded-by-page-size pattern as
- * `portal/dashboard/page.tsx`'s `loadLocationsForBrand` — `GET
- * /restaurants` only returns a `location_count` per brand, not the rows,
- * so each brand's locations come from the public
- * `GET /restaurants/{id}/locations` call. Brands with no locations skip
- * the extra request. */
-async function loadLocationsForBrand(brand: RestaurantBrand): Promise<BrandWithLocations> {
-  // A soft-deleted listing (`status=deleted` view) has no visible locations
-  // and the public locations endpoint 404s for it — skip the fetch.
-  if (brand.location_count === 0 || brand.deleted_at) {
-    return { brand, locations: [], locationsError: null };
-  }
-  try {
-    const page = await getRestaurantLocations(brand.id, { page: 1, page_size: 100 });
-    return { brand, locations: page.results, locationsError: null };
-  } catch (error) {
-    return {
-      brand,
-      locations: [],
-      locationsError:
-        error instanceof ApiError
-          ? error.message
-          : "Could not load this brand's locations. Please try again.",
-    };
-  }
-}
-
 export default async function AdminListingsPage({ searchParams }: AdminListingsPageProps) {
   const session = await requireSession(["admin"]);
 
   const page = parsePositiveInt(searchParams.page) ?? 1;
   const ownerId = parsePositiveInt(searchParams.owner_id);
+  const brandId = parsePositiveInt(searchParams.brand_id);
   const filters: AdminListingsFilters = {
+    ownerId,
+    brandId,
     ownerEmail: trimmedOrUndefined(searchParams.owner_email),
     name: trimmedOrUndefined(searchParams.name),
     status: parseListingStatusFilter(searchParams.status),
@@ -118,12 +95,12 @@ export default async function AdminListingsPage({ searchParams }: AdminListingsP
     sort: parseSort(searchParams.sort),
   };
 
-  let brands: RestaurantBrand[] = [];
+  let brands: AdminListing[] = [];
   let total = 0;
   let loadError: string | null = null;
   try {
-    const result = await getMyRestaurants(
-      { page, page_size: PAGE_SIZE, ownerId, ...filters },
+    const result = await getAdminListings(
+      { page, page_size: PAGE_SIZE, ...filters },
       session.accessToken
     );
     brands = result.results;
@@ -135,10 +112,6 @@ export default async function AdminListingsPage({ searchParams }: AdminListingsP
         : "Something went wrong loading restaurants. Please try again.";
   }
 
-  const brandsWithLocations: BrandWithLocations[] = loadError
-    ? []
-    : await mapWithConcurrency(brands, LISTINGS_FETCH_CONCURRENCY, loadLocationsForBrand);
-
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
@@ -149,7 +122,8 @@ export default async function AdminListingsPage({ searchParams }: AdminListingsP
       <p className="mt-2 text-sm text-brand-ink-muted">
         Every restaurant on the platform, across all owners. Filter to find one, then delete
         the listing (hides it and deactivates all its locations; restorable via Status: Deleted)
-        or deactivate a single location.
+        or deactivate a single location. Filtering by status, tier or city highlights WHICH of a
+        restaurant&rsquo;s locations matches.
       </p>
 
       {loadError ? (
@@ -162,8 +136,8 @@ export default async function AdminListingsPage({ searchParams }: AdminListingsP
         // `useState(initialBrands)` — same pattern as
         // admin/claims/page.tsx's `ClaimReviewPanel key={`${tab}-${page}`}`.
         <AdminListingsPanel
-          key={JSON.stringify({ ...filters, ownerId, page })}
-          initialBrands={brandsWithLocations}
+          key={JSON.stringify({ ...filters, page })}
+          initialBrands={brands}
           filters={filters}
           total={total}
           page={page}

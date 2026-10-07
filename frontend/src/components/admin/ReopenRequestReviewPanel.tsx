@@ -12,6 +12,7 @@
 // action.
 import { useState } from "react";
 import Link from "next/link";
+import LocalDateTime from "@/components/ui/LocalDateTime";
 import {
   approveReopenRequestAction,
   rejectReopenRequestAction,
@@ -28,16 +29,6 @@ import { locationHref } from "@/lib/restaurant/urls";
 interface ReopenRequestReviewPanelProps {
   initialRequests: ReopenRequestQueueItem[];
   statusFilter: ReopenRequestStatus;
-}
-
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
 }
 
 export default function ReopenRequestReviewPanel({
@@ -172,7 +163,7 @@ function ReopenRequestCard({
         </div>
         <div>
           <dt className="text-brand-ink-subtle">Submitted</dt>
-          <dd className="mt-0.5 font-medium text-brand-ink">{formatDateTime(request.submitted_at)}</dd>
+          <dd className="mt-0.5 font-medium text-brand-ink"><LocalDateTime value={request.submitted_at} /></dd>
         </div>
         {request.notes && (
           <div className="sm:col-span-2">
@@ -185,7 +176,7 @@ function ReopenRequestCard({
         {request.reviewed_at && (
           <div>
             <dt className="text-brand-ink-subtle">Reviewed</dt>
-            <dd className="mt-0.5 font-medium text-brand-ink">{formatDateTime(request.reviewed_at)}</dd>
+            <dd className="mt-0.5 font-medium text-brand-ink"><LocalDateTime value={request.reviewed_at} /></dd>
           </div>
         )}
         {request.reviewer_notes && (

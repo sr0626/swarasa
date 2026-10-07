@@ -6,6 +6,7 @@
 // status filter and pagination live on the page as real links.
 import { useState } from "react";
 import Link from "next/link";
+import LocalDateTime from "@/components/ui/LocalDateTime";
 import { approveClaimAction, rejectClaimAction } from "@/app/admin/claims/actions";
 import ClaimStatusBadge from "@/components/claim/ClaimStatusBadge";
 import { CheckIcon, XIcon } from "@/components/ui/icons";
@@ -17,16 +18,6 @@ interface ClaimReviewPanelProps {
   /** Active status filter; a card that no longer matches after an action
    * is dropped from the list. */
   statusFilter: ClaimStatus;
-}
-
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
 }
 
 function isHttpUrl(value: string): boolean {
@@ -239,20 +230,20 @@ function ClaimCard({
         <div>
           <dt className="text-brand-ink-subtle">Submitted</dt>
           <dd className="mt-0.5 font-medium text-brand-ink">
-            {formatDateTime(claim.submitted_at)}
+            <LocalDateTime value={claim.submitted_at} />
           </dd>
         </div>
         <div>
           <dt className="text-brand-ink-subtle">SLA due</dt>
           <dd className="mt-0.5 font-medium text-brand-ink">
-            {formatDateTime(claim.sla_due_at)}
+            <LocalDateTime value={claim.sla_due_at} />
           </dd>
         </div>
         {claim.reviewed_at && (
           <div>
             <dt className="text-brand-ink-subtle">Reviewed</dt>
             <dd className="mt-0.5 font-medium text-brand-ink">
-              {formatDateTime(claim.reviewed_at)}
+              <LocalDateTime value={claim.reviewed_at} />
             </dd>
           </div>
         )}

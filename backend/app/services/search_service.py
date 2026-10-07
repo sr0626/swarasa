@@ -285,6 +285,7 @@ async def search(
                     open_time=today.open_time,
                     close_time=today.close_time,
                     is_closed=today.is_closed,
+                    opens_later_today=today.opens_later_today,
                     has_deal_today=has_deal_today_by_location[nearest.location_id],
                 ),
                 location_count_nearby=card.location_count_nearby,

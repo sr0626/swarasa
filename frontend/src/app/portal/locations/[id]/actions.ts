@@ -51,6 +51,7 @@ import {
 } from "@/lib/api/menu";
 import { getServerSession } from "@/lib/auth/session";
 import { geocodeAddress } from "@/lib/geocode";
+import { MAP_POSITION_NOT_UPDATED_NOTICE } from "@/lib/portal/locationCoordinates";
 import {
   assignLocationManagerSchema,
   createPhotoSchema,
@@ -150,12 +151,15 @@ function revalidateLocationPaths(locationId: number): void {
 /**
  * PATCH /locations/{id} — info/address/contact fields.
  *
- * `options.regeocode`: the client sets this when the street/city/state/ZIP
- * changed and the owner did NOT type new coordinates by hand — the old
- * lat/lng would otherwise silently go stale. The address is then geocoded
- * here (server-side: the API Lambda has no internet, see
- * lib/geocode). On a miss the coordinates are left unchanged
- * and a `notice` tells the owner; the save itself never fails on geocoding.
+ * Latitude/longitude are auto-generated from the address and NEVER taken from
+ * the client: any coordinates in `input` are dropped here. `options.regeocode`
+ * (set by the form when the street/city/state/ZIP changed, or there is no
+ * position yet) makes this action geocode the address itself (server-side:
+ * the API Lambda has no internet, see lib/geocode) and send the fresh
+ * coordinates along with the full address block — the only shape the backend
+ * accepts coordinates in from an owner/manager. On a miss the stored
+ * coordinates are left unchanged and a `notice` says so; the save itself
+ * never fails on geocoding.
  */
 export async function updateLocationInfoAction(
   locationId: number,
@@ -174,6 +178,8 @@ export async function updateLocationInfoAction(
   }
 
   const update = { ...parsed.data };
+  delete update.latitude;
+  delete update.longitude;
   let notice: string | undefined;
   if (
     options?.regeocode &&
@@ -195,12 +201,9 @@ export async function updateLocationInfoAction(
         notice = "Saved. The map position is approximate (matched by ZIP code only).";
       }
     } else {
-      // Keep whatever is stored; never fabricate. A missing position keeps
-      // the listing out of nearby searches, so say so.
-      delete update.latitude;
-      delete update.longitude;
-      notice =
-        "Saved, but we couldn't find the new address on the map, so the map position wasn't updated. Check the street address, or contact us and we'll set it for you.";
+      // Keep whatever is stored; never fabricate (coordinates already dropped
+      // above, so the backend leaves them untouched).
+      notice = MAP_POSITION_NOT_UPDATED_NOTICE;
     }
   }
 

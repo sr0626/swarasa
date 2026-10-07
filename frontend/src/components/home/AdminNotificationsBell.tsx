@@ -17,6 +17,7 @@
 // account menu and would otherwise push a 320px panel off-screen.
 import { useEffect, useId, useRef, useState, type FocusEvent, type SVGProps } from "react";
 import Link from "next/link";
+import LocalDateTime from "@/components/ui/LocalDateTime";
 import { announceMenuOpen, onOtherMenuOpen } from "@/lib/nav/exclusiveMenu";
 import type { AdminNotifications } from "@/types/adminNotifications";
 import type { ReportCategory } from "@/types/listingReport";
@@ -31,13 +32,6 @@ const CATEGORY_LABELS: Record<ReportCategory, string> = {
   permanently_closed: "Permanently closed",
   other: "Other",
 };
-
-// Fixed UTC "Sep 18" -- avoids server/client timezone hydration mismatches.
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
-}
 
 function BellIcon(props: SVGProps<SVGSVGElement>) {
   return (
@@ -179,7 +173,7 @@ export default function AdminNotificationsBell({ data }: { data: AdminNotificati
                       <Link href="/admin/claims" onClick={closeOnNavigate} className={LINK_ROW_CLASS}>
                         <span className="min-w-0 truncate font-medium">{c.brand_name}</span>
                         <span className="shrink-0 text-xs text-brand-ink-subtle">
-                          {formatDate(c.submitted_at)}
+                          <LocalDateTime value={c.submitted_at} variant="shortDate" fallback="" />
                         </span>
                       </Link>
                     </li>
@@ -202,7 +196,7 @@ export default function AdminNotificationsBell({ data }: { data: AdminNotificati
                           </span>
                         </span>
                         <span className="shrink-0 text-xs text-brand-ink-subtle">
-                          {formatDate(r.submitted_at)}
+                          <LocalDateTime value={r.submitted_at} variant="shortDate" fallback="" />
                         </span>
                       </Link>
                     </li>
@@ -224,7 +218,7 @@ export default function AdminNotificationsBell({ data }: { data: AdminNotificati
                     <li key={u.owner_id} className={ROW_CLASS}>
                       <span className="min-w-0 truncate">{u.display}</span>
                       <span className="shrink-0 text-xs text-brand-ink-subtle">
-                        {formatDate(u.created_at)}
+                        <LocalDateTime value={u.created_at} variant="shortDate" fallback="" />
                       </span>
                     </li>
                   ))}
