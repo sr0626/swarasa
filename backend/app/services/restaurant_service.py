@@ -337,6 +337,55 @@ async def get_brand_or_404(
     return brand
 
 
+def brand_level_filters(
+    *,
+    owner_id: int | None,
+    owner_email: str | None,
+    name: str | None,
+    status: str | None,
+    is_claimed: bool | None,
+) -> tuple[list, str | None]:
+    """The `restaurant_brand`-column filters shared by `GET /restaurants`
+    and the admin `GET /admin/listings`: owner id, soft-delete visibility,
+    owner email / brand name substring, claimed flag. Returns
+    `(filters, remaining_status)` — `remaining_status` is `status` with the
+    `deleted` pseudo-value consumed (None), or unchanged for a real
+    location status the caller still has to apply at location level."""
+    filters: list = []
+    if owner_id is not None:
+        filters.append(RestaurantBrand.owner_id == owner_id)
+
+    # Soft-deleted listings (migration 0011) are hidden from every list by
+    # default — the owner console never sees them, and neither does the
+    # default admin view. `status="deleted"` (admin only — `status` is
+    # already forced to None above for a non-admin caller) flips this to
+    # "only deleted listings," which is how the admin panel finds one to
+    # restore. It is a pseudo-status: it is NOT a `restaurant_location.status`
+    # value, so it must not reach the location-status filter.
+    if status == DELETED_STATUS_FILTER:
+        filters.append(RestaurantBrand.deleted_at.is_not(None))
+        status = None
+    else:
+        filters.append(RestaurantBrand.deleted_at.is_(None))
+
+    if owner_email:
+        pattern = "%" + _escape_like(owner_email.strip()) + "%"
+        filters.append(
+            RestaurantBrand.owner_id.in_(
+                select(OwnerAccount.id).where(OwnerAccount.email.ilike(pattern, escape="\\"))
+            )
+        )
+
+    if name:
+        pattern = "%" + _escape_like(name.strip()) + "%"
+        filters.append(RestaurantBrand.name.ilike(pattern, escape="\\"))
+
+    if is_claimed is not None:
+        filters.append(RestaurantBrand.is_claimed == is_claimed)
+
+    return filters, status
+
+
 async def list_restaurants(
     db: AsyncSession,
     current_user,
@@ -385,37 +434,13 @@ async def list_restaurants(
         effective_owner_id = current_user.owner_account_id
         owner_email = name = status = is_paid = city = is_claimed = None
 
-    filters = []
-    if effective_owner_id is not None:
-        filters.append(RestaurantBrand.owner_id == effective_owner_id)
-
-    # Soft-deleted listings (migration 0011) are hidden from every list by
-    # default — the owner console never sees them, and neither does the
-    # default admin view. `status="deleted"` (admin only — `status` is
-    # already forced to None above for a non-admin caller) flips this to
-    # "only deleted listings," which is how the admin panel finds one to
-    # restore. It is a pseudo-status: it is NOT a `restaurant_location.status`
-    # value, so it must not reach the location-status filter below.
-    if status == DELETED_STATUS_FILTER:
-        filters.append(RestaurantBrand.deleted_at.is_not(None))
-        status = None
-    else:
-        filters.append(RestaurantBrand.deleted_at.is_(None))
-
-    if owner_email:
-        pattern = "%" + _escape_like(owner_email.strip()) + "%"
-        filters.append(
-            RestaurantBrand.owner_id.in_(
-                select(OwnerAccount.id).where(OwnerAccount.email.ilike(pattern, escape="\\"))
-            )
-        )
-
-    if name:
-        pattern = "%" + _escape_like(name.strip()) + "%"
-        filters.append(RestaurantBrand.name.ilike(pattern, escape="\\"))
-
-    if is_claimed is not None:
-        filters.append(RestaurantBrand.is_claimed == is_claimed)
+    filters, status = brand_level_filters(
+        owner_id=effective_owner_id,
+        owner_email=owner_email,
+        name=name,
+        status=status,
+        is_claimed=is_claimed,
+    )
 
     # status/is_paid/city all live on restaurant_location, not
     # restaurant_brand, and a brand can have several locations — each

@@ -20,6 +20,7 @@ import {
   describeSearch,
   sourceLabel,
 } from "@/lib/activity/describeEvent";
+import LocalDateTime from "@/components/ui/LocalDateTime";
 import type { ActivityEvent, ActivityEventType } from "@/types/userActivity";
 
 export const metadata: Metadata = {
@@ -40,12 +41,6 @@ function parsePositiveInt(value: string | undefined): number | undefined {
 
 function parseEventType(value: string | undefined): ActivityEventType | undefined {
   return value === "search" || value === "tile_click" ? value : undefined;
-}
-
-function formatDateTime(value: string): string {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
 }
 
 interface UserActivityPageProps {
@@ -151,7 +146,7 @@ export default async function UserActivityPage({ params, searchParams }: UserAct
                   data.results.map((event) => (
                     <tr key={event.id} className="border-b border-brand-border align-top last:border-0">
                       <td className="whitespace-nowrap px-4 py-3 text-brand-ink-muted">
-                        {formatDateTime(event.created_at)}
+                        <LocalDateTime value={event.created_at} fallback={event.created_at} />
                       </td>
                       <td className="px-4 py-3 font-medium text-brand-ink">
                         {event.event_type === "search" ? "Search" : "Restaurant click"}

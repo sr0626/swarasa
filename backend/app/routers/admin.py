@@ -21,9 +21,12 @@ from app.dependencies.pagination import Pagination, pagination_params
 from app.models.owner_account import OwnerAccount
 from app.schemas.activity import UserActivityResponse
 from app.schemas.admin_notifications import AdminNotificationsResponse
+from app.schemas.admin_listings import AdminListingSort, AdminListingsResponse
+from app.schemas.admin_managers import AdminManagersResponse, ManagerSort
 from app.schemas.admin_overview import AdminOverviewResponse
 from app.schemas.admin_owners import AdminOwnersResponse, OwnerSort
-from app.schemas.admin_registered_users import RegisteredUsersResponse
+from app.schemas.admin_registered_users import RegisteredUserSort, RegisteredUsersResponse
+from app.schemas.restaurant import RestaurantListStatusValue
 from app.schemas.admin_stats import RegisteredUserCountResponse
 from app.schemas.restaurant_bulk_import import (
     BulkImportRequest,
@@ -31,6 +34,8 @@ from app.schemas.restaurant_bulk_import import (
     BulkImportRowOut,
 )
 from app.services import activity_service, cognito_service
+from app.services.admin_listings_service import get_admin_listings
+from app.services.admin_managers_service import get_admin_managers
 from app.services.admin_notification_service import get_admin_notifications
 from app.services.admin_overview_service import get_admin_overview
 from app.services.admin_owners_service import get_admin_owners
@@ -92,6 +97,15 @@ async def registered_user_count_endpoint(
 @router.get("/registered-users", response_model=RegisteredUsersResponse)
 async def registered_users_endpoint(
     pagination: Pagination = Depends(pagination_params),
+    q: str | None = Query(
+        default=None,
+        max_length=100,
+        description="Case-insensitive substring match against email or display name.",
+    ),
+    sort: RegisteredUserSort = Query(
+        default="newest",
+        description="newest (default) | oldest | email | last_seen",
+    ),
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(require_admin),
 ) -> RegisteredUsersResponse:
@@ -107,7 +121,7 @@ async def registered_users_endpoint(
     CLAUDE.md "NEVER expose internal stack details").
     """
     try:
-        return await get_registered_users(db, pagination)
+        return await get_registered_users(db, pagination, search=q, sort=sort)
     except ClientError as exc:
         logger.warning(
             "registered-users: Cognito ListUsersInGroup failed: %s",
@@ -140,6 +154,78 @@ async def admin_owners_endpoint(
     only (no Cognito call); no billing fields. See docs/API_CONTRACTS.md
     "GET /admin/owners"."""
     return await get_admin_owners(db, pagination, search=q, sort=sort)
+
+
+@router.get("/managers", response_model=AdminManagersResponse)
+async def admin_managers_endpoint(
+    pagination: Pagination = Depends(pagination_params),
+    q: str | None = Query(
+        default=None,
+        max_length=100,
+        description="Case-insensitive substring match against manager email or display name.",
+    ),
+    sort: ManagerSort = Query(
+        default="newest",
+        description="newest (default) | oldest | most_locations | email | last_seen",
+    ),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_admin),
+) -> AdminManagersResponse:
+    """Auth: admin only. Manager directory for the admin "Managers" report:
+    one row per person with at least one `location_manager` assignment
+    (active or revoked) — email (Cognito, best-effort), name, first
+    assignment date, last seen, active-location count, the owner(s) they
+    work under and their active locations. See docs/API_CONTRACTS.md
+    "GET /admin/managers" for the who-is-listed rule."""
+    return await get_admin_managers(db, pagination, search=q, sort=sort)
+
+
+@router.get("/listings", response_model=AdminListingsResponse)
+async def admin_listings_endpoint(
+    pagination: Pagination = Depends(pagination_params),
+    owner_id: int | None = Query(default=None),
+    brand_id: int | None = Query(
+        default=None, description="Exactly one restaurant (used by the Managers report links)."
+    ),
+    owner_email: str | None = Query(
+        default=None,
+        max_length=255,
+        description="Case-insensitive substring match against the owner's email.",
+    ),
+    name: str | None = Query(default=None, max_length=255),
+    location_status: RestaurantListStatusValue | None = Query(
+        default=None,
+        alias="status",
+        description="A location status, or the pseudo-value `deleted` for soft-deleted listings only.",
+    ),
+    is_paid: bool | None = Query(default=None),
+    city: str | None = Query(default=None, max_length=120),
+    is_claimed: bool | None = Query(default=None),
+    sort: AdminListingSort = Query(
+        default="newest", description="newest (default) | oldest | followers"
+    ),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_admin),
+) -> AdminListingsResponse:
+    """Auth: admin only. Listings-management data: each brand with EVERY
+    location (any status), the owner's email and who created the brand and
+    each location (from `audit_log`). Location-level filters (`status`,
+    `is_paid`, `city`) match a brand through ONE location satisfying all of
+    them and flag it with `matches_filter`. See docs/API_CONTRACTS.md
+    "GET /admin/listings"."""
+    return await get_admin_listings(
+        db,
+        pagination,
+        owner_id=owner_id,
+        brand_id=brand_id,
+        owner_email=owner_email,
+        name=name,
+        status=location_status,
+        is_paid=is_paid,
+        city=city,
+        is_claimed=is_claimed,
+        sort=sort,
+    )
 
 
 @router.get(

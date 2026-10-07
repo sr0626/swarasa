@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
+
+from app.schemas.utc import UtcDatetime
 
 ReportCategory = Literal[
     "address_incorrect",
@@ -90,9 +91,9 @@ class ReportOut(BaseModel):
     reporter_email: str | None = None
     reporter_user_id: str | None = None
     status: str
-    submitted_at: datetime
+    submitted_at: UtcDatetime
     reviewed_by: str | None = None
-    reviewed_at: datetime | None = None
+    reviewed_at: UtcDatetime | None = None
     reviewer_notes: str | None = None
 
 
