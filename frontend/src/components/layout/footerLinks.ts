@@ -5,5 +5,5 @@ export const FOOTER_LINKS = [
   { href: "/about", label: "About Us" },
   { href: "/contact", label: "Contact Us" },
   { href: "/terms", label: "Terms & Privacy" },
-  { href: "/privacy", label: "Privacy" },
+  { href: "/privacy", label: "Your Data" },
 ] as const;
