@@ -56,4 +56,6 @@ export interface AdminOverview {
    * caller-gated `null`.
    */
   registered_user_count: number | null;
+  /** Distinct people with >= 1 ACTIVE manager assignment (tile -> /admin/managers). */
+  manager_count?: number;
 }

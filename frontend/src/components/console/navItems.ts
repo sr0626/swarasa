@@ -21,6 +21,7 @@ export const ADMIN_NAV_ITEMS: ReadonlyArray<ConsoleNavItem> = [
   { href: "/account", label: "Profile", icon: "user" },
   { href: "/admin/overview", label: "Overview", icon: "chart" },
   { href: "/admin/owners", label: "Owners", icon: "user" },
+  { href: "/admin/managers", label: "Managers", icon: "user" },
   { href: "/admin/registered-users", label: "Registered users", icon: "user" },
   { href: "/admin/claims", label: "Claims", icon: "claims" },
   // Not named "Reports" -- that label is already taken by the
@@ -41,7 +42,6 @@ export const OWNER_NAV_ITEMS: ReadonlyArray<ConsoleNavItem> = [
       { href: "/account#restaurants", label: "My restaurants" },
       { href: "/account#profile", label: "Profile" },
       { href: "/account#security", label: "Security" },
-      { href: "/account#privacy", label: "Data & privacy" },
     ],
   },
   // Its own page (not an in-page section): the activity feed is only fetched

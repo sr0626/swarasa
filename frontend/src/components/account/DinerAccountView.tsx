@@ -1,12 +1,11 @@
 // /account for a registered_user (diner): friendly and discovery-oriented.
 // Warm hero header with a greeting and a "find restaurants" CTA; the main
 // column is the visual grid of followed restaurants, the side column holds
-// the account details, security link and privacy/data controls. No business
+// the account details and security link. No business
 // terminology. Server Component (children handle their own interactivity).
 import Link from "next/link";
 import AccountAvatar from "@/components/account/AccountAvatar";
 import AccountDetailsCard from "@/components/account/AccountDetailsCard";
-import DataPrivacySection from "@/components/account/DataPrivacySection";
 import DisplayNameForm from "@/components/account/DisplayNameForm";
 import FollowedRestaurantsGrid from "@/components/account/FollowedRestaurantsGrid";
 import LocationForm from "@/components/account/LocationForm";
@@ -16,18 +15,15 @@ import { SearchIcon } from "@/components/ui/icons";
 import { hasLocation } from "@/lib/validation/userLocation";
 import type { AuthMe } from "@/types/auth";
 import type { FollowedBrand } from "@/types/follow";
-import type { DataDeletionRequest } from "@/types/privacy";
 
 export default function DinerAccountView({
   me,
   follows,
   followsError,
-  latestDeletionRequest,
 }: {
   me: AuthMe;
   follows: FollowedBrand[];
   followsError: string | null;
-  latestDeletionRequest: DataDeletionRequest | null;
 }) {
   const firstName = firstNameFor(me);
   const followCount = follows.length;
@@ -83,7 +79,6 @@ export default function DinerAccountView({
           )}
           <AccountDetailsCard me={me} stacked nameEditableElsewhere />
           <SecurityCard />
-          <DataPrivacySection latestDeletionRequest={latestDeletionRequest} />
         </div>
       </div>
     </div>

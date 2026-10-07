@@ -8,12 +8,12 @@ Cognito call — and deliberately carries NO billing/payment fields
 """
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel
 
 from app.schemas.admin_overview import StatusBreakdown
+from app.schemas.utc import UtcDatetime
 
 OwnerSort = Literal["newest", "oldest", "most_locations", "email"]
 
@@ -28,7 +28,7 @@ class AdminOwnerOut(BaseModel):
     full_name: str | None
     phone: str | None
     # `owner_account.created_at`.
-    joined_at: datetime
+    joined_at: UtcDatetime
     # True once a CCPA deletion request for this owner was approved
     # (`owner_account.personal_data_deleted_at IS NOT NULL`). The row is
     # kept (brands/locations hang off it) but identity fields are redacted.

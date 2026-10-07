@@ -55,6 +55,8 @@ from botocore.exceptions import ClientError
 
 OWNER_GROUP = "owner"
 REGISTERED_USER_GROUP = "registered_user"
+MANAGER_GROUP = "manager"
+ADMIN_GROUP = "admin"
 
 _cognito_client = None
 
@@ -248,6 +250,38 @@ def list_registered_users() -> list[RegisteredUserRecord]:
         if not next_token:
             break
     return records
+
+
+def list_group_emails(group_name: str) -> dict[str, str]:
+    """`{sub: email}` for every member of one pool group — ONE paginated
+    `ListUsersInGroup` sweep (same action/grant as `list_registered_users`,
+    no new IAM). Used by the admin console to resolve many actor/manager
+    subs to emails in a couple of calls instead of one `ListUsers` per sub
+    (`find_email_by_sub`). Members with no `email` attribute are omitted.
+
+    Raises `RuntimeError`/`ClientError`/`BotoCoreError` like the sibling
+    list functions; the callers that use this for DISPLAY-only enrichment
+    (`admin_actor_service`, `admin_managers_service`) catch and degrade.
+    """
+    client = _get_client()
+    pool_id = _user_pool_id()
+    emails: dict[str, str] = {}
+    next_token: str | None = None
+    while True:
+        kwargs = {"UserPoolId": pool_id, "GroupName": group_name, "Limit": 60}
+        if next_token:
+            kwargs["NextToken"] = next_token
+        response = client.list_users_in_group(**kwargs)
+        for user in response.get("Users") or []:
+            attrs = {a.get("Name"): a.get("Value") for a in user.get("Attributes", [])}
+            sub = attrs.get("sub") or user.get("Username")
+            email = attrs.get("email")
+            if sub and email:
+                emails[sub] = email
+        next_token = response.get("NextToken")
+        if not next_token:
+            break
+    return emails
 
 
 def add_user_to_group(username: str, group_name: str) -> None:

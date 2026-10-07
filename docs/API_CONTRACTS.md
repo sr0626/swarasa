@@ -130,6 +130,17 @@ Notes:
   card's "Open today 11am–9pm" / "Closed today" label. All `null` =
   hours unknown for today (the card shows no label). `is_closed: true`
   => `open_time`/`close_time` are `null`. Times are `HH:MM:SS`.
+- `nearest_location.opens_later_today` (added 2026-09-24, additive) —
+  server-computed in the location's timezone: `true` when `is_open_now` is
+  `false` and "now" is BEFORE today's opening time, `false` when already past
+  closing, `null` when open now / closed all day / hours unknown. With
+  `is_open_now` + `open_time`/`close_time`/`is_closed` it drives the shared
+  pill copy: "Open now · until 10pm" / "Closed now · opens 10am" /
+  "Closed now" / "Closed today" (**only** when `is_closed` is true, i.e.
+  closed the entire day). The browser clock is never used; results are
+  cached at most 60s (`revalidate: 60`), so the label can lag a boundary
+  by up to a minute. Also on the follow-list `nearest_location` and the
+  brand-landing cards (`BrandLocationCardOut`).
 - Default sort: `is_paid` desc, then `is_verified` desc, then
   `distance_mi` asc, then `name` asc (DECISIONS.md "Search default sort").
   Paid results carry `nearest_location.is_paid: true`, which the client
@@ -715,6 +726,13 @@ location (see `frontend/src/lib/api/locations.ts` `getLocationById`'s
   frontend should treat the same as `is_closed: null`).
 - `is_open_now` is the computed display status (see `/search` notes) —
   `null` when the current day's `is_closed` is `null` (hours unknown).
+- `today_open_time` / `today_close_time` / `today_is_closed` /
+  `opens_later_today` (added 2026-09-24, additive) — today's hours in the
+  location's own timezone, computed server-side with the same rules as
+  `is_open_now` and the `/search` card (see `nearest_location.
+  opens_later_today`): they feed the "Open now · until 10pm" / "Closed now ·
+  opens 10am" / "Closed now" / "Closed today" pill on the Details card. All
+  `null` = unknown; `today_is_closed: true` = closed the whole day.
 - The menu is **not** in this response — read it from the separate public
   `GET /locations/{id}/menu` (see "Menu (`menu_section`, `menu_item`)").
 - `cover_photo_url` — the `restaurant_photo` row for this location with
@@ -881,6 +899,18 @@ null` and `specialties: string[] | null`. Does **not** accept `is_paid`, `paid_u
 `stripe_sub_item_id` — those are Stripe-webhook/admin-only writes
 (root CLAUDE.md "Stripe webhook sets is_paid... on payment
 success/failure"; not a field an owner or manager can set directly).
+
+**`latitude` / `longitude` are auto-generated (2026-09-24).** They are
+derived from the address (geocoded in the frontend's Next server action —
+the API Lambda has no internet — on every address change) and are never
+hand-edited in the UI. Accordingly, an **owner or manager** may send
+`latitude`/`longitude` on this route only **together with the full address
+block** (`address_line1`, `city`, `state`, `postal_code` all present and
+non-empty — the shape that server action sends after re-geocoding); a bare
+coordinate edit is rejected `422` with `code: "coordinates_not_editable"`.
+An **admin** may still set coordinates directly. If geocoding fails the
+action sends the address without coordinates, so the stored position is
+kept and the owner sees a gentle notice.
 
 Response: `200`, same shape as `GET /locations/{id}`.
 
@@ -2705,7 +2735,14 @@ Response: `200`
       "actor_label": "manager@example.com",
       "actor_resolved": true,
       "summary": "Location phone number updated",
-      "created_at": "2026-09-22T14:03:11Z"
+      "created_at": "2026-09-22T14:03:11Z",
+      "brand_id": 12, "restaurant_name": "Spice Route",
+      "location_id": 31, "location_name": "Plano",
+      "timezone": "America/Chicago",
+      "actor_email": "manager@example.com", "actor_role_label": "Manager",
+      "changes": [
+        { "field": "phone", "label": "Phone", "old": "(972) 555-0142", "new": "(972) 555-0199" }
+      ]
     },
     {
       "id": 9099,
@@ -2724,6 +2761,36 @@ Response: `200`
 }
 ```
 Most-recent-first (`created_at desc`, `id desc` tiebreak).
+
+**Detail fields (added 2026-09-24, all additive — nothing above changed).**
+The console renders each event as a table (cards on a phone): When /
+Restaurant & location / What changed / Previous / New / Updated by.
+- Where: `brand_id`, `restaurant_name`, `location_id`, `location_name` (the
+  location's own name, else "street, city"), each `null` when the entity no
+  longer exists (a permanently deleted location falls back to the audit
+  snapshot's address). `timezone` — the IANA zone `created_at` should be
+  displayed in (the location's; brand-level events use `America/Chicago`).
+- Who: `actor_email` (also set for "You"; `null` when unresolvable),
+  `actor_role_label` (`"Owner"` | `"Manager"` | `"Platform admin"`).
+  `actor_label` keeps its meaning (`"You"`, the email, or — when no email can
+  be resolved — a role fallback such as `"a manager"` / `"a platform admin"`;
+  it is **no longer** a role + truncated id). Emails resolve in one batched
+  `owner_account` query, then best-effort Cognito once per distinct sub.
+- What: `changes[]` — one entry per changed thing, `{ field, label, old,
+  new }`, values already friendly (`status`: `active` -> "Live",
+  `owner_deactivated` -> "Hidden", `coming_soon` -> "Coming soon",
+  `closed_pending_reopen` -> "Closed"; booleans "Yes"/"No"; phones
+  `(972) 555-0142`; lists comma-joined). Grouping: the address columns ->
+  one "Address" change; latitude+longitude -> one "Map position"; hours ->
+  one "Hours (Monday)" change per differing day; manager assignment ->
+  "Manager access (email)" Assigned/Revoked. `old`/`new` `null` = no value.
+  Empty `[]` for a create/delete (or an unchanged save): show `summary`.
+  Derived from `audit_log.old_val/new_val` by `app/services/audit_diff.py`.
+  `PUT /locations/{id}/hours` now audits per-day `hours` snapshots
+  (`"HH:MM-HH:MM" | "closed" | "unknown"`) alongside `hours_updated_days`;
+  older hours rows only know which days were saved ("Hours: Updated: Mon").
+- All per-page lookups are batched (a fixed number of queries regardless of
+  page size). Role scoping is unchanged.
 
 **Scoping** (see `backend/app/services/audit_query_service.py` module
 docstring for the full reasoning): for an **owner**, a row is included
@@ -3138,6 +3205,8 @@ Query params:
 |---|---|---|
 | page | int, optional, default 1 | |
 | page_size | int, optional, default 20, max 100 | |
+| q | string, optional, max 100 chars | Case-insensitive substring match against `email` OR `user_profile.full_name` (added 2026-10-05, same shape as `GET /admin/owners`'s `q`); blank/whitespace ignored |
+| sort | enum, optional, default `newest` | `newest` (`signup_at` desc) · `oldest` · `email` (A–Z) · `last_seen` (`last_seen_at` desc, never-seen rows last). `cognito_sub` is always the final tiebreaker. Unknown value → `422` (added 2026-10-05) |
 
 **JUDGMENT CALL:** `ListUsersInGroup` paginates via an opaque `NextToken`
 cursor, not offsets, so this endpoint fetches every group member from
@@ -3146,9 +3215,9 @@ Cognito (same bounded, admin-only, low-traffic assumption
 combined list in application code — see
 `app/services/cognito_service.py::list_registered_users` and
 `app/services/admin_registered_users_service.py` for the full reasoning.
-Results are ordered newest-signup-first (`signup_at` descending), a stable
-sort key so pages don't reshuffle between requests the way sorting by a
-live `last_seen_at` would.
+`q`/`sort` are likewise applied in Python over that same fetched set (the
+`last_seen`/name-search case needs every user's `user_profile` row anyway,
+fetched in one chunked query, not per-page).
 
 Response: `200`
 ```json
@@ -3157,6 +3226,7 @@ Response: `200`
     {
       "cognito_sub": "3f2a1c9e-...",
       "email": "diner@example.com",
+      "full_name": "Priya Sharma",
       "status": "CONFIRMED",
       "signup_at": "2026-09-10T14:22:03Z",
       "last_seen_at": "2026-09-23T08:05:11Z",
@@ -3169,6 +3239,9 @@ Response: `200`
   "total": 143
 }
 ```
+
+`full_name` (added 2026-10-05) is `user_profile.full_name` — the display
+name a diner set via `PATCH /auth/me`; `null` for most diners.
 
 Live call, no caching (same posture as `GET /admin/registered-user-count`).
 
@@ -3249,6 +3322,213 @@ Response: `200`
   "total": 1
 }
 ```
+
+Errors:
+| Status | Code | When |
+|---|---|---|
+| 403 | `forbidden` | caller is not admin |
+| 422 | — | `page`/`page_size` out of range, or unknown `sort` |
+
+### GET /admin/managers
+
+Added 2026-10-05. Auth: admin only. Manager directory for the admin
+console's "Managers" report (`/admin/managers`, linked from the Platform
+Overview page and its own nav item) — the manager-side counterpart of
+`GET /admin/owners` / `GET /admin/registered-users`.
+
+**Who is listed:** every distinct `location_manager.user_id` with **at
+least one** assignment row, active or revoked. A manager whose assignments
+were all revoked is still listed, with `active_location_count: 0` — cheap
+to derive from the same rows already being read. A Cognito `manager`-group
+member who was never assigned to any location has no local row and is
+**not** listed (deriving them would need a full Cognito sweep just to show
+empty rows, for no admin-facing benefit).
+
+Query params:
+| Param | Type | Notes |
+|---|---|---|
+| page | int, optional, default 1 | |
+| page_size | int, optional, default 20, max 100 | |
+| q | string, optional, max 100 chars | Case-insensitive substring match against email OR `user_profile.full_name` |
+| sort | enum, optional, default `newest` | `newest` (`first_assigned_at` desc) · `oldest` · `most_locations` (`active_location_count` desc) · `email` (A–Z) · `last_seen` (desc, never-seen last). `cognito_sub` is the final tiebreaker. Unknown value → `422` |
+
+**Data sources**, joined in application code (small result set — fetch all,
+filter/sort/paginate in Python, same posture as
+`GET /admin/registered-users`):
+- `location_manager` ⨝ `restaurant_location` ⨝ `restaurant_brand` — one
+  query for every assignment row, the location it's on, and that location's
+  brand/owner. A location whose brand is soft-deleted never counts as an
+  active assignment.
+- `owner_account` — one query, for the owner(s) a manager works under.
+- `user_profile` — one query (chunked), for `full_name` + `last_seen_at`.
+- Cognito — email only, best-effort: ONE `ListUsersInGroup` sweep of the
+  `manager` group (`app/services/admin_actor_service.py::resolve_emails`,
+  reused from the Listings provenance work below — no new IAM action), plus
+  a capped per-sub fallback for anyone that sweep didn't return. On any
+  Cognito failure, `email_lookup_degraded: true` and every row's `email` is
+  `null` (search then matches names only) — never a 502, since the rest of
+  the report is still useful without emails.
+
+Response: `200`
+```json
+{
+  "results": [
+    {
+      "cognito_sub": "9b1e7a2c-...",
+      "email": "manager@example.com",
+      "full_name": "Mona Rao",
+      "first_assigned_at": "2026-08-01T12:00:00Z",
+      "last_seen_at": "2026-10-03T09:15:00Z",
+      "active_location_count": 2,
+      "owners": [
+        { "id": 12, "email": "owner@example.com", "full_name": "Priya Sharma" }
+      ],
+      "locations": [
+        { "location_id": 55, "brand_id": 9, "brand_name": "Spice Route", "location_name": null, "city": "Plano" }
+      ]
+    }
+  ],
+  "page": 1,
+  "page_size": 20,
+  "total": 1,
+  "email_lookup_degraded": false
+}
+```
+
+`owners`/`locations` only ever reflect **active** assignments on locations of
+live (not soft-deleted) brands — a revoked-only manager has `[]` for both.
+`owners`: `email`/`full_name` are `null` for a CCPA-deleted owner (the row is
+still listed by id). `locations` is sorted by brand name then city, and
+each entry links the admin console to `/admin/listings?brand_id=<id>`.
+
+Errors:
+| Status | Code | When |
+|---|---|---|
+| 403 | `forbidden` | caller is not admin |
+| 422 | — | `page`/`page_size` out of range, or unknown `sort` |
+
+(No 502: a Cognito failure degrades emails, per `email_lookup_degraded`
+above, rather than failing the whole report.)
+
+### GET /admin/listings
+
+Added 2026-10-05, replacing the admin Listings page's prior client-side
+fan-out (the admin-scoped `GET /restaurants` plus one **public**
+`GET /restaurants/{id}/locations` call per brand). That fan-out had two
+defects this endpoint fixes:
+- The per-brand locations call was unauthenticated, so it only ever
+  returned **ACTIVE** locations — filtering `GET /restaurants` by
+  `status=coming_soon` (say) matched a brand through a location the page
+  could then never actually show, so an admin had no way to tell WHICH
+  location matched.
+- It carried no admin-only provenance (who owns this brand, who created
+  it/each location).
+
+Auth: admin only. Query params are the admin-only filter set
+`GET /restaurants` already has (`owner_id`/`owner_email`/`name`/`status`/
+`is_paid`/`city`/`is_claimed`, exactly the same semantics — shared
+server-side via `app/services/restaurant_service.py::brand_level_filters`)
+plus:
+
+| Param | Type | Notes |
+|---|---|---|
+| brand_id | int, optional | Exactly one restaurant — used by the Managers report's per-location links |
+| sort | enum, optional, default `newest` | `newest` (`id` desc) · `oldest` (`id` asc) · `followers` (desc, same tiebreak as `GET /restaurants`'s `sort=followers`) |
+
+**Location-level filter semantics differ from `GET /restaurants` on
+purpose.** `GET /restaurants`'s `status`/`is_paid`/`city` are three
+independent "does ANY location of this brand match" tests, ANDed together —
+so `status=coming_soon&is_paid=true` can match a brand whose coming-soon
+location is free and whose active location is paid (no ONE location is
+both). This endpoint instead requires ONE location to satisfy every
+location-level filter at once, and flags that location — and only that
+one — `matches_filter: true`; with at most one location-level filter set,
+the two endpoints' `total` always agree (so the Platform Overview tiles,
+which link to `GET /restaurants`-shaped queries, still match this page's
+count).
+
+Every location of the brand is returned, in every status (not just
+`active`) — `location_count` keeps its existing meaning (ACTIVE-location
+count only, same as `RestaurantOut.location_count`); `locations` is the
+full list, oldest first.
+
+**Provenance**, sourced from `audit_log` (`app/services/
+admin_actor_service.py`): `owner_email` (`owner_account.email`; `null` for
+an unclaimed brand or a CCPA-deleted owner — see `owner_deleted`) on the
+brand, and on BOTH the brand and each location: `created_at` (the
+EARLIEST matching `audit_log` "create" row for that record, falling back to
+the record's own `created_at` when there is no audit row — never
+fabricated), `created_by_role` (`owner`/`manager`/`admin`/`system`, `system`
+meaning a non-interactive actor such as an import or seed script — the
+audit row's `actor_id` starts `system:`), `created_by_email` and a
+ready-to-render `created_by_label` (the email when known, `"import"`/
+`"seed"`/a short script name for a system actor, the Cognito sub's first 8
+characters when the role is known but the email isn't, or `null` when the
+creator is unknown entirely). Email resolution for owners is one local
+query; for manager/admin actors it is the SAME batched, best-effort Cognito
+`ListUsersInGroup` sweep `GET /admin/managers` uses (one sweep per distinct
+role seen, plus a capped per-sub fallback) — never one Cognito call per
+row, and never surfaced on any public/owner/manager payload.
+
+Response: `200`
+```json
+{
+  "results": [
+    {
+      "id": 9,
+      "name": "Spice Route",
+      "slug": "spice-route",
+      "is_claimed": true,
+      "has_pending_claim": false,
+      "owner_id": 12,
+      "owner_email": "owner@example.com",
+      "owner_deleted": false,
+      "location_count": 1,
+      "follower_count": 14,
+      "deleted_at": null,
+      "cuisine_tags": [],
+      "created_at": "2026-07-01T09:00:00Z",
+      "created_by_role": "owner",
+      "created_by_email": "owner@example.com",
+      "created_by_label": "owner@example.com",
+      "locations": [
+        {
+          "id": 55,
+          "slug": "plano",
+          "location_name": null,
+          "address_line1": "123 Main St",
+          "address_line2": null,
+          "city": "Plano",
+          "state": "TX",
+          "postal_code": "75024",
+          "phone": "+12145550100",
+          "status": "coming_soon",
+          "is_verified": false,
+          "is_paid": false,
+          "paid_until": null,
+          "cuisine_tags": [],
+          "matches_filter": true,
+          "created_at": "2026-09-01T10:00:00Z",
+          "created_by_role": "manager",
+          "created_by_email": "mgr@example.com",
+          "created_by_label": "mgr@example.com"
+        }
+      ]
+    }
+  ],
+  "page": 1,
+  "page_size": 20,
+  "total": 1
+}
+```
+
+No N+1 regardless of page size: one brand query, one owner query, one
+locations query, one cuisine-tags query (x2, brand-union and per-location),
+one follower-count query, one pending-claim query, two audit_log queries
+(brands, locations) and the shared email-resolution batch — fixed query
+count whether the page holds 1 brand or 20
+(`tests/integration/test_admin_listings.py::
+test_query_count_does_not_grow_with_page_size`).
 
 Errors:
 | Status | Code | When |
@@ -3351,9 +3631,17 @@ Response: `200`
     "page_size": 20,
     "total": 18
   },
-  "registered_user_count": null
+  "registered_user_count": null,
+  "manager_count": 6
 }
 ```
+
+`manager_count` (added 2026-10-05): the count of distinct people with at
+least one **active** `location_manager` assignment — local DB only, one
+`COUNT(DISTINCT user_id)` query, no Cognito call. Backs the Overview page's
+"Managers" tile (→ `/admin/managers`). The Managers report's own `total`
+can be higher: it also lists managers whose assignments were all revoked
+(see `GET /admin/managers`).
 
 **JUDGMENT CALL — two different counting grains in one response, by
 design (documented in `app/schemas/admin_overview.py` and

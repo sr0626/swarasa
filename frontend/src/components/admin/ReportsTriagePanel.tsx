@@ -7,6 +7,7 @@
 // links (server-rendered), so this component only owns per-card actions.
 import { useState } from "react";
 import Link from "next/link";
+import LocalDateTime from "@/components/ui/LocalDateTime";
 import { updateReportAction } from "@/app/admin/reports/actions";
 import { reportCategoryLabel } from "@/lib/constants/reportCategories";
 import type { ListingReport, ReportStatus } from "@/types/listingReport";
@@ -17,16 +18,6 @@ interface ReportsTriagePanelProps {
   /** Active status filter; a card that no longer matches after an action
    * is dropped from the list. `null` = "All" (nothing is dropped). */
   statusFilter: ReportStatus | null;
-}
-
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
 }
 
 const STATUS_COPY: Record<ReportStatus, string> = {
@@ -154,7 +145,7 @@ function ReportCard({
         <div>
           <dt className="text-brand-ink-subtle">Submitted</dt>
           <dd className="mt-0.5 font-medium text-brand-ink">
-            {formatDateTime(report.submitted_at)}
+            <LocalDateTime value={report.submitted_at} />
           </dd>
         </div>
         <div>
@@ -168,7 +159,7 @@ function ReportCard({
           <div>
             <dt className="text-brand-ink-subtle">Reviewed</dt>
             <dd className="mt-0.5 font-medium text-brand-ink">
-              {formatDateTime(report.reviewed_at)}
+              <LocalDateTime value={report.reviewed_at} />
             </dd>
           </div>
         )}

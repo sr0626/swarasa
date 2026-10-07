@@ -3,7 +3,10 @@
 // (app/schemas/admin_registered_users.py is its own file): a live
 // Cognito-backed report, not the local-DB `GET /admin/overview` aggregate.
 import { apiFetch, toQueryString } from "./client";
-import type { RegisteredUsersResponse } from "@/types/adminRegisteredUsers";
+import type {
+  RegisteredUsersParams,
+  RegisteredUsersResponse,
+} from "@/types/adminRegisteredUsers";
 import type { PaginationParams } from "@/types/common";
 import type { ActivityEventType, UserActivityResponse } from "@/types/userActivity";
 
@@ -14,12 +17,14 @@ import type { ActivityEventType, UserActivityResponse } from "@/types/userActivi
  * `ListUsersInGroup` call fails.
  */
 export async function getRegisteredUsers(
-  params: PaginationParams = {},
+  params: RegisteredUsersParams = {},
   accessToken: string
 ): Promise<RegisteredUsersResponse> {
   const query = toQueryString({
     page: params.page,
     page_size: params.page_size,
+    q: params.q,
+    sort: params.sort,
   });
 
   return apiFetch<RegisteredUsersResponse>(
