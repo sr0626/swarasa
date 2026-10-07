@@ -36,6 +36,7 @@ from app.models.deal import Deal
 from app.models.menu_section import MenuSection
 from app.models.menu_item import MenuItem
 from app.models.user_activity_event import UserActivityEvent
+from app.models.admin_message import AdminMessage
 
 __all__ = [
     "OwnerAccount",
@@ -61,4 +62,5 @@ __all__ = [
     "MenuSection",
     "MenuItem",
     "UserActivityEvent",
+    "AdminMessage",
 ]

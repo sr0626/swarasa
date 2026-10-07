@@ -3852,3 +3852,44 @@ Errors: `{"ok": false, "command": "bulk_import_restaurants", "error": "..."}`
 for a batch-level problem (no header row, a required column entirely
 missing, zero data rows, or over the 500-row cap) — same
 per-row-vs-batch-level split as the JSON path.
+
+---
+
+## Contact admin (`/contact-admin`, `/admin/messages`)
+
+Signed-in owners and managers message the platform admins from inside the
+console; admins work the messages in an inbox. Table: `admin_message`
+(migration `0017_admin_message`). No email/SES notification (SES is
+deferred) -- admins see the open count on the Overview page and the
+Messages inbox.
+
+### `POST /contact-admin`
+Auth: owner or manager (any other role -> 403).
+Body: `{"subject": str, "body": str, "related_location_id": int | null}`.
+- `subject` 3-120 and `body` 10-4000 characters, checked after trimming.
+- `related_location_id` (optional): an owner may attach only a location
+  under one of their own brands; a manager only a location they are
+  actively assigned to (`location_manager`, never the JWT). Any failure
+  (nonexistent, someone else's, unassigned) returns the same generic
+  `400 {"detail": "Invalid location", "code": "invalid_location"}`.
+- Sender email, role and `sub` come from the verified token; the display
+  name from the local profile.
+- Rate limit: 5 messages per sender per rolling hour, counted from
+  `admin_message` itself -> `429 {"code": "rate_limited"}`.
+Response `201`: `{"status": "received"}`.
+
+### `GET /admin/messages`
+Auth: admin. Query: `status` = `open` | `resolved` (omit = all), `q`
+(<= 100 chars; matches subject, body, sender email, sender name), `page`,
+`page_size`. Open queue is oldest-first; resolved/all newest-first.
+Response: `{results, page, page_size, total, open_count}` where
+`open_count` is the inbox-wide number of open messages (independent of
+filters). Row: `message_id, sender_role, sender_email, sender_name,
+subject, body, related_location_id, related_location_label,
+related_location_brand_slug, related_location_slug, status, created_at,
+resolved_at, resolved_by`.
+
+### `PATCH /admin/messages/{message_id}`
+Auth: admin. Body: `{"status": "open" | "resolved"}`. Resolving stamps
+`resolved_at`/`resolved_by`; re-opening clears them. A real status change
+writes an `audit_log` row (`admin_message`, `update`). `404` when missing.

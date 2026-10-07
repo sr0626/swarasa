@@ -377,3 +377,13 @@ export function MenuIcon(props: IconProps) {
     </svg>
   );
 }
+
+/** Added for the "Contact admin" / admin "Messages" console menu items. */
+export function MailIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} {...props}>
+      <rect x="3.5" y="5.5" width="17" height="13" rx="2" />
+      <path d="M4 7.5l8 6 8-6" />
+    </svg>
+  );
+}

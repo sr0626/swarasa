@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { activeNavHref, MANAGER_NAV_ITEMS, OWNER_NAV_ITEMS } from "./navItems.ts";
+import { activeNavHref, ADMIN_NAV_ITEMS, MANAGER_NAV_ITEMS, OWNER_NAV_ITEMS } from "./navItems.ts";
 
 test("owner: /account highlights Business account, /account/activity only Activity", () => {
   assert.equal(activeNavHref("/account", OWNER_NAV_ITEMS), "/account");
@@ -17,6 +17,17 @@ test("Activity is a menu item for both owner and manager", () => {
   for (const items of [OWNER_NAV_ITEMS, MANAGER_NAV_ITEMS]) {
     assert.ok(items.some((i) => i.href === "/account/activity" && i.label === "Activity"));
   }
+});
+
+test("Contact admin is a menu item for owner and manager; Messages for admin", () => {
+  for (const items of [OWNER_NAV_ITEMS, MANAGER_NAV_ITEMS]) {
+    assert.ok(
+      items.some((i) => i.href === "/portal/contact-admin" && i.label === "Contact admin")
+    );
+    assert.equal(activeNavHref("/portal/contact-admin", items), "/portal/contact-admin");
+  }
+  assert.ok(ADMIN_NAV_ITEMS.some((i) => i.href === "/admin/messages" && i.label === "Messages"));
+  assert.equal(activeNavHref("/admin/messages", ADMIN_NAV_ITEMS), "/admin/messages");
 });
 
 test("no menu href points at the old in-page #activity anchor", () => {
