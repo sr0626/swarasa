@@ -219,6 +219,7 @@ async def _active_location_cards(db: AsyncSession, brand_id: int) -> list[BrandL
                 open_time=status.open_time,
                 close_time=status.close_time,
                 is_closed=status.is_closed,
+                opens_later_today=status.opens_later_today,
                 has_deal_today=any(
                     deal_service.deal_matches_today(d, row.timezone)
                     for d in deals_by_location.get(row.id, [])

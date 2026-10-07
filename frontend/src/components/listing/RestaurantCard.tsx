@@ -211,6 +211,7 @@ export default function RestaurantCard({
             isClosedToday={nearest_location.is_closed}
             openTime={nearest_location.open_time}
             closeTime={nearest_location.close_time}
+            opensLaterToday={nearest_location.opens_later_today}
           />
         </div>
       )}

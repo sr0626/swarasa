@@ -20,6 +20,7 @@ import SetupReadyPrompt from "@/components/portal/SetupReadyPrompt";
 import { PencilIcon } from "@/components/ui/icons";
 import { canActivate } from "@/lib/portal/listingSetup";
 import { formatPhone } from "@/lib/formatPhone";
+import { describeMapPosition, needsRegeocode } from "@/lib/portal/locationCoordinates";
 import { phoneFieldError } from "@/lib/phone";
 import type { LocationDetail } from "@/types/location";
 
@@ -32,8 +33,6 @@ interface FormState {
   country: string;
   phone: string;
   timezone: string;
-  latitude: string;
-  longitude: string;
 }
 
 function toFormState(location: LocationDetail): FormState {
@@ -47,20 +46,7 @@ function toFormState(location: LocationDetail): FormState {
     // Stored as +1XXXXXXXXXX; shown the way people write it.
     phone: location.phone ? formatPhone(location.phone) : "",
     timezone: location.timezone,
-    // Null until the address has been geocoded (see NewListingNotice).
-    latitude: location.latitude === null ? "" : String(location.latitude),
-    longitude: location.longitude === null ? "" : String(location.longitude),
   };
-}
-
-/** True when the street/city/state/ZIP differ — coordinates would go stale. */
-function addressChanged(a: FormState, b: FormState): boolean {
-  return (
-    a.address_line1.trim() !== b.address_line1.trim() ||
-    a.city.trim() !== b.city.trim() ||
-    a.state.trim().toUpperCase() !== b.state.trim().toUpperCase() ||
-    a.postal_code.trim() !== b.postal_code.trim()
-  );
 }
 
 const inputClass =
@@ -79,9 +65,14 @@ export default function LocationInfoForm({
   const readyPromptShown =
     (role === "owner" || role === "admin") && canActivate(location.status, location.setup_missing);
   const [form, setForm] = useState<FormState>(toFormState(location));
-  // Last-saved values: what "did the owner change the address / type new
-  // coordinates" is measured against.
+  // Last-saved values: what "did the owner change the address" is measured
+  // against. The map position itself is read-only (auto-generated from the
+  // address), shown from the last-saved location.
   const [baseline, setBaseline] = useState<FormState>(toFormState(location));
+  const [position, setPosition] = useState({
+    latitude: location.latitude,
+    longitude: location.longitude,
+  });
   const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -108,30 +99,10 @@ export default function LocationInfoForm({
       return;
     }
 
-    const latText = form.latitude.trim();
-    const lngText = form.longitude.trim();
-    if ((latText === "") !== (lngText === "")) {
-      setError("Enter both latitude and longitude, or leave both blank.");
-      return;
-    }
-    const latitude = latText === "" ? null : Number(latText);
-    const longitude = lngText === "" ? null : Number(lngText);
-    if (
-      (latitude !== null && !Number.isFinite(latitude)) ||
-      (longitude !== null && !Number.isFinite(longitude))
-    ) {
-      setError("Latitude and longitude must be numbers.");
-      return;
-    }
-
-    // Address edited without hand-typing new coordinates: re-geocode
-    // server-side rather than leaving the old (now wrong) position. Also
-    // covers a listing that has no position yet (blank coordinates).
-    const coordsEditedByHand =
-      form.latitude.trim() !== baseline.latitude.trim() ||
-      form.longitude.trim() !== baseline.longitude.trim();
-    const regeocode =
-      !coordsEditedByHand && (addressChanged(form, baseline) || latitude === null);
+    // Latitude/longitude are never sent from here: when the address changed
+    // (or there is no position yet) the server action re-geocodes it and
+    // supplies fresh coordinates itself.
+    const regeocode = needsRegeocode(form, baseline, position.latitude !== null);
 
     setSaving(true);
     try {
@@ -146,8 +117,6 @@ export default function LocationInfoForm({
           country: form.country.trim().toUpperCase(),
           phone: form.phone.trim(),
           timezone: form.timezone.trim(),
-          // When re-geocoding, the server supplies fresh coordinates.
-          ...(regeocode || latitude === null || longitude === null ? {} : { latitude, longitude }),
         },
         { regeocode }
       );
@@ -155,6 +124,7 @@ export default function LocationInfoForm({
         const next = toFormState(result.data);
         setForm(next);
         setBaseline(next);
+        setPosition({ latitude: result.data.latitude, longitude: result.data.longitude });
         setSaved(true);
         setNotice(result.notice ?? null);
         // Re-render the page around us so the setup checklist reflects the
@@ -288,29 +258,10 @@ export default function LocationInfoForm({
           />
         </div>
 
-        <div>
-          <label htmlFor="latitude" className={labelClass}>Latitude</label>
-          <input
-            id="latitude"
-            type="number"
-            step="any"
-            value={form.latitude}
-            onChange={(e) => set("latitude", e.target.value)}
-            className={inputClass}
-          />
-        </div>
-
-        <div>
-          <label htmlFor="longitude" className={labelClass}>Longitude</label>
-          <input
-            id="longitude"
-            type="number"
-            step="any"
-            value={form.longitude}
-            onChange={(e) => set("longitude", e.target.value)}
-            className={inputClass}
-          />
-        </div>
+        {/* Read-only: the position is derived from the address, never typed. */}
+        <p className="sm:col-span-2 text-xs text-brand-ink-subtle">
+          {describeMapPosition(position.latitude, position.longitude)}
+        </p>
 
         {error && (
           <p className="sm:col-span-2 rounded-brand-control bg-brand-closed-bg px-3 py-2.5 text-sm text-brand-closed">
