@@ -110,6 +110,16 @@ class LocationOut(BaseModel):
     # brand. Additive; empty when untagged.
     cuisine_tags: list[CuisineTagOut] = []
     is_open_now: bool | None
+    # Today's hours in the location's own timezone, computed server-side with
+    # the SAME rules as `is_open_now` and the /search card (additive,
+    # 2026-09-24) so the "Open now · until 10pm" / "Closed now · opens 10am" /
+    # "Closed today" pill never needs the viewer's clock. All null = unknown.
+    # `today_is_closed` true = closed the whole day (times null).
+    # `opens_later_today` is meaningful only when `is_open_now` is false.
+    today_open_time: time | None = None
+    today_close_time: time | None = None
+    today_is_closed: bool | None = None
+    opens_later_today: bool | None = None
     hours: list[HoursOut]
     cover_photo_url: str | None
     # Added 2026-09-16 alongside GalleryPhotoOut.thumbnail_url (see that

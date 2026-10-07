@@ -69,7 +69,8 @@ async def _location_to_out(
     hours_rows = await hours_service.get_hours_for_location(db, location.id)
     hours_by_day = {row.day_of_week: row for row in hours_rows}
     today = hours_service.today_weekday(location.timezone)
-    is_open_now = hours_service.compute_is_open_now(hours_by_day.get(today), location.timezone)
+    today_status = hours_service.compute_today_status(hours_by_day.get(today), location.timezone)
+    is_open_now = today_status.is_open_now
 
     cover = await photo_service.get_cover_photo(db, location.id)
     gallery = await photo_service.get_gallery_photos(db, location.id, location.is_paid)
@@ -128,6 +129,10 @@ async def _location_to_out(
         ),
         cuisine_tags=[CuisineTagOut.model_validate(t) for t in tags],
         is_open_now=is_open_now,
+        today_open_time=today_status.open_time,
+        today_close_time=today_status.close_time,
+        today_is_closed=today_status.is_closed,
+        opens_later_today=today_status.opens_later_today,
         hours=[
             HoursOut(
                 day_of_week=row.day_of_week,
@@ -361,6 +366,10 @@ _UPDATABLE_FIELDS = (
 _CLEARABLE_FIELDS = ("about", "specialties")
 _AUDITED_FIELDS = _UPDATABLE_FIELDS + _CLEARABLE_FIELDS
 
+# The address block a non-admin PATCH must carry (all four, non-empty) for its
+# `latitude`/`longitude` to be accepted — see `update_location`.
+_ADDRESS_BLOCK = ("address_line1", "city", "state", "postal_code")
+
 
 async def update_location(
     db: AsyncSession, location_id: int, body: LocationUpdate, current_user
@@ -372,6 +381,22 @@ async def update_location(
     old_val["longitude"] = float(location.longitude) if location.longitude is not None else None
 
     data = body.model_dump(exclude_unset=True)
+
+    # The map position is derived from the address, never hand-edited (user
+    # decision 2026-09-24). Owners/managers may only send latitude/longitude
+    # alongside the FULL address block in the same request — the shape the
+    # frontend's server action sends after re-geocoding the changed address
+    # (the API Lambda has no internet, so geocoding happens there). A bare
+    # lat/lng edit is rejected; an admin may still set coordinates directly.
+    if ("latitude" in data or "longitude" in data) and current_user.role != "admin":
+        if not all(data.get(field) for field in _ADDRESS_BLOCK):
+            raise AppError(
+                422,
+                "The map position is set automatically from the address and can't "
+                "be edited directly.",
+                "coordinates_not_editable",
+            )
+
     for field in _UPDATABLE_FIELDS:
         if field in data and data[field] is not None:
             value = data[field]
@@ -828,12 +853,39 @@ async def _caller_may_see_inactive_locations(db: AsyncSession, brand, current_us
 # ---------------------------------------------------------------------------
 
 
+def _hours_snapshot(rows, days: list[int]) -> dict[str, str]:
+    """`{"0": "11:00-22:00", "1": "closed", "2": "unknown"}` for just `days` —
+    compact, JSON-safe audit payload (keys are day_of_week as strings)."""
+    by_day = {row.day_of_week: row for row in rows}
+    snapshot: dict[str, str] = {}
+    for day in days:
+        row = by_day.get(day)
+        if row is None or row.is_closed is None:
+            snapshot[str(day)] = "unknown"
+        elif row.is_closed:
+            snapshot[str(day)] = "closed"
+        elif row.open_time is not None and row.close_time is not None:
+            snapshot[str(day)] = (
+                f"{row.open_time.strftime('%H:%M')}-{row.close_time.strftime('%H:%M')}"
+            )
+        else:
+            snapshot[str(day)] = "unknown"
+    return snapshot
+
+
 async def replace_location_hours(
     db: AsyncSession, location_id: int, entries: list[HourEntryIn], current_user
 ) -> HoursResponse:
     location = await get_location_or_404(db, location_id)
+    days = [e.day_of_week for e in entries]
+    old_rows = await hours_service.get_hours_for_location(db, location.id)
+    old_snapshot = _hours_snapshot(old_rows, days)
     await hours_service.replace_hours(db, location.id, entries)
+    new_rows = await hours_service.get_hours_for_location(db, location.id)
 
+    # `hours_updated_days` stays (existing summary + legacy consumers); the
+    # per-day `hours` snapshots are what lets the activity feed show
+    # "Hours (Monday): 11am-9pm -> 10am-10pm" (audit_diff.py).
     await audit_service.log(
         db,
         table_name="restaurant_location",
@@ -841,8 +893,8 @@ async def replace_location_hours(
         action="update",
         actor_id=current_user.cognito_sub,
         actor_role=current_user.role,
-        old_val=None,
-        new_val={"hours_updated_days": [e.day_of_week for e in entries]},
+        old_val={"hours": old_snapshot},
+        new_val={"hours_updated_days": days, "hours": _hours_snapshot(new_rows, days)},
     )
     await db.commit()
 

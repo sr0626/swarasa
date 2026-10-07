@@ -161,6 +161,17 @@ export interface LocationDetail {
   /** THIS location's own cuisine/dietary/type tags (never inherited from the brand). */
   cuisine_tags: CuisineTag[];
   is_open_now: boolean | null;
+  /**
+   * Today's hours in the LOCATION's timezone, computed server-side with the
+   * same rules as `is_open_now` (additive, 2026-09-24) — feeds the shared
+   * `describeOpenStatus` pill. Optional so an older API degrades to a plain
+   * "Open now"/"Closed now". `today_is_closed` true = closed the whole day.
+   */
+  today_open_time?: string | null;
+  today_close_time?: string | null;
+  today_is_closed?: boolean | null;
+  /** Now is before today's opening time (meaningful only when `is_open_now` is false). */
+  opens_later_today?: boolean | null;
   hours: LocationHour[];
   cover_photo_url: string | null;
   /** Up to 2 entries when is_paid=false, up to 10 when is_paid=true. */

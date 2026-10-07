@@ -38,6 +38,11 @@ class NearestLocationOut(BaseModel):
     open_time: time | None = None
     close_time: time | None = None
     is_closed: bool | None = None
+    # Additive (2026-09-24): meaningful only when `is_open_now` is false on an
+    # open day with known times. true = "now" is before today's opening time
+    # ("Closed now - opens 10am"); false = already past closing ("Closed now").
+    # null = open now / closed all day / hours unknown.
+    opens_later_today: bool | None = None
     # Public "does THIS nearest location have an active deal today" badge
     # signal — content-free by design (docs/DECISIONS.md "Deals: public
     # boolean signal, gated content"); every caller sees this, including

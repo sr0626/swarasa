@@ -311,7 +311,7 @@ async def test_manager_caused_edit_is_attributed_to_the_manager(client, db_sessi
 
 
 @pytest.mark.asyncio
-async def test_unresolvable_actor_falls_back_to_role_and_truncated_id(client, db_session, as_user):
+async def test_unresolvable_actor_falls_back_to_a_role_label(client, db_session, as_user):
     """When the Cognito lookup can't resolve an email (mocked to return
     None by the autouse fixture), the row must still show up with an
     honest fallback label rather than a blank/misleading one.
@@ -338,8 +338,10 @@ async def test_unresolvable_actor_falls_back_to_role_and_truncated_id(client, db
     assert response.status_code == 200, response.text
     row = response.json()["results"][0]
     assert row["actor_resolved"] is False
-    assert "platform admin" in row["actor_label"]
-    assert admin_sub[:8] in row["actor_label"]
+    # Honest role fallback ("a platform admin"), never a truncated id.
+    assert row["actor_label"] == "a platform admin"
+    assert row["actor_email"] is None
+    assert row["actor_role_label"] == "Platform admin"
 
 
 # ---------------------------------------------------------------------------

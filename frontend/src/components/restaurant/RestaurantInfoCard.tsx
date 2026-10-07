@@ -9,7 +9,7 @@
 // unknown). Maps links use the same Google Maps URL pattern as
 // components/listing/RestaurantCard.tsx (address search) plus the
 // directions URL for the "Get directions" affordance.
-import { formatPhone } from "@/lib/formatPhone";
+import { formatPhone, phoneHref } from "@/lib/formatPhone";
 import {
   DirectionsIcon,
   GlobeIcon,
@@ -58,10 +58,6 @@ export default function RestaurantInfoCard({
   if (!location && !site) return null;
 
   const todayIndex = location ? todayIndexInTimezone(location.timezone) : null;
-  const todayHour =
-    location && todayIndex !== null
-      ? location.hours.find((h) => h.day_of_week === todayIndex)
-      : undefined;
 
   let fullAddress = "";
   let mapsSearchUrl = "";
@@ -91,9 +87,10 @@ export default function RestaurantInfoCard({
         {location && (
           <OpenStatusBadge
             isOpenNow={location.is_open_now}
-            isClosedToday={todayHour?.is_closed}
-            openTime={todayHour?.open_time}
-            closeTime={todayHour?.close_time}
+            isClosedToday={location.today_is_closed}
+            openTime={location.today_open_time}
+            closeTime={location.today_close_time}
+            opensLaterToday={location.opens_later_today}
           />
         )}
       </div>
@@ -139,7 +136,7 @@ export default function RestaurantInfoCard({
             </div>
 
             {location.phone && (
-              <a href={`tel:${location.phone}`} className={linkClass}>
+              <a href={`tel:${phoneHref(location.phone)}`} className={linkClass}>
                 <PhoneIcon className="h-4 w-4 shrink-0" />
                 {formatPhone(location.phone)}
               </a>

@@ -20,19 +20,43 @@
 // schema types it renders) to avoid a mechanical rename touching every
 // consumer for no behavior change -- read it as "the activity feed
 // section", not "owner-only".
+//
+// Detail table (2026-09-24, direct user feedback -- "Location status updated,
+// You, Sep 24 10:45 PM" lacked detail): one row per changed field with
+// When (in the location's timezone, labelled) / Restaurant + location /
+// What changed / Previous / New / Updated by. A real <table> from `lg` up;
+// stacked cards on a phone (no horizontal page scroll at 375px). Row building
+// lives in lib/activity/ownerFeedRows.ts (unit-tested).
 import { useState } from "react";
 import { getMyActivityAction } from "@/app/account/actions";
 import { cardClass } from "@/components/account/accountShared";
-import LocalDateTime from "@/components/ui/LocalDateTime";
 import { ClockIcon } from "@/components/ui/icons";
+import { toActivityRows, type ActivityTableRow } from "@/lib/activity/ownerFeedRows";
+import { formatZonedDateTime } from "@/lib/format/zonedDateTime";
 import type { OwnerActivity } from "@/types/activity";
 import type { PaginatedResponse } from "@/types/common";
 
-const ACTION_BADGE: Record<string, string> = {
-  create: "bg-brand-success-bg text-brand-success",
-  update: "bg-brand-chip text-brand-ink-muted",
-  delete: "bg-brand-closed-bg text-brand-closed",
-};
+function ActorCell({ row }: { row: ActivityTableRow }) {
+  return (
+    <>
+      <span className="break-words font-medium text-brand-ink">{row.updatedBy}</span>
+      {row.updatedByRole && (
+        <span className="block text-xs text-brand-ink-subtle">{row.updatedByRole}</span>
+      )}
+    </>
+  );
+}
+
+function PlaceCell({ row }: { row: ActivityTableRow }) {
+  return (
+    <>
+      <span className="break-words font-medium text-brand-ink">{row.restaurant}</span>
+      {row.location && (
+        <span className="block break-words text-xs text-brand-ink-subtle">{row.location}</span>
+      )}
+    </>
+  );
+}
 
 export default function OwnerActivitySection({
   initialPage,
@@ -56,6 +80,7 @@ export default function OwnerActivitySection({
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(loadError);
 
+  const tableRows = toActivityRows(rows, formatZonedDateTime);
   const hasMore = rows.length < total;
 
   async function handleLoadMore() {
@@ -95,29 +120,66 @@ export default function OwnerActivitySection({
         <p className="mt-4 text-sm text-brand-ink-muted">No activity yet.</p>
       )}
 
-      {rows.length > 0 && (
-        <ul className="mt-4 divide-y divide-brand-border">
-          {rows.map((row) => (
-            <li key={row.id} className="flex flex-col gap-1 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-brand-ink">{row.summary}</p>
-                <p className="mt-0.5 text-xs text-brand-ink-muted">
-                  {row.actor_label}
-                  {!row.actor_resolved && " (name unavailable)"}
-                  {" — "}
-                  <LocalDateTime value={row.created_at} />
-                </p>
-              </div>
-              <span
-                className={`inline-flex w-fit shrink-0 items-center rounded-brand-pill px-2.5 py-1 text-xs font-semibold capitalize ${
-                  ACTION_BADGE[row.action] ?? "bg-brand-chip text-brand-ink-muted"
-                }`}
-              >
-                {row.action}
-              </span>
-            </li>
-          ))}
-        </ul>
+      {tableRows.length > 0 && (
+        <>
+          {/* Phone / tablet: one card per change. */}
+          <ul className="mt-4 divide-y divide-brand-border lg:hidden">
+            {tableRows.map((row) => (
+              <li key={row.key} className="py-3 first:pt-0 last:pb-0">
+                <p className="break-words text-sm font-semibold text-brand-ink">{row.what}</p>
+                <dl className="mt-1.5 grid grid-cols-[auto,1fr] gap-x-3 gap-y-1 text-sm">
+                  <dt className="text-brand-ink-subtle">Previous</dt>
+                  <dd className="min-w-0 break-words text-brand-ink-muted">{row.previous}</dd>
+                  <dt className="text-brand-ink-subtle">New</dt>
+                  <dd className="min-w-0 break-words font-medium text-brand-ink">{row.next}</dd>
+                  <dt className="text-brand-ink-subtle">Where</dt>
+                  <dd className="min-w-0">
+                    <PlaceCell row={row} />
+                  </dd>
+                  <dt className="text-brand-ink-subtle">By</dt>
+                  <dd className="min-w-0">
+                    <ActorCell row={row} />
+                  </dd>
+                  <dt className="text-brand-ink-subtle">When</dt>
+                  <dd className="min-w-0 text-brand-ink-muted">{row.when}</dd>
+                </dl>
+              </li>
+            ))}
+          </ul>
+
+          {/* Desktop: a real table. */}
+          <div className="mt-4 hidden overflow-x-auto lg:block">
+            <table className="w-full min-w-[720px] table-fixed border-collapse text-left text-sm">
+              <caption className="sr-only">Recent changes to your listings</caption>
+              <thead>
+                <tr className="border-b border-brand-border text-xs font-semibold uppercase tracking-wide text-brand-ink-subtle">
+                  <th scope="col" className="w-[17%] py-2 pr-3">When</th>
+                  <th scope="col" className="w-[17%] py-2 pr-3">Restaurant / location</th>
+                  <th scope="col" className="w-[14%] py-2 pr-3">What changed</th>
+                  <th scope="col" className="w-[17%] py-2 pr-3">Previous</th>
+                  <th scope="col" className="w-[17%] py-2 pr-3">New</th>
+                  <th scope="col" className="w-[18%] py-2">Updated by</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-brand-border align-top">
+                {tableRows.map((row) => (
+                  <tr key={row.key}>
+                    <td className="py-3 pr-3 text-brand-ink-muted">{row.when}</td>
+                    <td className="break-words py-3 pr-3">
+                      <PlaceCell row={row} />
+                    </td>
+                    <td className="break-words py-3 pr-3 font-semibold text-brand-ink">{row.what}</td>
+                    <td className="break-words py-3 pr-3 text-brand-ink-muted">{row.previous}</td>
+                    <td className="break-words py-3 pr-3 font-medium text-brand-ink">{row.next}</td>
+                    <td className="break-words py-3">
+                      <ActorCell row={row} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       {hasMore && (

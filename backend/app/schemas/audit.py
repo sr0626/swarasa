@@ -20,6 +20,19 @@ from pydantic import BaseModel
 from app.schemas.utc import UtcDatetime
 
 
+class ActivityChangeOut(BaseModel):
+    """One reader-facing change inside an activity event (one table row):
+    friendly `label` ("Status", "Address", "Hours (Monday)"), and the old/new
+    values already mapped to friendly text ("Live" / "Hidden", "(972)
+    555-0142"). `None` = no value (the UI shows a dash). `field` is the stable
+    raw key for tests/analytics, never shown."""
+
+    field: str
+    label: str
+    old: str | None = None
+    new: str | None = None
+
+
 class OwnerActivityOut(BaseModel):
     id: int
     table_name: str
@@ -44,6 +57,32 @@ class OwnerActivityOut(BaseModel):
     summary: str
 
     created_at: UtcDatetime
+
+    # --- Added 2026-09-24 (additive; every field above is unchanged) -------
+    # Where: the brand ("Restaurant") and, for a location-level event (or a
+    # manager-assignment on a location), the location's own name/label.
+    # `None` when the row is gone (a permanently deleted location) and no
+    # snapshot survives in the audit row.
+    brand_id: int | None = None
+    restaurant_name: str | None = None
+    location_id: int | None = None
+    location_name: str | None = None
+    # IANA timezone the UI formats `created_at` in (the location's own; brand-
+    # level events use the platform default), so server- and client-rendered
+    # times agree and carry a timezone label ("CDT").
+    timezone: str = "America/Chicago"
+
+    # Who: `actor_email` is the resolved email (also for "You"), `None` when
+    # unresolvable; `actor_role_label` is "Owner" | "Manager" | "Platform
+    # admin". `actor_label` keeps its meaning: "You", the email, or an honest
+    # "a manager"-style fallback (`actor_resolved` false).
+    actor_email: str | None = None
+    actor_role_label: str = ""
+
+    # What changed: one entry per changed field (see `services/audit_diff.py`
+    # for the grouping rules). Empty for a create/delete (or an unchanged
+    # save) — the UI then shows `summary` alone.
+    changes: list[ActivityChangeOut] = []
 
 
 class OwnerActivityListResponse(BaseModel):

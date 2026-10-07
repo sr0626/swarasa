@@ -104,16 +104,19 @@ dependency in `app/dependencies/auth.py`.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies.pagination import Pagination
 from app.models.audit_log import AuditLog
 from app.models.location_manager import LocationManager
+from app.models.owner_account import OwnerAccount
 from app.models.restaurant_brand import RestaurantBrand
 from app.models.restaurant_location import RestaurantLocation
-from app.schemas.audit import OwnerActivityListResponse, OwnerActivityOut
-from app.services import cognito_service
+from app.schemas.audit import ActivityChangeOut, OwnerActivityListResponse, OwnerActivityOut
+from app.services import audit_diff, cognito_service
 from app.services.auth_service import get_owner_account_by_sub
 
 _ENTITY_LABELS = {
@@ -146,13 +149,6 @@ _FIELD_LABELS = {
     "user_id": "assigned manager",
     "revoked_at": "manager assignment",
 }
-
-_ROLE_LABELS = {
-    "owner": "owner",
-    "manager": "manager",
-    "admin": "platform admin",
-}
-
 
 def _summarize(table_name: str, action: str, old_val: dict | None, new_val: dict | None) -> str:
     """A short, human-readable one-liner for one audit_log row — never the
@@ -213,43 +209,165 @@ def _summarize(table_name: str, action: str, old_val: dict | None, new_val: dict
     return f"{entity} {', '.join(labels)} updated"
 
 
-def _resolve_actor_label(
-    actor_id: str, actor_role: str, current_user, cache: dict[str, tuple[str, bool]]
-) -> tuple[str, bool]:
-    """Returns `(label, resolved)`. `resolved=True` means `label` is a
-    real human-readable identity (the caller themselves, or an email
-    resolved via Cognito); `resolved=False` means `label` is the
-    role + truncated-id fallback (task brief: "otherwise just show
-    actor_role + a truncated actor id and note the gap").
+DEFAULT_TIMEZONE = "America/Chicago"
 
-    A Cognito lookup happens at most once per distinct `actor_id` on a
-    page (cached in `cache`) — the same "email is a display-only,
-    best-effort field" posture `location_manager_service._to_out` and
-    `cognito_service.find_email_by_sub` already use, just memoized here
-    since a single activity page can repeat the same actor across many
-    rows.
-    """
-    if actor_id == current_user.cognito_sub:
-        return "You", True
+_ROLE_DISPLAY = {"owner": "Owner", "manager": "Manager", "admin": "Platform admin"}
+_ROLE_FALLBACK = {"owner": "an owner", "manager": "a manager", "admin": "a platform admin"}
 
-    if actor_id in cache:
-        return cache[actor_id]
 
-    email = None
-    try:
-        email = cognito_service.find_email_by_sub(actor_id)
-    except Exception:  # noqa: BLE001 - display-only field, never break the read path
-        email = None
+@dataclass
+class _PageContext:
+    """Everything a page of rows needs, fetched in a FIXED number of queries
+    (never one per row): manager rows, locations, brands, owner emails."""
 
+    manager_rows: dict[int, tuple[int, str]] = field(default_factory=dict)  # id -> (location_id, user_id)
+    locations: dict[int, dict] = field(default_factory=dict)
+    brand_names: dict[int, str] = field(default_factory=dict)
+    emails: dict[str, str] = field(default_factory=dict)  # cognito sub -> email
+
+
+def _snapshot_sub(row: AuditLog) -> str | None:
+    for snapshot in (row.new_val, row.old_val):
+        if isinstance(snapshot, dict) and snapshot.get("user_id"):
+            return str(snapshot["user_id"])
+    return None
+
+
+async def _resolve_emails(db: AsyncSession, subs: set[str]) -> dict[str, str]:
+    """sub -> email. Owners come from `owner_account` in ONE query; anyone
+    left (managers, admins) gets a best-effort Cognito lookup, once per
+    distinct sub. Display-only: a miss just means no email."""
+    if not subs:
+        return {}
+    emails: dict[str, str] = {}
+    result = await db.execute(
+        select(OwnerAccount.cognito_sub, OwnerAccount.email).where(
+            OwnerAccount.cognito_sub.in_(subs)
+        )
+    )
+    for sub, email in result.all():
+        if email:
+            emails[sub] = email
+    for sub in subs - emails.keys():
+        try:
+            email = cognito_service.find_email_by_sub(sub)
+        except Exception:  # noqa: BLE001 - display-only field, never break the read path
+            email = None
+        if email:
+            emails[sub] = email
+    return emails
+
+
+def _location_label(name: str | None, line1: str | None, city: str | None) -> str:
+    if name and name.strip():
+        return name.strip()
+    return ", ".join(part for part in (line1, city) if part)
+
+
+async def _load_page_context(db: AsyncSession, rows, current_user) -> _PageContext:
+    ctx = _PageContext()
+
+    manager_record_ids = {r.record_id for r in rows if r.table_name == "location_manager"}
+    if manager_record_ids:
+        result = await db.execute(
+            select(LocationManager.id, LocationManager.location_id, LocationManager.user_id).where(
+                LocationManager.id.in_(manager_record_ids)
+            )
+        )
+        ctx.manager_rows = {mid: (lid, uid) for mid, lid, uid in result.all()}
+
+    location_ids = {r.record_id for r in rows if r.table_name == "restaurant_location"}
+    location_ids |= {lid for lid, _ in ctx.manager_rows.values()}
+    brand_ids = {r.record_id for r in rows if r.table_name == "restaurant_brand"}
+    if location_ids:
+        result = await db.execute(
+            select(
+                RestaurantLocation.id,
+                RestaurantLocation.brand_id,
+                RestaurantLocation.location_name,
+                RestaurantLocation.address_line1,
+                RestaurantLocation.city,
+                RestaurantLocation.timezone,
+            ).where(RestaurantLocation.id.in_(location_ids))
+        )
+        for lid, bid, name, line1, city, tz in result.all():
+            ctx.locations[lid] = {
+                "brand_id": bid,
+                "label": _location_label(name, line1, city),
+                "timezone": tz or DEFAULT_TIMEZONE,
+            }
+            brand_ids.add(bid)
+    if brand_ids:
+        result = await db.execute(
+            select(RestaurantBrand.id, RestaurantBrand.name).where(RestaurantBrand.id.in_(brand_ids))
+        )
+        ctx.brand_names = {bid: name for bid, name in result.all()}
+
+    subs = {r.actor_id for r in rows}
+    subs |= {uid for _, uid in ctx.manager_rows.values()}
+    subs |= {sub for r in rows if r.table_name == "location_manager" and (sub := _snapshot_sub(r))}
+    subs.discard(current_user.cognito_sub)
+    ctx.emails = await _resolve_emails(db, subs)
+    return ctx
+
+
+def _actor_fields(row: AuditLog, current_user, ctx: _PageContext) -> tuple[str, bool, str | None]:
+    """`(actor_label, resolved, actor_email)`. "You" for the caller (with
+    their own email); else the resolved email; else an honest role fallback
+    ("a manager") — never a truncated id."""
+    if row.actor_id == current_user.cognito_sub:
+        return "You", True, current_user.email
+    email = ctx.emails.get(row.actor_id)
     if email:
-        result = (email, True)
-    else:
-        role_label = _ROLE_LABELS.get(actor_role, actor_role)
-        truncated = actor_id[:8] + "…" if len(actor_id) > 8 else actor_id
-        result = (f"{role_label} ({truncated})", False)
+        return email, True, email
+    return _ROLE_FALLBACK.get(row.actor_role, f"a {row.actor_role}"), False, None
 
-    cache[actor_id] = result
-    return result
+
+def _manager_subject(row: AuditLog, current_user, ctx: _PageContext) -> str | None:
+    """Who a `location_manager` row is ABOUT (the manager being assigned/
+    revoked), as an email, "you", or None."""
+    sub = (ctx.manager_rows.get(row.record_id) or (None, None))[1] or _snapshot_sub(row)
+    if sub is None:
+        return None
+    if sub == current_user.cognito_sub:
+        return "you"
+    return ctx.emails.get(sub)
+
+
+def _where(row: AuditLog, ctx: _PageContext) -> dict:
+    """brand/location names + timezone for one row, from the batched context
+    (falling back to the audit snapshot when the entity has been deleted)."""
+    location_id: int | None = None
+    if row.table_name == "restaurant_location":
+        location_id = row.record_id
+    elif row.table_name == "location_manager":
+        location_id = (ctx.manager_rows.get(row.record_id) or (None, None))[0]
+        if location_id is None:
+            for snapshot in (row.new_val, row.old_val):
+                if isinstance(snapshot, dict) and snapshot.get("location_id"):
+                    location_id = int(snapshot["location_id"])
+                    break
+
+    brand_id: int | None = row.record_id if row.table_name == "restaurant_brand" else None
+    location_name: str | None = None
+    timezone = DEFAULT_TIMEZONE
+    info = ctx.locations.get(location_id) if location_id is not None else None
+    if info is not None:
+        brand_id = info["brand_id"]
+        location_name = info["label"]
+        timezone = info["timezone"]
+    elif location_id is not None:
+        snap = row.new_val if isinstance(row.new_val, dict) and row.new_val else row.old_val
+        snap = snap if isinstance(snap, dict) else {}
+        location_name = _location_label(None, snap.get("address_line1"), snap.get("city")) or None
+
+    return {
+        "brand_id": brand_id,
+        "restaurant_name": ctx.brand_names.get(brand_id) if brand_id is not None else None,
+        "location_id": location_id,
+        "location_name": location_name,
+        "timezone": timezone,
+    }
 
 
 async def _list_activity(
@@ -261,8 +379,9 @@ async def _list_activity(
     """Shared count/fetch/serialize for both roles — `list_owner_activity`
     and `list_manager_activity` differ only in how `ownership_filter` (a
     SQLAlchemy boolean expression over `AuditLog.table_name`/`record_id`)
-    is built; everything after that — pagination, ordering, actor-label
-    resolution, summarization — is identical.
+    is built; everything after that — pagination, ordering, name/actor
+    resolution, diffing — is identical, and the per-page lookups are batched
+    (`_load_page_context`), never one query per row.
     """
     total = (
         await db.execute(select(func.count()).select_from(AuditLog).where(ownership_filter))
@@ -278,10 +397,16 @@ async def _list_activity(
         )
     ).scalars().all()
 
-    actor_cache: dict[str, tuple[str, bool]] = {}
+    ctx = await _load_page_context(db, rows, current_user)
     results: list[OwnerActivityOut] = []
     for row in rows:
-        label, resolved = _resolve_actor_label(row.actor_id, row.actor_role, current_user, actor_cache)
+        label, resolved, actor_email = _actor_fields(row, current_user, ctx)
+        manager_label = (
+            _manager_subject(row, current_user, ctx) if row.table_name == "location_manager" else None
+        )
+        changes = audit_diff.diff_changes(
+            row.table_name, row.action, row.old_val, row.new_val, manager_label=manager_label
+        )
         results.append(
             OwnerActivityOut(
                 id=row.id,
@@ -292,6 +417,13 @@ async def _list_activity(
                 actor_resolved=resolved,
                 summary=_summarize(row.table_name, row.action, row.old_val, row.new_val),
                 created_at=row.created_at,
+                actor_email=actor_email,
+                actor_role_label=_ROLE_DISPLAY.get(row.actor_role, row.actor_role.capitalize()),
+                changes=[
+                    ActivityChangeOut(field=c.field, label=c.label, old=c.old, new=c.new)
+                    for c in changes
+                ],
+                **_where(row, ctx),
             )
         )
 

@@ -1,6 +1,15 @@
 // Types for `GET /auth/me/activity` — docs/API_CONTRACTS.md
 // "GET /auth/me/activity". Matches backend/app/schemas/audit.py exactly.
 
+/** One friendly changed field inside an activity event (already mapped:
+ * "Live" / "Hidden", "(972) 555-0142"; `null` = no value, shown as a dash). */
+export interface ActivityChange {
+  field: string;
+  label: string;
+  old: string | null;
+  new: string | null;
+}
+
 export interface OwnerActivity {
   id: number;
   table_name: string;
@@ -23,4 +32,18 @@ export interface OwnerActivity {
   summary: string;
 
   created_at: string;
+
+  // --- Detail fields (added 2026-09-24; optional so an older API degrades to
+  // the summary-only row) --------------------------------------------------
+  brand_id?: number | null;
+  restaurant_name?: string | null;
+  location_id?: number | null;
+  location_name?: string | null;
+  /** IANA timezone `created_at` is displayed in (the location's own). */
+  timezone?: string;
+  actor_email?: string | null;
+  /** "Owner" | "Manager" | "Platform admin". */
+  actor_role_label?: string;
+  /** Empty for a create/delete (or an unchanged save): show `summary` alone. */
+  changes?: ActivityChange[];
 }
