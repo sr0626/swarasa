@@ -12,12 +12,7 @@
 import Link from "next/link";
 import SwarasaMark from "@/components/icons/SwarasaMark";
 import { DEFAULT_CITY_LABEL } from "@/lib/constants/city";
-
-const FOOTER_LINKS = [
-  { href: "/about", label: "About Us" },
-  { href: "/contact", label: "Contact Us" },
-  { href: "/terms", label: "Terms & Privacy" },
-] as const;
+import { FOOTER_LINKS } from "./footerLinks";
 
 export default function Footer() {
   const year = new Date().getFullYear();
