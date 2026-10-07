@@ -138,7 +138,7 @@ function MessageCard({
         <div>
           <dt className="text-brand-ink-subtle">Sent</dt>
           <dd className="mt-0.5 font-medium text-brand-ink">
-            <LocalDateTime iso={message.created_at} />
+            <LocalDateTime value={message.created_at} />
           </dd>
         </div>
         <div>
@@ -167,7 +167,7 @@ function MessageCard({
           <div>
             <dt className="text-brand-ink-subtle">Resolved</dt>
             <dd className="mt-0.5 font-medium text-brand-ink">
-              <LocalDateTime iso={message.resolved_at} />
+              <LocalDateTime value={message.resolved_at} />
             </dd>
           </div>
         )}
