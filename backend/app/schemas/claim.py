@@ -1,10 +1,11 @@
 """Claim flow (/claim) — see docs/API_CONTRACTS.md "Claim flow (/claim)"."""
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, model_validator
+
+from app.schemas.utc import UtcDatetime
 
 ProofMethod = Literal["google_business_profile", "phone_verification", "document_upload"]
 
@@ -30,9 +31,9 @@ class ClaimOut(BaseModel):
     brand_id: int
     status: str
     proof_method: str
-    submitted_at: datetime
-    sla_due_at: datetime
-    reviewed_at: datetime | None = None
+    submitted_at: UtcDatetime
+    sla_due_at: UtcDatetime
+    reviewed_at: UtcDatetime | None = None
     reviewer_notes: str | None = None
     # Only ever set on the `POST /claim/{id}/approve` response: True = claimant
     # added to the Cognito `owner` group, False = attempted and failed
@@ -59,9 +60,9 @@ class ClaimQueueItem(BaseModel):
     google_business_profile_url: str | None = None
     supporting_document_url: str | None = None
     status: str
-    submitted_at: datetime
-    sla_due_at: datetime
-    reviewed_at: datetime | None = None
+    submitted_at: UtcDatetime
+    sla_due_at: UtcDatetime
+    reviewed_at: UtcDatetime | None = None
     reviewer_notes: str | None = None
 
 

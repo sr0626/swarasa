@@ -19,6 +19,7 @@
 // `frontend/src/lib/api/locations.ts`'s photo upload already uses
 // (getLocationPhotoUploadUrl -> PUT to S3 -> createLocationPhoto).
 import { useState } from "react";
+import LocalDateTime from "@/components/ui/LocalDateTime";
 import Link from "next/link";
 import { submitClaimAction } from "@/app/claim/actions";
 import { createClaimSchema } from "@/lib/validation/claim";
@@ -58,14 +59,6 @@ const PROOF_METHODS: Array<{
       "Fallback option — provide a business license or utility bill for manual admin review.",
   },
 ];
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
 
 export default function ClaimForm({ brandId, brandName, locations }: ClaimFormProps) {
   const [proofMethod, setProofMethod] = useState<ClaimProofMethod>(
@@ -159,13 +152,13 @@ export default function ClaimForm({ brandId, brandName, locations }: ClaimFormPr
           <div>
             <dt className="text-brand-ink-subtle">Submitted</dt>
             <dd className="mt-1 font-medium text-brand-ink">
-              {formatDate(result.submitted_at)}
+              <LocalDateTime value={result.submitted_at} variant="date" />
             </dd>
           </div>
           <div>
             <dt className="text-brand-ink-subtle">Review due by</dt>
             <dd className="mt-1 font-medium text-brand-ink">
-              {formatDate(result.sla_due_at)}
+              <LocalDateTime value={result.sla_due_at} variant="date" />
             </dd>
           </div>
         </dl>

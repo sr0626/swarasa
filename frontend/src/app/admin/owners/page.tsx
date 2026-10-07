@@ -28,6 +28,7 @@ import {
   parseOwnerSort,
   parsePage,
 } from "@/lib/adminOwnersView";
+import LocalDateTime from "@/components/ui/LocalDateTime";
 import type { AdminOwnerRow } from "@/types/adminOwners";
 
 export const metadata: Metadata = {
@@ -35,12 +36,6 @@ export const metadata: Metadata = {
 };
 
 const PAGE_SIZE = 20;
-
-function formatDate(value: string): string {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "Unknown";
-  return parsed.toLocaleDateString("en-US", { dateStyle: "medium" });
-}
 
 interface OwnersPageProps {
   searchParams: { page?: string; q?: string; sort?: string };
@@ -249,7 +244,7 @@ function OwnerRow({ owner }: { owner: AdminOwnerRow }) {
           </>
         )}
       </td>
-      <td className="px-4 py-3 text-brand-ink-muted">{formatDate(owner.joined_at)}</td>
+      <td className="px-4 py-3 text-brand-ink-muted"><LocalDateTime value={owner.joined_at} variant="date" fallback="Unknown" /></td>
       <td className="px-4 py-3 text-brand-ink">{owner.brand_count}</td>
       <td className="px-4 py-3 text-brand-ink">
         {owner.location_count > 0 || owner.brand_count > 0 ? (

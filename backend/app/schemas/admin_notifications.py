@@ -2,16 +2,16 @@
 docs/API_CONTRACTS.md "Admin notifications"."""
 from __future__ import annotations
 
-from datetime import datetime
-
 from pydantic import BaseModel
+
+from app.schemas.utc import UtcDatetime
 
 
 class ClaimNotificationItem(BaseModel):
     claim_id: int
     brand_id: int
     brand_name: str
-    submitted_at: datetime
+    submitted_at: UtcDatetime
 
 
 class ReportNotificationItem(BaseModel):
@@ -19,7 +19,7 @@ class ReportNotificationItem(BaseModel):
     brand_id: int
     brand_name: str
     category: str
-    submitted_at: datetime
+    submitted_at: UtcDatetime
 
 
 class NewUserNotificationItem(BaseModel):
@@ -28,7 +28,7 @@ class NewUserNotificationItem(BaseModel):
     display: str
     email: str
     role: str
-    created_at: datetime
+    created_at: UtcDatetime
 
 
 class ClaimNotifications(BaseModel):

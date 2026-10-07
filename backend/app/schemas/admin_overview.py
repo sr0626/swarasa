@@ -83,3 +83,8 @@ class AdminOverviewResponse(BaseModel):
     # soon" tile against without a second schema/response change once the
     # companion PR lands.
     registered_user_count: int | None = None
+    # Distinct people holding at least one ACTIVE `location_manager`
+    # assignment (the "Managers" tile -> `/admin/managers`). Local DB only.
+    # The Managers report also lists people whose assignments were all
+    # revoked, so its `total` can exceed this tile.
+    manager_count: int = 0
