@@ -4,10 +4,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { FOOTER_LINKS } from "./footerLinks.ts";
 
-test("footer links include a Privacy link to /privacy", () => {
+test("footer links include a Your Data link to /privacy", () => {
   const link = FOOTER_LINKS.find((l) => l.href === "/privacy");
   assert.ok(link);
-  assert.equal(link.label, "Privacy");
+  assert.equal(link.label, "Your Data");
 });
 
 test("footer hrefs and labels are unique", () => {
