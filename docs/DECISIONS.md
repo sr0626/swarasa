@@ -2829,6 +2829,44 @@ role group. IAM: one statement scoped to the single user-pool ARN with exactly
 the four actions (human applies Terraform; until then the actions return 502).
 *Rejected: AdminCreateUser/AdminDeleteUser/AdminSetUserPassword (not needed, wider blast radius); a migration to add a text record_id now*
 
+**Manager invite-by-email without SES: single-use link the owner shares**
+2026-10-28 | Built in PR #253 (migration `0020_manager_invite`). An owner (or
+an admin acting for them) creates an invite for one of their locations and
+copies the link to send it themselves, since SES is deferred and Cognito
+`AdminCreateUser` would need extra IAM plus a forced-new-password login step
+the app does not handle. Token is 32 random bytes; only its SHA-256 is stored
+(compared with `hmac.compare_digest`); single use, 14-day expiry, revocable,
+20 creations per owner per day (429). Token travels in the POST body, never
+the URL. Acceptance is explicit at `/invite/<token>`: the signed-in caller's
+email must match the invited address, then the cross-owner rule and both caps
+are re-run, the `location_manager` row and audit entry are written, and the
+Cognito `manager` group is added with the existing grant (rolled back on
+failure). Every bad token returns the same 404 and creation does no Cognito
+lookup, so nothing reveals whether an email has an account. Invitee email is
+redacted once an invite is accepted or revoked; CCPA export and deletion cover
+invites. A raw link exists only on the page where it was created ("New link"
+revokes the previous one).
+*Rejected: auto-applying a pending invite on /auth/me (token and email check
+would be spread across two places); Cognito AdminCreateUser (IAM, login flow);
+storing the raw token (a DB read would expose usable links)*
+
+**Role resolution uses a fixed precedence (admin > owner > manager > registered_user)**
+2026-10-28 | Built in PR #253. An invitee who signed up as a diner and then
+accepted a manager invite is in two Cognito groups (no remove-from-group IAM
+is granted). `_extract_role` now picks by fixed precedence instead of the
+order groups appear in the token, matching the admin user directory.
+*Rejected: granting AdminRemoveUserFromGroup (wider IAM for little gain)*
+
+**Self-service sign-up assigns only the owner and registered_user groups**
+2026-10-28 | Fixed in PR #254. The post-confirmation Lambda maps the
+sign-up `custom:role` attribute to a Cognito group for `owner` and
+`registered_user` only; any other value is logged and ignored. Manager
+membership comes from the API (owner assignment or invite acceptance) and
+admin membership is granted manually. The Lambda is zip-packaged by
+Terraform, so changes to it take effect only after the human's plan and apply.
+*Rejected: keeping a "defensive" mapping for manager/admin (privileged groups
+must never be reachable from a client-supplied value)*
+
 **Online ordering = redirect link model in Phase 4 (not on-platform checkout)**
 May 2026 | Platform links to restaurant's own ordering system (DoorDash, their own URL).
 Avoids food delivery logistics, payment processing liability, and fulfilment complexity.
