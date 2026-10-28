@@ -24,20 +24,15 @@ fastapi/sqlalchemy/mangum, which this tiny zip-packaged Lambda does not
 install — see infra/modules/cognito/main.tf's packaging comment for why this
 Lambda is zip, not the API Lambda's container-image convention).
 
-Role -> group mapping and the manager/admin question: the current sign-up
-form only ever sends `custom:role = "owner"` or `custom:role =
-"registered_user"` — `manager` accounts are provisioned by an existing owner
-inviting an existing Cognito user by email (Location Managers sub-resource),
-and `admin` accounts are provisioned manually by a human
-(seed_dev_data.py's documented prerequisite). Neither goes through
-self-service sign-up today. This handler still maps `manager` -> the
-`manager` group and `admin` -> the `admin` group defensively (ROLE_TO_GROUP
-below) rather than treating them as invalid: if a future sign-up flow (or a
-bug) ever sends one of those values, silently leaving that user in no group
-at all — with nothing in the logs to say why — is a worse failure mode than
-honoring an explicit, well-formed role value the same way `owner`/
-`registered_user` are honored. Both paths cost the same one
-AdminAddUserToGroup call, so there is no real downside to supporting them.
+Role -> group mapping: ONLY `owner` and `registered_user` are honored.
+`custom:role` is a client-settable attribute on a public app client, so
+anyone can call Cognito SignUp directly with any value. Honoring `admin` or
+`manager` here let a self-signed-up user confirm their email and land in the
+admin group (privilege escalation, fixed 2026-10-28). `manager` accounts get
+their group from the invite-accept path in the API (which validates a
+single-use token and email match) or an owner assigning an existing user, and
+`admin` accounts are provisioned manually by a human. Any other value is
+logged and ignored (the user lands in no group).
 
 Never raises. AWS's own guidance for Cognito Lambda triggers
 (https://docs.aws.amazon.com/cognito/latest/developerguide/user-pool-lambda-triggers.html)
@@ -58,16 +53,12 @@ import boto3
 logger = logging.getLogger("app.lambda_handlers.cognito_post_confirmation")
 
 # custom:role value -> Cognito pool group name (infra/modules/cognito/main.tf
-# defines exactly these 4 groups: owner, manager, admin, registered_user).
+# defines 4 groups; only the two self-service ones may be assigned here).
 # Keys are lowercase; the handler lowercases the incoming attribute before
 # lookup so a stray case mismatch doesn't fall through as "unrecognized".
 ROLE_TO_GROUP = {
     "owner": "owner",
     "registered_user": "registered_user",
-    # Defensive only — see module docstring. No current sign-up path sends
-    # these, but honoring them costs nothing and avoids a silent no-op.
-    "manager": "manager",
-    "admin": "admin",
 }
 
 _cognito_client = None
