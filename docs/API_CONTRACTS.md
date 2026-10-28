@@ -3329,6 +3329,80 @@ Errors:
 | 403 | `forbidden` | caller is not admin |
 | 422 | — | `page`/`page_size` out of range, or unknown `sort` |
 
+### Admin: assign an owner to an unclaimed listing
+
+`POST /admin/restaurants/{brand_id}/assign-owner` — Auth: admin only. Attaches
+a listing that has **no owner** (`restaurant_brand.owner_id IS NULL`, the
+"Unclaimed" provenance on `/admin/listings`) to an owner, bypassing the claim
+flow (admin-curated / seeded listings). Sets `owner_id`, `is_claimed=true`,
+`claimed_at=now` exactly like `POST /claim/{id}/approve`.
+
+Body (**exactly one** of the two; anything else → `422`):
+```json
+{ "owner_id": 12 }
+```
+```json
+{ "owner_email": "owner@example.com" }
+```
+`owner_email` is trimmed + lower-cased. It resolves, in order, to (1) an
+existing `owner_account` with that email; else (2) a Cognito **`owner`-group**
+user with that email (one `ListUsersInGroup` sweep — the same IAM grant the
+admin registered-users/managers reports use, no new permission), for whom an
+`owner_account` is created through `auth_service.get_or_create_owner_account`
+(the same path as `GET /auth/me` / `POST /claim`) and audited
+(`owner_account` `create`, `source: admin_pre_create`).
+
+Response `200`:
+```json
+{
+  "brand_id": 7, "owner_id": 12, "owner_email": "owner@example.com",
+  "is_claimed": true, "owner_account_created": false, "revoked_manager_count": 0
+}
+```
+
+**JUDGMENT CALLS:**
+- **Tier is untouched.** No `is_paid` / `paid_until` is read or written.
+- **Managers.** An unclaimed brand normally has no active `location_manager`
+  rows, but orphans can exist (an owner_account was removed, `owner_id` went
+  NULL). Applying "Manager scoped to one owner at a time" (DECISIONS.md, PR
+  #229): any such manager who ALSO holds an active assignment under a
+  *different* owner has this brand's assignment **revoked** (`is_active=false`,
+  `revoked_at`, `location_manager` audit row, WARNING log with ids; the other
+  owner is never named in the response); managers with no conflict stay and now
+  work for the new owner. `revoked_manager_count` reports how many.
+- **Pending claim blocks it** (`409 claim_pending`): approve/reject the claim
+  instead, so a later approval can't overwrite an admin assignment.
+- **Audit:** `restaurant_brand` `update` (old/new `owner_id`, `is_claimed`,
+  `claimed_at`, `source: admin_assign_owner`), all in the same transaction.
+- **No unassign endpoint.** Removing an owner from a live listing would orphan
+  managers, per-owner billing linkage (deferred) and the owner's portal access
+  in one step, and there is no way to tell an admin-assigned brand from a
+  claimed one; deliberately not built. Revisit with an explicit product ask.
+
+Errors (generic wording; `code` is the machine-readable reason):
+| Status | Code | When |
+|---|---|---|
+| 403 | `forbidden` | caller is not admin |
+| 404 | `not_found` | brand missing or soft-deleted |
+| 404 | `owner_not_found` | unknown / CCPA-deleted `owner_id`, or the email is neither a local owner nor in the Cognito `owner` group |
+| 409 | `brand_already_owned` | brand already has an owner (message does not name them) |
+| 409 | `claim_pending` | a claim on the brand is `pending_review` |
+| 422 | — | not exactly one of `owner_id`/`owner_email`, bad email shape, unknown field |
+| 502 | `upstream_error` | Cognito lookup failed (nothing is written) |
+
+### POST /admin/owners
+
+Auth: admin only. Pre-creates the `owner_account` for an **existing** Cognito
+`owner`-group user so the admin can see/assign them before they ever sign in.
+Body `{ "email": "owner@example.com" }`. **No invitation or email is sent and
+no Cognito user is created** (invite-by-email is the separate backlog item).
+Response `201`: `{ "id": 12, "email": "owner@example.com", "joined_at": "…Z" }`.
+Audited as `owner_account` `create`. Errors: `403 forbidden`, `404
+owner_not_found` (email not in the Cognito `owner` group), `409 owner_exists`
+(an owner_account already has that email), `422` (bad email), `502
+upstream_error`. Assign-by-email above reuses the same resolver, so this form
+is only a convenience to create the account without assigning a listing.
+
 ### GET /admin/managers
 
 Added 2026-10-05. Auth: admin only. Manager directory for the admin
