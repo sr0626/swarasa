@@ -4150,3 +4150,95 @@ Auth: registered_user. Response `200`: `{"marked_read": int}`.
 **CCPA.** `GET /auth/me/data-export` includes `notifications`
 (`kind, title, location_id, created_at, read_at`); `data_scope.notifications`
 counts them; an approved deletion request hard-deletes them.
+
+---
+
+## Manager invites (`/locations/{id}/manager-invites`, `/manager-invites`) — invite a manager who has no account yet
+
+Table: `manager_invite` (migration `0020_manager_invite`). Closes the gap
+that `POST /locations/{id}/managers` only works for someone who ALREADY has a
+Cognito account (`404 manager_not_found` otherwise). **No email is sent** (SES
+deferred): creating an invite returns a single-use link secret ONCE; the owner
+copies the link (`{origin}/invite/{token}`) and sends it themselves. The
+invitee signs up / signs in with the invited address, opens the link and
+accepts; only then is a real `location_manager` row created, through the SAME
+rules as `POST /locations/{id}/managers`.
+
+**Token.** 32 random bytes (`secrets.token_urlsafe(32)`, 43 chars). Only the
+SHA-256 hex hash is stored; lookup is by hash plus a constant-time re-compare.
+Single use (`accepted_at`), 14-day expiry (`expires_at`), revocable
+(`revoked_at`). Travels in POST bodies, never a URL path the API sees.
+
+**No disclosure.** Creating an invite does no Cognito lookup and no cross-owner
+check, so the response is identical whether the address has an account or
+already manages another owner's location. Every unusable token (unknown,
+expired, revoked, already used, signed in with a different email, location or
+ownership changed) is the SAME `404 invite_invalid`. Rule failures at accept
+time are one generic `409 invite_cannot_be_accepted` (precise reason only in
+server logs).
+
+### `POST /locations/{id}/manager-invites`
+Auth: the location's owner, or admin acting for them
+(`require_location_owner_or_admin`; `invited_by_owner_id` is always the brand
+owner, the admin is recorded in `audit_log`). Body `{"email": str}` (trimmed,
+lowercased, loosely validated; `422` otherwise). Checks, in order: location
+exists (`404`); brand has an owner (`409 owner_required`); per-owner rate limit
+**20 invites per rolling 24h** (`429 invite_rate_limited`); the location's
+paid-tier active-manager cap (`409 manager_cap_reached`, the owner's own data).
+Any still-pending invite for the same (location, email) is revoked first (a
+fresh link supersedes). Response `201`:
+`{id, location_id, email, status: "pending", created_at, expires_at, token}`.
+`token` is returned only here. Audit: `manager_invite` / `create` (no email in
+the audit row).
+
+### `GET /locations/{id}/manager-invites`
+Auth: owner (of the location) or admin. Query `page`, `page_size` (default 20,
+max 100). Outstanding invites only (pending + expired; accepted ones are
+managers, revoked ones are gone), newest first. Response
+`{results: [{id, location_id, email, status: "pending"|"expired", created_at,
+expires_at}], page, page_size, total}`. Never includes the token.
+
+### `DELETE /locations/{id}/manager-invites/{invite_id}`
+Auth: owner or admin. `204`, idempotent for an already-revoked invite; `404`
+if the invite is not on this location; `409 invite_already_accepted` once used
+(remove the manager instead). Sets `revoked_at` and redacts the stored email.
+Audit: `manager_invite` / `delete`.
+
+### `POST /manager-invites/preview`
+Auth: PUBLIC (the token is the credential). Body `{"token": str}`. Response
+`{brand_name, location_name, city, email_hint ("j***@example.com"),
+expires_at}`; any unusable token is `404 invite_invalid`.
+
+### `POST /manager-invites/accept`
+Auth: any signed-in account, but only `registered_user`/`manager` roles may
+accept (owner/admin -> `403 invite_wrong_account_type`). Body `{"token": str}`.
+Order: token usable -> the caller's (Cognito-verified) email equals the invited
+address (else the generic `404 invite_invalid`) -> location/brand still exist
+and the brand is still owned by the inviting owner -> cross-owner rule
+(`assert_manager_belongs_to_same_owner`) -> location cap
+(`assert_can_add_active_manager`) -> manager cap
+(`assert_manager_not_over_location_cap`) -> insert `location_manager` ->
+Cognito `AdminAddUserToGroup(manager)` (skipped when the token already says
+manager; a Cognito failure rolls everything back, `503 invite_try_again`,
+retryable) -> commit. Already an active manager of this location: no duplicate
+row, invite still consumed. Rule failures: `409 invite_cannot_be_accepted`.
+Audit: `location_manager` / `create` with `actor_id` = the invitee and
+`new_val.via_invite_id`. The invite's `accepted_at` is set and its email
+redacted. Response `200`:
+`{location_id, brand_name, location_name, sign_in_again}`; `sign_in_again` is
+true when the caller was not yet in the `manager` group (their current token
+predates the group, so the UI asks them to sign in again).
+
+**Role resolution.** An invitee who signed up as a diner ends up in BOTH the
+`registered_user` and `manager` groups (no `AdminRemoveUserFromGroup` grant).
+`app/dependencies/auth.py::_extract_role` therefore resolves by a fixed
+precedence (`admin > owner > manager > registered_user`) instead of token
+order.
+
+**CCPA.** `GET /auth/me/data-export` includes `manager_invites` (invites the
+caller sent as an owner, and ones addressed to their login email:
+`invite_id, direction, location_id, email, status, created_at, expires_at,
+accepted_at, revoked_at`); `data_scope.manager_invites` counts them. An approved
+deletion request redacts the invitee email on those rows and revokes any live
+link (rows are kept for rate-limit bookkeeping). Invitee emails are also
+redacted as soon as an invite is accepted or revoked.

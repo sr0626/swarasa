@@ -171,3 +171,20 @@ specific `location_id` (link target) and is fanned out to every follower of
 that location's brand. Not on the audited-entity list (the `deal` create is
 already audited). Included in CCPA export; hard-deleted on an approved
 deletion request.
+
+## manager_invite (migration `0020_manager_invite`) — pending invite-by-email for managers
+
+Columns: `id`, `email` (lowercased invitee address; third-party PII, replaced
+by the literal `redacted` once the invite is accepted/revoked or on a CCPA
+deletion), `location_id` (FK `restaurant_location`, CASCADE),
+`invited_by_owner_id` (FK `owner_account`, CASCADE — always the brand's owner,
+also when an admin created it), `token_hash` (SHA-256 hex of the single-use
+token; the raw token is never stored), `created_at`, `expires_at` (created +
+14 days), `accepted_at`, `revoked_at`. Indexes: unique `token_hash`;
+`location_id`; `email`; `(invited_by_owner_id, created_at)` (per-owner daily
+rate limit). Status is derived (accepted / revoked / expired / pending), not
+stored. No unique (location, email): a new invite for the same address revokes
+the previous pending one. Accepting an invite creates an ordinary
+`location_manager` row (audited); `manager_invite` create/revoke are audited
+as `table_name="manager_invite"` without the email. Included in CCPA export;
+email redacted on approved deletion.

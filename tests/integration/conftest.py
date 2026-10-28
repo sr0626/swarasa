@@ -252,3 +252,7 @@ def _block_real_cognito_group_calls(monkeypatch):
     from app.services import cognito_service
 
     monkeypatch.setattr(cognito_service, "add_user_to_group", lambda username, group_name: None)
+    # CCPA deletion approval resolves the requester's email (best-effort) to
+    # redact manager invites addressed to it; never hit real Cognito in tests.
+    # Tests that care re-patch it with their own directory.
+    monkeypatch.setattr(cognito_service, "find_email_by_sub", lambda sub: None)

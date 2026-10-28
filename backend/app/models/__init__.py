@@ -38,6 +38,7 @@ from app.models.menu_item import MenuItem
 from app.models.user_activity_event import UserActivityEvent
 from app.models.admin_message import AdminMessage
 from app.models.user_notification import UserNotification
+from app.models.manager_invite import ManagerInvite
 
 __all__ = [
     "OwnerAccount",
@@ -65,4 +66,5 @@ __all__ = [
     "UserActivityEvent",
     "AdminMessage",
     "UserNotification",
+    "ManagerInvite",
 ]

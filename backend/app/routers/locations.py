@@ -36,8 +36,19 @@ from app.schemas.location_manager import (
     LocationManagerOut,
 )
 from app.schemas.location_reopen import ReopenRequestCreate, ReopenRequestOut
+from app.schemas.manager_invite import (
+    ManagerInviteCreate,
+    ManagerInviteCreatedOut,
+    ManagerInviteListResponse,
+)
 from app.schemas.photo import PhotoCreate, PhotoOut, PhotoUpdate, UploadUrlRequest, UploadUrlResponse
-from app.services import location_manager_service, location_reopen_service, location_service
+from app.dependencies.pagination import Pagination, pagination_params
+from app.services import (
+    location_manager_service,
+    location_reopen_service,
+    location_service,
+    manager_invite_service,
+)
 
 router = APIRouter(prefix="/locations", tags=["locations"])
 
@@ -267,3 +278,44 @@ async def remove_location_manager(
     await location_manager_service.deactivate_manager(
         db, location_id, manager_id, current_user
     )
+
+
+@router.post(
+    "/{location_id}/manager-invites",
+    response_model=ManagerInviteCreatedOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_manager_invite(
+    location_id: int,
+    body: ManagerInviteCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_location_owner_or_admin),
+) -> ManagerInviteCreatedOut:
+    """Auth: the location's owner, or admin acting for them. Returns the raw
+    single-use token ONCE; no email is sent (SES deferred) — the caller shares
+    the link themselves. See `manager_invite_service`."""
+    return await manager_invite_service.create_invite(db, location_id, current_user, body.email)
+
+
+@router.get("/{location_id}/manager-invites", response_model=ManagerInviteListResponse)
+async def list_manager_invites(
+    location_id: int,
+    pagination: Pagination = Depends(pagination_params),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_location_owner_or_admin),
+) -> ManagerInviteListResponse:
+    return await manager_invite_service.list_invites(db, location_id, pagination)
+
+
+@router.delete(
+    "/{location_id}/manager-invites/{invite_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+)
+async def revoke_manager_invite(
+    location_id: int,
+    invite_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_location_owner_or_admin),
+) -> None:
+    await manager_invite_service.revoke_invite(db, location_id, invite_id, current_user)

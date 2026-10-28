@@ -26,6 +26,7 @@ from app.routers import (
     listing_report,
     location_reopen,
     locations,
+    manager_invites,
     notifications,
     restaurants,
     search,
@@ -42,6 +43,7 @@ app.include_router(sitemap.router)
 app.include_router(activity.router)
 app.include_router(restaurants.router)
 app.include_router(locations.router)
+app.include_router(manager_invites.router)
 app.include_router(deals.router)
 app.include_router(menu.router)
 app.include_router(claim.router)

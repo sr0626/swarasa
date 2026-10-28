@@ -9,9 +9,10 @@
 //     brands/locations once they exist.
 //
 // Deliberately NOT manager or admin: managers are provisioned only via the
-// existing invite-by-email assignment flow (Location Managers sub-resource,
-// backend/app/routers — it resolves an EXISTING Cognito user, never creates
-// one), and admin accounts are provisioned manually by a human. Both stay
+// owner's assignment/invite flows (Location Managers sub-resource: assign an
+// EXISTING account by email, or invite a new person by link -- they sign up
+// here as a diner (`inviteMode`) and accepting the invite promotes them), and
+// admin accounts are provisioned manually by a human. Both stay
 // exactly as they are today; this form only ever creates owner/
 // registered_user accounts. Matches the existing codebase convention (see
 // backend/app/dependencies/auth.py `_extract_role` — an authenticated user
@@ -70,7 +71,14 @@ const ROLE_OPTIONS: Array<{ value: Role; label: string; hint: string }> = [
 export default function SignUpForm({
   initialRole = "registered_user",
   nextPath = null,
+  inviteMode = false,
 }: {
+  /**
+   * Arrived from a manager invitation (/invite/<token>): the account type is
+   * fixed to a regular (diner) account — accepting the invitation is what
+   * turns it into a manager, so there is nothing to choose here.
+   */
+  inviteMode?: boolean;
   /** Already-validated same-site path (safeNextPath) to resume after sign-up. */
   nextPath?: string | null;
   /** Pre-selected account type (validated by the page; defaults to diner). */
@@ -80,7 +88,7 @@ export default function SignUpForm({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [role, setRole] = useState<Role>(initialRole);
+  const [role, setRole] = useState<Role>(inviteMode ? "registered_user" : initialRole);
   const [city, setCity] = useState("");
   const [postalCode, setPostalCode] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
@@ -177,6 +185,14 @@ export default function SignUpForm({
         </p>
       )}
 
+      {inviteMode && (
+        <p className="rounded-brand-control bg-brand-bg px-3 py-2 text-sm text-brand-ink-muted">
+          Sign up with the email address your invitation was sent to. After you confirm your
+          email and sign in, you&apos;ll come back to accept it.
+        </p>
+      )}
+
+      {!inviteMode && (
       <fieldset className="flex flex-col gap-2">
         <legend className="text-sm font-medium text-brand-ink-muted">
           Account type
@@ -215,6 +231,7 @@ export default function SignUpForm({
           <p className="text-sm text-brand-closed">{fieldErrors.role}</p>
         )}
       </fieldset>
+      )}
 
       <div className="flex flex-col gap-1.5">
         <label
