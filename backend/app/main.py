@@ -15,6 +15,7 @@ from app.routers import (
     activity,
     admin,
     admin_message,
+    admin_owner_assignment,
     auth,
     claim,
     cuisine,
@@ -49,6 +50,7 @@ app.include_router(cuisine.router)
 app.include_router(data_deletion.router)
 app.include_router(admin.router)
 app.include_router(admin_message.router)
+app.include_router(admin_owner_assignment.router)
 app.include_router(location_reopen.router)
 
 # package_type = "Image" Lambda functions have no separate "handler" config

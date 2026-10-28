@@ -42,6 +42,9 @@ import {
   ownerLine,
   type ListingStatusFilter,
 } from "@/lib/adminListings";
+import AssignOwnerPanel from "@/components/admin/AssignOwnerPanel";
+import { applyAssignment, assignBlockedReason, assignSummary, canAssignOwner } from "@/lib/adminOwnerAssignment";
+import type { AssignOwnerResponse } from "@/types/adminOwnerAssignment";
 import LocalDateTime from "@/components/ui/LocalDateTime";
 import { PencilIcon, PlusIcon, TrashIcon } from "@/components/ui/icons";
 import type {
@@ -172,6 +175,13 @@ export default function AdminListingsPanel({
 
   function removeBrand(brandId: number) {
     setBrands((prev) => prev.filter((b) => b.id !== brandId));
+  }
+
+  // An admin assignment flips the brand to claimed + owned in place.
+  function markOwnerAssigned(brandId: number, result: AssignOwnerResponse) {
+    setBrands((prev) =>
+      prev.map((entry) => (entry.id === brandId ? applyAssignment(entry, result) : entry))
+    );
   }
 
   // A deactivated location stays in the list (an admin still needs to see it)
@@ -365,6 +375,7 @@ export default function AdminListingsPanel({
                   onToggleExpanded={() => toggleExpanded(entry.id)}
                   onDeleted={() => removeBrand(entry.id)}
                   onRestored={() => removeBrand(entry.id)}
+                  onOwnerAssigned={(result) => markOwnerAssigned(entry.id, result)}
                   onLocationDeactivated={(locationId) => markLocationDeactivated(entry.id, locationId)}
                 />
               </li>
@@ -444,6 +455,7 @@ function BrandRow({
   onToggleExpanded,
   onDeleted,
   onRestored,
+  onOwnerAssigned,
   onLocationDeactivated,
 }: {
   entry: AdminListing;
@@ -452,6 +464,7 @@ function BrandRow({
   onToggleExpanded: () => void;
   onDeleted: () => void;
   onRestored: () => void;
+  onOwnerAssigned: (result: AssignOwnerResponse) => void;
   onLocationDeactivated: (locationId: number) => void;
 }) {
   const brand = entry;
@@ -463,6 +476,9 @@ function BrandRow({
   const [deleting, setDeleting] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [assignedNote, setAssignedNote] = useState<string | null>(null);
+  const canAssign = canAssignOwner(brand);
+  const assignBlocked = assignBlockedReason(brand);
 
   async function handleRestore() {
     setRestoring(true);
@@ -566,6 +582,16 @@ function BrandRow({
             </button>
           ) : (
             <>
+              {canAssign && (
+                <AssignOwnerPanel
+                  brandId={brand.id}
+                  brandName={brand.name}
+                  onAssigned={(result) => {
+                    setAssignedNote(assignSummary(result));
+                    onOwnerAssigned(result);
+                  }}
+                />
+              )}
               <Link
                 href={`/portal/locations/new?brand=${brand.id}`}
                 aria-label={`Add a location to ${brand.name}`}
@@ -643,6 +669,19 @@ function BrandRow({
         <p className="mt-3 rounded-brand-control bg-brand-closed-bg px-3 py-2.5 text-sm text-brand-closed">
           {error}
         </p>
+      )}
+
+      {assignedNote && (
+        <p
+          role="status"
+          className="mt-3 rounded-brand-control bg-brand-success-bg px-3 py-2.5 text-sm text-brand-success"
+        >
+          {assignedNote}
+        </p>
+      )}
+
+      {assignBlocked && !isDeleted && (
+        <p className="mt-2 text-xs text-brand-ink-subtle">{assignBlocked}</p>
       )}
 
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1">

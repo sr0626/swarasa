@@ -28,6 +28,7 @@ import {
   parseOwnerSort,
   parsePage,
 } from "@/lib/adminOwnersView";
+import AddOwnerForm from "@/components/admin/AddOwnerForm";
 import LocalDateTime from "@/components/ui/LocalDateTime";
 import type { AdminOwnerRow } from "@/types/adminOwners";
 
@@ -81,6 +82,8 @@ export default async function AdminOwnersPage({ searchParams }: OwnersPageProps)
         </Link>
         .
       </p>
+
+      <AddOwnerForm />
 
       <form method="get" action="/admin/owners" className="mt-6 flex flex-wrap items-end gap-3">
         <div className="min-w-[200px] flex-1">
