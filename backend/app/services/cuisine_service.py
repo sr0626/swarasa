@@ -43,25 +43,37 @@ async def list_active_cuisine_tags(
 _TAG_ORDER = (CuisineTag.category, CuisineTag.display_name)
 
 
-async def get_location_cuisine_tags(db: AsyncSession, location_id: int) -> list[CuisineTag]:
-    return (await get_location_cuisine_tags_bulk(db, [location_id])).get(location_id, [])
+async def get_location_cuisine_tags(
+    db: AsyncSession, location_id: int, *, only_active: bool = True
+) -> list[CuisineTag]:
+    return (
+        await get_location_cuisine_tags_bulk(db, [location_id], only_active=only_active)
+    ).get(location_id, [])
 
 
 async def get_location_cuisine_tags_bulk(
-    db: AsyncSession, location_ids: list[int]
+    db: AsyncSession, location_ids: list[int], *, only_active: bool = True
 ) -> dict[int, list[CuisineTag]]:
     """One query for any number of locations (no N+1). Every requested id is
     present in the result (empty list when untagged). Ordered by category
-    then display name, the same order everywhere tags are shown."""
+    then display name, the same order everywhere tags are shown.
+
+    `only_active=True` (the default, every PUBLIC caller): a tag an admin has
+    deactivated (admin taxonomy management) is hidden. `only_active=False`
+    is for owner / assigned-manager / admin editors, who must still see a
+    deactivated tag on their location so they can remove it."""
     by_location: dict[int, list[CuisineTag]] = {lid: [] for lid in location_ids}
     if not location_ids:
         return by_location
-    result = await db.execute(
+    stmt = (
         select(LocationCuisine.location_id, CuisineTag)
         .join(CuisineTag, LocationCuisine.cuisine_tag_id == CuisineTag.id)
         .where(LocationCuisine.location_id.in_(location_ids))
         .order_by(*_TAG_ORDER)
     )
+    if only_active:
+        stmt = stmt.where(CuisineTag.is_active == True)  # noqa: E712
+    result = await db.execute(stmt)
     for location_id, tag in result.all():
         by_location.setdefault(location_id, []).append(tag)
     return by_location
@@ -91,7 +103,12 @@ async def get_brand_union_tags_bulk(
         .order_by(*_TAG_ORDER)
     )
     if only_active:
-        stmt = stmt.where(RestaurantLocation.status == RestaurantLocation.STATUS_ACTIVE)
+        # Public: only active locations contribute, and deactivated tags
+        # (admin taxonomy management) are hidden.
+        stmt = stmt.where(
+            RestaurantLocation.status == RestaurantLocation.STATUS_ACTIVE,
+            CuisineTag.is_active == True,  # noqa: E712
+        )
     for brand_id, tag in (await db.execute(stmt)).all():
         by_brand.setdefault(brand_id, []).append(tag)
     return by_brand
@@ -114,7 +131,7 @@ def location_has_any_tag(names: list[str]) -> ColumnElement[bool]:
     return RestaurantLocation.id.in_(
         select(LocationCuisine.location_id)
         .join(CuisineTag, CuisineTag.id == LocationCuisine.cuisine_tag_id)
-        .where(CuisineTag.name.in_(names))
+        .where(CuisineTag.name.in_(names), CuisineTag.is_active == True)  # noqa: E712
     )
 
 
@@ -126,10 +143,11 @@ def location_has_tag_named(needle: str) -> ColumnElement[bool]:
         select(LocationCuisine.location_id)
         .join(CuisineTag, CuisineTag.id == LocationCuisine.cuisine_tag_id)
         .where(
+            CuisineTag.is_active == True,  # noqa: E712
             or_(
                 func.lower(CuisineTag.display_name) == lowered,
                 func.lower(CuisineTag.name) == lowered,
-            )
+            ),
         )
     )
 
@@ -139,19 +157,27 @@ async def set_location_cuisine_tags(
 ) -> tuple[list[str], list[str]]:
     """Full replace of ONE location's tag links. Silently ignores ids that
     don't correspond to an active tag (a stale frontend id shouldn't fail the
-    whole write) and de-duplicates. Returns `(old_names, new_names)` — the
+    whole write) and de-duplicates. A tag an admin has since DEACTIVATED can
+    never be newly added, but if this location already carries it, it is kept
+    when the id is re-sent and dropped when omitted (so an editor can remove
+    it). Returns `(old_names, new_names)` — the
     sorted `cuisine_tag.name` slugs before/after — for the caller's audit row.
     Flushes but does not commit (the caller owns the transaction)."""
-    old_names = sorted(t.name for t in await get_location_cuisine_tags(db, location_id))
+    current = await get_location_cuisine_tags(db, location_id, only_active=False)
+    old_names = sorted(t.name for t in current)
+    currently_linked = {t.id for t in current}
 
     valid: dict[int, str] = {}
     if tag_ids:
+        wanted = set(tag_ids)
         result = await db.execute(
-            select(CuisineTag.id, CuisineTag.name).where(
-                CuisineTag.id.in_(set(tag_ids)), CuisineTag.is_active == True  # noqa: E712
+            select(CuisineTag.id, CuisineTag.name, CuisineTag.is_active).where(
+                CuisineTag.id.in_(wanted)
             )
         )
-        valid = {row[0]: row[1] for row in result.all()}
+        valid = {
+            row[0]: row[1] for row in result.all() if row[2] or row[0] in currently_linked
+        }
 
     await db.execute(delete(LocationCuisine).where(LocationCuisine.location_id == location_id))
     for tag_id in dict.fromkeys(tag_ids):

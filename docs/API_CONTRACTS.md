@@ -173,6 +173,9 @@ Notes:
 
 Auth: none (public)
 
+Returns `is_active=true` tags only; an admin can deactivate/reactivate tags via
+`/admin/taxonomy` (see "Admin taxonomy management").
+
 **Added 2026-09-13, closing a gap flagged during PR #17 review** (see
 `docs/DECISIONS.md` "Cuisine tags: public read endpoint, no
 pagination"): the homepage's cuisine filter chips were a hardcoded
@@ -3626,6 +3629,58 @@ Response `200`:
   replaced by `{"_truncated": true, "_preview": "<first 2000 chars>"}`.
 
 Errors: `403 forbidden`; `422` (bad filter value/range/page params).
+
+### Admin taxonomy management (`/admin/taxonomy`)
+
+Added 2026-10-28. Auth: admin only (`require_admin`; anonymous `401`, any other
+role `403`). Manages `cuisine_tag` ("kind" = `category`: `regional` | `dietary` |
+`type` | `signature` | `dining_time`). No schema change (`is_active` already
+existed); migration `0021_food_truck_type` only guarantees the `food_truck`
+`type` tag exists. **There is no DELETE route** - tags are retired by
+deactivating them. The slug (`name`) and `category` are immutable.
+
+`GET /admin/taxonomy` -> `200`
+```json
+{
+  "results": [
+    { "id": 7, "name": "food_truck", "display_name": "Food Truck", "category": "type",
+      "is_active": true, "usage_count": 3,
+      "created_at": "2026-10-28T18:02:11Z", "updated_at": "2026-10-28T18:02:11Z" }
+  ],
+  "categories": ["regional", "dietary", "type", "signature", "dining_time"]
+}
+```
+All tags (active and inactive), ordered category then display name; no
+pagination. `usage_count` = number of `location_cuisine` rows for the tag.
+
+`POST /admin/taxonomy` body `{ "display_name": "Pop-up", "category": "type", "name": "popup" }`
+(`name` optional, `^[a-z0-9][a-z0-9_]{0,63}$`, derived from `display_name`
+when omitted; `display_name` 1-120 chars, whitespace collapsed). `201` with the
+tag. `409 conflict` (generic message, never echoes the value) when the slug
+exists or the display name exists (case-insensitive) in the same category.
+`422` for a bad category/slug or an underivable slug.
+
+`PATCH /admin/taxonomy/{id}` body: `display_name` and/or `is_active`
+(at least one, else `422`). Rename `409`s on a same-category display-name
+clash; unknown id `404`. A PATCH that changes nothing writes no audit row.
+
+Audit: one `audit_log` row per write, `table_name="cuisine_tag"`,
+`record_id=<tag id>`, `action` `create` | `update`, `old_val`/`new_val`
+= `{name, display_name, category, is_active}` (`old_val` null on create).
+
+**Inactive-tag behaviour (decision).** Deactivating never deletes or strips
+`location_cuisine` rows. An inactive tag: (1) disappears from
+`GET /cuisine-tags` and so from owner pickers, homepage chips and search filter
+options; (2) no longer matches `GET /search` `cuisine[]`/`dietary[]`/`type[]`
+or the text search; (3) is omitted from every PUBLIC payload (`cuisine_tags` on
+`GET /locations/{id}`, search tiles, brand pages, follow list, JSON-LD source);
+(4) is still returned to the location's own editors (the owning owner, an
+assigned manager, an admin) on `GET /locations/{id}`, `GET
+/restaurants/{id}/locations` (owner/admin) and `PUT /locations/{id}/cuisine-tags`,
+and in admin listings, so they can remove it. `PUT` semantics: an inactive tag
+can never be newly added; if the location already carries it, re-sending its id
+keeps it and omitting the id removes it. Reactivating restores everything
+immediately.
 
 ### GET /admin/listings
 
