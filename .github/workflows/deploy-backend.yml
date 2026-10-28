@@ -118,8 +118,16 @@ jobs:
           ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -t "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" backend/
-          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          # buildx with provenance/sbom attestations OFF: with them on (the
+          # buildx default, and what the runner's docker produced from
+          # 2026-10-28) the push is an OCI image INDEX, which ECR cannot
+          # scan (UnsupportedImageTypeException -> the scan gate below fails
+          # with ScanNotFoundException) and Lambda cannot run. A plain
+          # single-platform manifest is what both need.
+          docker buildx build \
+            --provenance=false --sbom=false \
+            --push \
+            -t "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" backend/
 
       # devops/CLAUDE.md ALWAYS: "scan images on push ... and stop the
       # pipeline on critical findings". Infra's ECR module sets
