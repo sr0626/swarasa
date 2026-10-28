@@ -18,6 +18,7 @@ import {
   MailIcon,
   PlusIcon,
   StoreIcon,
+  TagIcon,
   UserIcon,
 } from "@/components/ui/icons";
 import type { IconProps } from "@/components/ui/icons";
@@ -34,6 +35,7 @@ const ICONS: Record<ConsoleNavIcon, (props: IconProps) => JSX.Element> = {
   clock: ClockIcon,
   chart: BarChartIcon,
   mail: MailIcon,
+  tag: TagIcon,
 };
 
 export default function ConsoleSidebarNav({

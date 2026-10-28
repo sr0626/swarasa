@@ -45,3 +45,8 @@ test("no menu href points at the old in-page #activity anchor", () => {
     for (const s of i.subItems ?? []) assert.notEqual(s.href, "/account#activity");
   }
 });
+
+test("admin menu has Taxonomy, highlighted on its own page", () => {
+  assert.ok(ADMIN_NAV_ITEMS.some((i) => i.href === "/admin/taxonomy" && i.label === "Taxonomy"));
+  assert.equal(activeNavHref("/admin/taxonomy", ADMIN_NAV_ITEMS), "/admin/taxonomy");
+});

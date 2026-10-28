@@ -74,7 +74,13 @@ async def _location_to_out(
 
     cover = await photo_service.get_cover_photo(db, location.id)
     gallery = await photo_service.get_gallery_photos(db, location.id, location.is_paid)
-    tags = await cuisine_service.get_location_cuisine_tags(db, location.id)
+    # Deactivated taxonomy tags are hidden from the public; the location's
+    # owner / assigned manager / admin still see them (to remove them).
+    tags = await cuisine_service.get_location_cuisine_tags(
+        db,
+        location.id,
+        only_active=not await _caller_may_view_hidden_location(db, location, current_user),
+    )
 
     # Deals — public "fact" (has_deal_today) vs content-gated "detail"
     # (deals_today). See app/services/deal_service.py module docstring and
@@ -471,7 +477,10 @@ async def replace_location_cuisine_tags(
         new_val={"cuisine_tags": new_names},
     )
     await db.commit()
-    tags = await cuisine_service.get_location_cuisine_tags(db, location.id)
+    # Caller has write access (route dependency): include deactivated tags.
+    tags = await cuisine_service.get_location_cuisine_tags(
+        db, location.id, only_active=False
+    )
     return LocationCuisineTagsResponse(results=[CuisineTagOut.model_validate(t) for t in tags])
 
 
@@ -779,7 +788,7 @@ async def list_locations_for_brand(
     ).scalars().all()
 
     tags_by_location = await cuisine_service.get_location_cuisine_tags_bulk(
-        db, [row.id for row in rows]
+        db, [row.id for row in rows], only_active=not include_inactive
     )
     # Deal counts are content metadata: only the owning owner / an admin
     # (the same callers `include_inactive` is true for) get them, from ONE

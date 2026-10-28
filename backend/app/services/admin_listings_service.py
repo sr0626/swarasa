@@ -152,7 +152,7 @@ async def get_admin_listings(
         locations_by_brand[loc.brand_id].append(loc)
 
     location_tags = await cuisine_service.get_location_cuisine_tags_bulk(
-        db, [loc.id for loc in locations]
+        db, [loc.id for loc in locations], only_active=False
     )
     brand_tags = await cuisine_service.get_brand_union_tags_bulk(
         db, brand_ids, only_active=False

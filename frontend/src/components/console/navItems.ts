@@ -1,7 +1,7 @@
 // Menu definitions for the role consoles. Plain serializable data (an icon
 // *key*, not a component) so Server Components can hand it to the client-side
 // ConsoleSidebarNav. Add a row here when a new page lands in a console.
-export type ConsoleNavIcon = "user" | "claims" | "reports" | "store" | "plus" | "clock" | "chart" | "mail";
+export type ConsoleNavIcon = "user" | "claims" | "reports" | "store" | "plus" | "clock" | "chart" | "mail" | "tag";
 
 /** An in-page anchor link ("/account#profile") shown under an active item. */
 export interface ConsoleNavSubItem {
@@ -38,6 +38,8 @@ export const ADMIN_NAV_ITEMS: ReadonlyArray<ConsoleNavItem> = [
   { href: "/admin/listings", label: "Listings", icon: "store" },
   // "Contact admin" messages from owners/managers (GET /admin/messages).
   { href: "/admin/messages", label: "Messages", icon: "mail" },
+  // Cuisine / dietary / restaurant-type tags (GET/POST/PATCH /admin/taxonomy).
+  { href: "/admin/taxonomy", label: "Taxonomy", icon: "tag" },
   // Read-only history of audit_log (GET /admin/audit-log).
   { href: "/admin/audit-log", label: "Audit log", icon: "clock" },
 ];

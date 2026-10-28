@@ -10,6 +10,7 @@ import { useState } from "react";
 import { replaceLocationCuisineTagsAction } from "@/app/portal/locations/[id]/actions";
 import CuisineTagPicker from "@/components/portal/CuisineTagPicker";
 import { TagIcon } from "@/components/ui/icons";
+import { retiredTags, withRetiredOptions } from "@/lib/cuisine/retired";
 import { sameTagIds, toggleTagId } from "@/lib/cuisine/tags";
 import type { CuisineTag } from "@/types/cuisine";
 
@@ -24,6 +25,12 @@ export default function LocationCuisineTagsForm({
   /** This location's current tags. */
   initialTags: CuisineTag[];
 }) {
+  // Tags an admin has since deactivated are not in `allTags` but may still be on
+  // this location; show them as removable "retired" chips (docs/API_CONTRACTS.md
+  // "Admin taxonomy management"). Tracks the last saved tags so a removed one
+  // disappears after saving and can't be re-added.
+  const [currentTags, setCurrentTags] = useState<CuisineTag[]>(initialTags);
+  const retired = retiredTags(allTags, currentTags);
   const [saved, setSaved] = useState<number[]>(() => initialTags.map((t) => t.id));
   const [selected, setSelected] = useState<number[]>(() => initialTags.map((t) => t.id));
   const [saving, setSaving] = useState(false);
@@ -48,6 +55,7 @@ export default function LocationCuisineTagsForm({
         cuisine_tag_ids: selected,
       });
       if (result.ok) {
+        setCurrentTags(result.data.results);
         const ids = result.data.results.map((t) => t.id);
         setSaved(ids);
         setSelected(ids);
@@ -82,7 +90,7 @@ export default function LocationCuisineTagsForm({
       ) : (
         <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-4">
           <CuisineTagPicker
-            tags={allTags}
+            tags={withRetiredOptions(allTags, retired)}
             selectedIds={new Set(selected)}
             onToggle={toggle}
             disabled={saving}

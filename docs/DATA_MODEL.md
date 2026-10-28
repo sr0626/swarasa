@@ -7,6 +7,24 @@
 > the migrations in `backend/migrations/versions/`. Backfilling the other
 > entities is a separate docs task.
 
+## cuisine_tag — admin taxonomy management (migration `0021_food_truck_type`)
+
+`cuisine_tag(id, name UNIQUE slug, display_name, category, is_active NOT NULL
+DEFAULT true, created_at, updated_at)`. `category` is one of `regional`,
+`dietary`, `type`, `signature`, `dining_time` (restaurant types - e.g. Food
+Truck - are `category = 'type'`; there is no separate type table, and no
+parent/region column). `is_active` already existed (migration 0001), so no
+schema change was needed for admin deactivate/reactivate. Admins add, rename
+(`display_name` only; `name` and `category` are immutable) and deactivate tags
+through `/admin/taxonomy` (docs/API_CONTRACTS.md); there is no delete. An
+inactive tag keeps its `location_cuisine` rows but is hidden from public
+payloads and search and is not offered for new selection.
+
+`0021_food_truck_type` is a pure data migration: it inserts
+`('food_truck','Food Truck','type')` only if no row named `food_truck` exists
+(an existing, possibly renamed/deactivated row is untouched). Downgrade is a
+deliberate no-op so assigned data is never lost.
+
 ## location_cuisine (migration `0016_location_cuisine`) — tags are per location
 
 Model: `backend/app/models/location_cuisine.py`. Join table
