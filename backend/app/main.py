@@ -17,6 +17,7 @@ from app.routers import (
     admin_message,
     admin_owner_assignment,
     auth,
+    cities,
     claim,
     cuisine,
     data_deletion,
@@ -40,6 +41,7 @@ register_exception_handlers(app)
 app.include_router(health.router)
 app.include_router(search.router)
 app.include_router(sitemap.router)
+app.include_router(cities.router)
 app.include_router(activity.router)
 app.include_router(restaurants.router)
 app.include_router(locations.router)

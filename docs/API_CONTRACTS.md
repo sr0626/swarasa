@@ -458,6 +458,50 @@ across page boundaries): `1` -> the canonical URL is `/restaurant/{brand_slug}`;
 `2+` -> `/restaurant/{brand_slug}` (landing) and
 `/restaurant/{brand_slug}/{location_slug}`.
 
+### Cities (SEO city landing pages)
+
+Powers `/indian-restaurants` (city index) and `/indian-restaurants/{city-slug}`.
+Both endpoints are public (no auth), read-only, send
+`Cache-Control: public, max-age=300, s-maxage=300`, and use the SAME visibility
+rule as `/search` and `/sitemap/locations`: `status = 'active'` (so
+`owner_deactivated`, `coming_soon` and `closed_pending_reopen` are excluded)
+and the brand is not soft-deleted. No new index/migration is needed (one GROUP
+BY over active locations).
+
+City slug: city name lower-cased, ASCII-folded, non-alphanumeric runs ->
+`-` (`Fort Worth` -> `fort-worth`); case/whitespace variants of a city merge.
+If the same slug exists in more than one state, each colliding city gets the
+lower-cased state appended (`springfield-il`, `springfield-mo`); otherwise the
+plain slug is used.
+
+#### GET /cities
+
+Paginated (default 20, max 100), ordered by location count desc then name:
+```json
+{ "results": [ { "slug": "irving", "city": "Irving", "state": "TX", "location_count": 12 } ],
+  "page": 1, "page_size": 20, "total": 1 }
+```
+
+#### GET /cities/{slug}/restaurants
+
+Paginated (default 20, max 100). One tile per active LOCATION in the city,
+ordered verified-first, then brand name, then id (stable; not paid-first —
+promoted placement is deferred). `results` items are exactly the `/search`
+`SearchResultItem` shape so the shared tile renders them unchanged, with:
+`nearest_location` = that location, `distance_mi` = `null`,
+`location_count_nearby` = the brand's TOTAL active-location count (1 -> the
+brand's canonical URL is the short `/restaurant/{brand}`), and
+`nearest_location.has_deal_today` = the content-free public deal signal (no
+deal content ever appears here).
+```json
+{ "city": { "slug": "irving", "city": "Irving", "state": "TX", "location_count": 12 },
+  "results": [ /* SearchResultItem[] */ ], "page": 1, "page_size": 20, "total": 12 }
+```
+Unknown slug, or a city with no publicly visible location -> `404`
+`{"detail": "City not found", "code": "not_found"}`. A known city with an
+out-of-range `page` returns `200` with empty `results` (the frontend maps that
+to its own 404).
+
 ### GET /restaurants/{id}/locations
 
 Auth: none (public) — but see the owner/admin note below.
