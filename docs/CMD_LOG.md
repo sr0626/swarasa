@@ -649,4 +649,14 @@ git push -u origin feature/admin-users-audit-log   # claude
 git push -u origin fix/deploy-backend-single-manifest   # claude
 aws sso login --profile swarasa-dev   # user  (expired session)
 aws lambda invoke --function-name swarasa-api-dev --payload '{"_management_command": "alembic_upgrade"}' --profile swarasa-dev --region us-east-1 ...   # user  (after the #250 deploy, applying 0019_user_notification)
+git push -u origin docs/wave-247-250   # claude
+git push -u origin docs/decisions-wave-12   # claude
+aws lambda invoke --function-name swarasa-api-dev --payload '{"_management_command": "alembic_upgrade"}' --profile swarasa-dev --region us-east-1 ...   # user  (after the #250 deploy, applying 0019_user_notification)
+terraform plan -var-file=envs/dev.tfvars -out=iam-admin-users.tfplan   # user  (infra/, swarasa-dev)
+terraform apply iam-admin-users.tfplan   # user  (infra/, swarasa-dev — IAM statement for admin Cognito actions, 1 changed)
+git push -u origin feature/manager-invite   # claude
+aws lambda invoke --function-name swarasa-api-dev --payload '{"_management_command": "alembic_upgrade"}' --profile swarasa-dev --region us-east-1 ...   # user  (after the #253 deploy, applying 0020_manager_invite)
+git push -u origin fix/signup-role-escalation   # claude
+terraform plan -var-file=envs/dev.tfvars -out=lambda-fix.tfplan   # user  (infra/, swarasa-dev)
+terraform apply lambda-fix.tfplan   # user  (infra/, swarasa-dev — post-confirmation Lambda code update, 1 changed)
 ```
