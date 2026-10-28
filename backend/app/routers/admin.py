@@ -8,6 +8,7 @@ from the specific Irving, TX real-data seed it also unblocks).
 from __future__ import annotations
 
 import logging
+from datetime import date
 from typing import Literal
 
 from botocore.exceptions import BotoCoreError, ClientError
@@ -21,6 +22,14 @@ from app.dependencies.pagination import Pagination, pagination_params
 from app.models.owner_account import OwnerAccount
 from app.schemas.activity import UserActivityResponse
 from app.schemas.admin_notifications import AdminNotificationsResponse
+from app.schemas.admin_audit_log import AdminAuditLogResponse
+from app.schemas.admin_users import (
+    AdminUserActionResponse,
+    AdminUsersResponse,
+    UserRole,
+    UserSort,
+    UserStatusFilter,
+)
 from app.schemas.admin_listings import AdminListingSort, AdminListingsResponse
 from app.schemas.admin_managers import AdminManagersResponse, ManagerSort
 from app.schemas.admin_overview import AdminOverviewResponse
@@ -34,12 +43,14 @@ from app.schemas.restaurant_bulk_import import (
     BulkImportRowOut,
 )
 from app.services import activity_service, cognito_service
+from app.services.admin_audit_log_service import get_admin_audit_log
 from app.services.admin_listings_service import get_admin_listings
 from app.services.admin_managers_service import get_admin_managers
 from app.services.admin_notification_service import get_admin_notifications
 from app.services.admin_overview_service import get_admin_overview
 from app.services.admin_owners_service import get_admin_owners
 from app.services.admin_registered_users_service import get_registered_users
+from app.services.admin_users_service import get_admin_users, perform_user_action
 from app.services.restaurant_bulk_import_service import BulkImportError, bulk_import_restaurants
 
 logger = logging.getLogger("app.routers.admin")
@@ -178,6 +189,114 @@ async def admin_managers_endpoint(
     work under and their active locations. See docs/API_CONTRACTS.md
     "GET /admin/managers" for the who-is-listed rule."""
     return await get_admin_managers(db, pagination, search=q, sort=sort)
+
+
+# Cognito usernames in this pool are the sub (UUID) or an email; reject
+# anything else before it reaches an Admin API call.
+_USERNAME_PATTERN = r"^[A-Za-z0-9._@+\-]+$"
+
+
+@router.get("/users", response_model=AdminUsersResponse)
+async def admin_users_endpoint(
+    pagination: Pagination = Depends(pagination_params),
+    q: str | None = Query(
+        default=None,
+        max_length=100,
+        description="Case-insensitive substring match against email or display name.",
+    ),
+    role: UserRole | None = Query(default=None, description="admin | owner | manager | registered_user"),
+    status: UserStatusFilter | None = Query(
+        default=None, description="enabled | disabled | unconfirmed"
+    ),
+    sort: UserSort = Query(default="newest", description="newest | oldest | email | last_seen"),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_admin),
+) -> AdminUsersResponse:
+    """Auth: admin only. Searchable directory of every pool user across all
+    roles (Cognito role groups, capped per group) with role, confirmed/enabled
+    status, created date and `user_profile.last_seen_at`. A Cognito failure is
+    a generic 502 -- never a stale or partial list. See docs/API_CONTRACTS.md
+    "GET /admin/users"."""
+    try:
+        return await get_admin_users(
+            db, pagination, current_user, search=q, role=role, status=status, sort=sort
+        )
+    except (ClientError, BotoCoreError, RuntimeError) as exc:
+        logger.warning("admin-users: Cognito lookup failed: %s", type(exc).__name__)
+        raise AppError(502, "Unable to retrieve users", "upstream_error") from exc
+
+
+@router.post("/users/{username}/disable", response_model=AdminUserActionResponse)
+async def admin_disable_user_endpoint(
+    username: str = Path(min_length=1, max_length=128, pattern=_USERNAME_PATTERN),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_admin),
+) -> AdminUserActionResponse:
+    """Auth: admin only. `AdminDisableUser`; blocked for yourself and for the
+    last enabled admin. Writes an audit_log row."""
+    return await perform_user_action(db, current_user, username, "disable")
+
+
+@router.post("/users/{username}/enable", response_model=AdminUserActionResponse)
+async def admin_enable_user_endpoint(
+    username: str = Path(min_length=1, max_length=128, pattern=_USERNAME_PATTERN),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_admin),
+) -> AdminUserActionResponse:
+    """Auth: admin only. `AdminEnableUser`. Writes an audit_log row."""
+    return await perform_user_action(db, current_user, username, "enable")
+
+
+@router.post("/users/{username}/confirm", response_model=AdminUserActionResponse)
+async def admin_confirm_user_endpoint(
+    username: str = Path(min_length=1, max_length=128, pattern=_USERNAME_PATTERN),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_admin),
+) -> AdminUserActionResponse:
+    """Auth: admin only. `AdminConfirmSignUp` for an UNCONFIRMED account
+    (409 `invalid_state` otherwise). Writes an audit_log row."""
+    return await perform_user_action(db, current_user, username, "confirm")
+
+
+@router.post("/users/{username}/reset-password", response_model=AdminUserActionResponse)
+async def admin_reset_password_endpoint(
+    username: str = Path(min_length=1, max_length=128, pattern=_USERNAME_PATTERN),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_admin),
+) -> AdminUserActionResponse:
+    """Auth: admin only. `AdminResetUserPassword`; blocked for yourself and
+    for the last enabled admin. Writes an audit_log row."""
+    return await perform_user_action(db, current_user, username, "reset-password")
+
+
+@router.get("/audit-log", response_model=AdminAuditLogResponse)
+async def admin_audit_log_endpoint(
+    pagination: Pagination = Depends(pagination_params),
+    entity: str | None = Query(
+        default=None, pattern=r"^[a-z0-9_]{1,64}$", description="audit_log.table_name"
+    ),
+    action: str | None = Query(default=None, pattern=r"^[a-z_]{1,16}$"),
+    actor: str | None = Query(
+        default=None, max_length=100, description="Actor email, or Cognito sub (8+ char prefix ok)."
+    ),
+    date_from: date | None = Query(default=None, description="UTC date, inclusive."),
+    date_to: date | None = Query(default=None, description="UTC date, inclusive."),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_admin),
+) -> AdminAuditLogResponse:
+    """Auth: admin only. Read-only audit-log viewer, newest first. See
+    docs/API_CONTRACTS.md "GET /admin/audit-log"."""
+    if date_from is not None and date_to is not None and date_from > date_to:
+        raise AppError(422, "date_from must not be after date_to", "validation_error")
+    return await get_admin_audit_log(
+        db,
+        pagination,
+        entity=entity,
+        action=action,
+        actor=actor,
+        date_from=date_from,
+        date_to=date_to,
+    )
 
 
 @router.get("/listings", response_model=AdminListingsResponse)

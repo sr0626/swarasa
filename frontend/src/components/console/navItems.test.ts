@@ -30,6 +30,14 @@ test("Contact admin is a menu item for owner and manager; Messages for admin", (
   assert.equal(activeNavHref("/admin/messages", ADMIN_NAV_ITEMS), "/admin/messages");
 });
 
+test("admin menu has Users and Audit log, each highlighted only on its own page", () => {
+  assert.ok(ADMIN_NAV_ITEMS.some((i) => i.href === "/admin/users" && i.label === "Users"));
+  assert.ok(ADMIN_NAV_ITEMS.some((i) => i.href === "/admin/audit-log" && i.label === "Audit log"));
+  assert.equal(activeNavHref("/admin/users", ADMIN_NAV_ITEMS), "/admin/users");
+  assert.equal(activeNavHref("/admin/audit-log", ADMIN_NAV_ITEMS), "/admin/audit-log");
+  assert.equal(activeNavHref("/admin/registered-users", ADMIN_NAV_ITEMS), "/admin/registered-users");
+});
+
 test("no menu href points at the old in-page #activity anchor", () => {
   const all = [...OWNER_NAV_ITEMS, ...MANAGER_NAV_ITEMS];
   for (const i of all) {

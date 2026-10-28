@@ -3410,6 +3410,149 @@ Errors:
 (No 502: a Cognito failure degrades emails, per `email_lookup_degraded`
 above, rather than failing the whole report.)
 
+### GET /admin/users
+
+Added 2026-10-28. Auth: admin only. Searchable directory of every pool user
+across all roles, for the admin console's "Users" page (`/admin/users`).
+Source of truth is Cognito: one paginated `ListUsersInGroup` sweep per role
+group (`admin`, `owner`, `manager`, `registered_user`), each capped at 3000
+members (`truncated: true` when any group hit the cap). A user in several
+groups is ONE row (`role` = highest privilege, `roles` = all). A pool user
+in no role group is not listed. Local joins are one chunked query each:
+`user_profile` (`full_name`, `last_seen_at`) and `owner_account`
+(`full_name`; null for a CCPA-deleted owner). Search/filter/sort/paginate
+happen in Python after the sweep (same posture as
+`GET /admin/registered-users`). No new IAM: `ListUsersInGroup` only.
+
+Query params:
+| Param | Type | Notes |
+|---|---|---|
+| page / page_size | int, default 1 / 20, max 100 | |
+| q | string, max 100 | Case-insensitive substring of email OR display name |
+| role | `admin` \| `owner` \| `manager` \| `registered_user` | Matches any of the user's groups |
+| status | `enabled` \| `disabled` \| `unconfirmed` | `enabled` = Cognito `Enabled`; `unconfirmed` = `UserStatus == UNCONFIRMED` |
+| sort | `newest` (default) \| `oldest` \| `email` \| `last_seen` | missing values last; username is the tiebreaker |
+
+Response `200`:
+```json
+{
+  "results": [
+    {
+      "username": "9b1e7a2c-...",
+      "cognito_sub": "9b1e7a2c-...",
+      "email": "priya@example.com",
+      "full_name": "Priya Sharma",
+      "role": "owner",
+      "roles": ["owner", "registered_user"],
+      "status": "CONFIRMED",
+      "confirmed": true,
+      "enabled": true,
+      "created_at": "2026-09-01T12:00:00Z",
+      "last_seen_at": "2026-10-27T09:15:00Z",
+      "is_self": false
+    }
+  ],
+  "page": 1, "page_size": 20, "total": 1, "truncated": false
+}
+```
+`username` is what the action endpoints below take. `confirmed` is
+`status != "UNCONFIRMED"`. `is_self` marks the caller's own row.
+
+Errors: `403 forbidden` (not admin); `422` (bad `role`/`status`/`sort`/page
+params); `502 upstream_error` (Cognito failure; generic message, never a
+stale or partial list).
+
+### POST /admin/users/{username}/disable | enable | confirm | reset-password
+
+Added 2026-10-28. Auth: admin only. No request body. `{username}` must match
+`^[A-Za-z0-9._@+\-]+$`, 1-128 chars (else `422`). Each action first reads the
+target with `AdminGetUser` (`404 not_found` if gone), applies the guardrails,
+calls the Cognito Admin API, and — only after Cognito succeeded — writes an
+`audit_log` row in the same transaction as the commit.
+
+| Path | Cognito API | Rules |
+|---|---|---|
+| `/disable` | `AdminDisableUser` | not yourself; not the last enabled admin |
+| `/enable` | `AdminEnableUser` | idempotent |
+| `/confirm` | `AdminConfirmSignUp` | only when `UserStatus == UNCONFIRMED` |
+| `/reset-password` | `AdminResetUserPassword` | not yourself; not the last enabled admin. The user then completes forgot-password (Cognito sends the code) |
+
+Response `200`: `{ "username": "...", "action": "disable", "enabled": false }`
+(`enabled` for disable/enable; `status` — `CONFIRMED` / `RESET_REQUIRED` — for
+confirm/reset-password).
+
+Audit row: `table_name = "cognito_user"`, `record_id = 0` (the entity is a
+Cognito identity, not a local row; `audit_log` has no better integer key and
+no migration was made), `action = "update"`, `actor_id` = the admin's sub,
+`actor_role = "admin"`, `old_val = {enabled, status}`,
+`new_val = {operation, enabled, status, target_username, target_sub, target_email}`.
+The owner/manager activity feeds filter by entity table, so these rows never
+appear there.
+
+Errors:
+| Status | Code | When |
+|---|---|---|
+| 403 | `forbidden` | caller is not admin |
+| 403 | `cannot_target_self` | disable/reset-password on your own account |
+| 404 | `not_found` | no such pool user |
+| 409 | `last_admin` | disable/reset-password on the last enabled admin |
+| 409 | `invalid_state` | confirm on an already-confirmed account |
+| 409 | `action_not_allowed` | Cognito rejected the action for this account (e.g. reset on an account with no verified contact) |
+| 422 | — | malformed `username` |
+| 502 | `upstream_error` | Cognito failure, including a failed admin-group check (disable/reset fail closed) |
+
+**IAM (needs human review/apply):** the four action endpoints need
+`cognito-idp:AdminDisableUser`, `AdminEnableUser`, `AdminConfirmSignUp` and
+`AdminResetUserPassword` on the single user-pool ARN —
+`infra/modules/iam/main.tf` Sid `CognitoAdminUserManagementOnThisPoolOnly`.
+
+### GET /admin/audit-log
+
+Added 2026-10-28. Auth: admin only. Read-only viewer over the whole
+`audit_log` table, newest first (`created_at desc, id desc`). No migration.
+
+Query params:
+| Param | Type | Notes |
+|---|---|---|
+| page / page_size | int, default 1 / 20, max 100 | |
+| entity | string, `^[a-z0-9_]{1,64}$` | exact `table_name` |
+| action | string, `^[a-z_]{1,16}$` | exact `action` |
+| actor | string, max 100 | An email (matched against non-deleted `owner_account.email`, case-insensitive, plus one best-effort Cognito `ListUsers` lookup) OR a Cognito sub (exact if under 8 chars, else prefix match, wildcard characters literal). An email that resolves to nobody returns an empty page |
+| date_from / date_to | `YYYY-MM-DD` | UTC calendar days, both inclusive. `date_from > date_to` → `422` |
+
+Response `200`:
+```json
+{
+  "results": [
+    {
+      "id": 812, "table_name": "restaurant_brand", "record_id": 9,
+      "action": "update", "actor_id": "9b1e7a2c-...", "actor_role": "owner",
+      "actor_email": "priya@example.com", "actor_label": "priya@example.com",
+      "summary": "Restaurant name updated",
+      "old_val": {"name": "Spice Rt"}, "new_val": {"name": "Spice Route"},
+      "created_at": "2026-10-27T18:02:11Z"
+    }
+  ],
+  "page": 1, "page_size": 20, "total": 1,
+  "entity_types": ["cognito_user", "restaurant_brand", "restaurant_location"],
+  "email_lookup_degraded": false
+}
+```
+- `entity_types` is every distinct `table_name` in the table (NOT narrowed by
+  the filters) and feeds the entity filter menu.
+- Actor emails are resolved once per request via
+  `admin_actor_service.resolve_emails` (one `owner_account` query, at most
+  one `ListUsersInGroup` sweep per role, capped per-sub fallback) — never one
+  Cognito call per row. On failure `email_lookup_degraded: true` and
+  `actor_label` falls back to the 8-char sub. `system:<script>` actors show a
+  script label ("import", "seed") and no email; CCPA-deleted owners show
+  "deleted account".
+- `old_val`/`new_val` are raw JSON snapshots. Clients MUST render them as
+  escaped text, never HTML. A snapshot over 8000 serialized characters is
+  replaced by `{"_truncated": true, "_preview": "<first 2000 chars>"}`.
+
+Errors: `403 forbidden`; `422` (bad filter value/range/page params).
+
 ### GET /admin/listings
 
 Added 2026-10-05, replacing the admin Listings page's prior client-side

@@ -126,6 +126,23 @@ resource "aws_iam_role_policy" "api_lambda_custom" {
         Effect   = "Allow"
         Action   = ["cognito-idp:ListUsersInGroup"]
         Resource = var.cognito_user_pool_arn
+      },
+      {
+        # Admin user directory actions (POST /admin/users/{username}/disable|
+        # enable|confirm|reset-password, app/services/cognito_service.py
+        # admin_* functions). Exactly the four actions, this one pool ARN.
+        # No AdminCreateUser/AdminDeleteUser/AdminUpdateUserAttributes/
+        # AdminSetUserPassword/group-removal. The listing/lookup half of the
+        # feature reuses ListUsersInGroup and AdminGetUser granted above.
+        Sid    = "CognitoAdminUserManagementOnThisPoolOnly"
+        Effect = "Allow"
+        Action = [
+          "cognito-idp:AdminDisableUser",
+          "cognito-idp:AdminEnableUser",
+          "cognito-idp:AdminConfirmSignUp",
+          "cognito-idp:AdminResetUserPassword"
+        ]
+        Resource = var.cognito_user_pool_arn
       }
     ]
   })
