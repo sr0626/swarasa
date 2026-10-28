@@ -18,8 +18,16 @@ All run from the repo root, against **dev**. Refresh SSO first if needed:
 
 ## Bulk import (CSV)
 
-No admin upload page yet — import is this script only. Start from
-`scripts/data/restaurants_import_template.csv` (3 fake rows: replace them).
+**Preferred path: Admin > Import (`/admin/import`)** — upload a CSV in the browser, get
+a per-row check (errors, warnings, duplicates, rows with no coordinates), confirm, and
+download the per-row result. Listings it creates are **unclaimed** (no `owner_email`
+column; it is ignored if present), active and verified; re-uploading the same file creates
+nothing. It geocodes rows without coordinates itself. See docs/API_CONTRACTS.md "Admin bulk
+listing import". The script below is the older **owner-assigned** path (every row needs an
+existing `owner_email`) and the way to import without the browser.
+
+Start from `scripts/data/restaurants_import_template.csv` (3 fake rows: replace them).
+The page's own template (header only) has no `owner_email` column.
 
 **Columns** (header row required, any order, blank cell = not given):
 

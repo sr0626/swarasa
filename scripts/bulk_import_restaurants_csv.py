@@ -59,7 +59,7 @@ round-trip for them).
 Local validation (no network, no AWS): before anything else the script checks
 every row against the same rules the server applies -- required cells
 non-blank, 2-letter state/country, numeric in-range latitude/longitude, and
-the shared US phone rule (`backend/app/core/phone.py`, imported directly) --
+the shared field rules (`backend/app/core/bulk_import_rules.py`, imported directly; the same module the admin import page uses) --
 and refuses to continue if any row is invalid. `type` values that match no
 tag in `backend/app/scripts/taxonomy.json` are printed as warnings only. A
 starter file with valid example rows: `scripts/data/restaurants_import_template.csv`.
@@ -88,7 +88,7 @@ from pathlib import Path
 # caught here, before geocoding or any AWS call.
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_REPO_ROOT / "backend"))
-from app.core.phone import US_PHONE_ERROR, normalize_us_phone  # noqa: E402
+from app.core.bulk_import_rules import check_row_fields  # noqa: E402
 
 TAXONOMY_PATH = _REPO_ROOT / "backend" / "app" / "scripts" / "taxonomy.json"
 
@@ -160,24 +160,11 @@ def validate_rows(rows: list[dict]) -> tuple[list[str], list[str]]:
     known_tags = _tag_forms()
     for i, row in enumerate(rows, start=2):
         label = f"line {i} ({row.get('name') or '<no name>'})"
-        for col in sorted(REQUIRED_COLUMNS):
-            if not row.get(col):
-                errors.append(f"{label}: '{col}' is blank")
-        if row.get("state") and len(row["state"]) != 2:
-            errors.append(f"{label}: state {row['state']!r} must be a 2-letter code")
-        if row.get("country") and len(row["country"]) != 2:
-            errors.append(f"{label}: country {row['country']!r} must be a 2-letter code")
-        if row.get("phone") and normalize_us_phone(row["phone"]) is None:
-            errors.append(f"{label}: invalid phone {row['phone']!r}: {US_PHONE_ERROR}")
-        for col, limit in (("latitude", 90), ("longitude", 180)):
-            if row.get(col):
-                try:
-                    if abs(float(row[col])) > limit:
-                        raise ValueError
-                except ValueError:
-                    errors.append(f"{label}: {col} {row[col]!r} is not a number within +/-{limit}")
-        if bool(row.get("latitude")) != bool(row.get("longitude")):
-            errors.append(f"{label}: give both latitude and longitude, or neither")
+        # Shared field rules (also used by the admin import UI).
+        check = check_row_fields(row, required=tuple(sorted(REQUIRED_COLUMNS)))
+        for issue in check.issues:
+            if issue.severity == "error":
+                errors.append(f"{label}: {issue.message}")
         type_text = (row.get("type") or "").strip().lower()
         if known_tags and type_text and type_text.replace(" ", "_").replace("-", "_") not in known_tags \
                 and type_text not in known_tags:
