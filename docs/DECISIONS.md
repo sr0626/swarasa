@@ -2867,6 +2867,52 @@ Terraform, so changes to it take effect only after the human's plan and apply.
 *Rejected: keeping a "defensive" mapping for manager/admin (privileged groups
 must never be reachable from a client-supplied value)*
 
+**Search: open_now filter pulled forward from Phase 3; saved ZIP/city is the default origin**
+2026-10-28 | Built in PR #258, no migration. Supersedes the "open_now search
+filter is Phase 3" deferral in "Restaurant hours". `GET /search?open_now=true`
+is a per-location post-filter on the geo-limited candidate set (one bulk hours
+query), evaluated in each LOCATION's own timezone with the same
+`compute_is_open_now` the card pill uses; locations with unknown hours are
+excluded; a closed sibling branch never becomes the card's nearest location.
+Separately, a signed-in diner's saved ZIP/city (PR #243) becomes the default
+search origin via `near_zip`/`near_city`: the centroid (mean lat/lng) of our
+own active geocoded locations in that ZIP, else that city, else the DFW
+default; `origin_source` in the response says which. Precedence: explicit
+location > saved ZIP/city > default. The saved ZIP is an origin, not a search
+criterion, so `/search` stays empty-by-default. Mean (not median) means a
+mis-geocoded outlier can skew a centroid; revisit if it shows up.
+*Rejected: a paid geocoding vendor (all-AWS, no-vendor rule, idle cost); using
+the saved ZIP as an implicit criterion (breaks empty-by-default)*
+
+**Taxonomy deactivation: hide, never delete**
+2026-10-28 | Built in PR #259 (migration `0021_food_truck_type`). Admins add,
+rename and deactivate tags at `/admin/taxonomy`. Rename changes `display_name`
+only; the slug (`name`) and `category` are immutable. There is no delete.
+An inactive tag is not offered for new selection, not filterable, and omitted
+from every public payload; the location's owner, assigned manager and admin
+still see already-assigned inactive tags as removable "retired" chips, and
+`PUT /locations/{id}/cuisine-tags` never newly adds an inactive tag. Duplicate
+slug or display name (per category) returns a generic 409. The migration only
+guarantees the `food_truck` type exists (idempotent insert; downgrade is a
+no-op so assigned tags are never stripped).
+*Rejected: hard delete of tags (would strip data from locations); adding
+`is_active` to the public tag payload (kept the public contract exact)*
+
+**City landing pages: `/indian-restaurants/{city-slug}`, brand-first location URLs unchanged**
+2026-10-28 | Built in PR #257, no migration. SSR index and per-city pages with
+unique title/description, canonical, ItemList JSON-LD, real `?page=N` links
+(24 per page) and sitemap entries; same visibility as search (active only;
+soft-deleted brands and coming_soon excluded). Slug = lowercase, ASCII-folded,
+hyphenated; case variants merge; a slug shared by cities in different states
+gets a `-{state}` suffix only on the colliding cities. Unknown slug, junk
+`?page=` and past-the-end pages return a real 404, which is why the per-city
+route has no `loading.tsx` (a streamed boundary would make them soft 200s).
+Tiles are anonymous (no follow button) and ordered verified-first then name,
+not paid-first, since promoted placement is deferred. Follow-up: the sitemap
+lists only page 1 of each city.
+*Rejected: city-first location URLs (user confirmed brand-first); a loading
+boundary on the per-city route (soft-404 risk)*
+
 **Online ordering = redirect link model in Phase 4 (not on-platform checkout)**
 May 2026 | Platform links to restaurant's own ordering system (DoorDash, their own URL).
 Avoids food delivery logistics, payment processing liability, and fulfilment complexity.
