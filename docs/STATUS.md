@@ -28,10 +28,16 @@ fully satisfied and asked to stop iterating for now, with an explicit intent
 to revisit later, not a final sign-off.
 
 ## Open PRs
-- Only in-flight docs PRs as of 2026-09-25: this wave-10 tracker/status/
-  cmd-log batch. No code PRs open.
+- Only in-flight docs PRs as of 2026-10-28: this wave-11 tracker/status/
+  cmd-log batch and the DECISIONS.md wave-11 entries. No code PRs open.
 
-## Live state (2026-09-25)
+## Live state (2026-10-28)
+- Migrations on main through `0018_user_profile_location`. `0017_admin_message`
+  confirmed applied to dev (2026-10-07). `0018` needs `alembic_upgrade` after
+  the #243 deploy (green 2026-10-07); confirm it was run before relying on
+  diner city/ZIP.
+
+## Live state (2026-09-25, earlier)
 - Migrations through `0016_location_cuisine` applied to dev via
   `alembic_upgrade` (0013 menu, 0014 location slug, 0015 hide/show,
   0016 per-location tags; 0016 applied 2026-09-24 evening after the #230
@@ -45,6 +51,27 @@ to revisit later, not a final sign-off.
   the `set_platform_flag` management command when paid tiers exist.
 - Repo now has "Automatically delete head branches" enabled; the 200+
   merged branches were cleaned up by the user on 2026-09-23.
+
+## Landed 2026-09-25 to 2026-10-07, wave 11 (#236-#244)
+- Jump-link pills removed from public location pages (#236).
+- **Deal content now visible to every signed-in account** (#237); signed-out
+  visitors keep the content-free "deal available today" signal only.
+- Bulk-import CSV template + local validation + SCRIPTS.md (#238).
+- Time-aware open/closed label (server-side, location timezone), footer
+  brand block removed, phone formatting everywhere, lat/lng read-only,
+  activity detail table (#239).
+- **Admin console batch** (#240): per-location listing detail via
+  `GET /admin/listings`, `UtcDatetime` on all admin timestamps (fixes UTC
+  vs local mismatch), registered-users search/sort, Managers report
+  (`GET /admin/managers`), owner + created-by provenance. No migration.
+- **Signed-in `/privacy` page** for data export/deletion (#241); footer
+  link now labelled "Your Data" (#244) next to "Terms & Privacy".
+- **Contact admin** (#242, migration `0017_admin_message`): owners/managers
+  message admins; admin inbox at `/admin/messages` with resolve/reopen.
+  No SES notification, no in-app reply thread.
+- **Registered-user city + ZIP mandatory** (#243, migration
+  `0018_user_profile_location`): signup, account form, dismissible banner,
+  admin Location column. Follow-up: default search to saved ZIP.
 
 ## Landed 2026-09-24/25, wave 10 (#227-#233)
 - **Owner console shows setup listings** (#227): loader now passes the
