@@ -21,15 +21,18 @@ import Link from "next/link";
 import SwarasaMark from "@/components/icons/SwarasaMark";
 import AccountMenu from "./AccountMenu";
 import AdminNotificationsBell from "./AdminNotificationsBell";
+import DealAlertsBell from "./DealAlertsBell";
 import { TopBarDesktopNav, TopBarMobileNav } from "./TopBarNav";
 import { topBarLinksFor } from "@/lib/nav/topBarLinks";
 import type { AdminNotifications } from "@/types/adminNotifications";
+import type { NotificationList } from "@/types/notification";
 import type { UserRole } from "@/types/auth";
 
 export default function TopBarShell({
   greetingName,
   role = null,
   notifications = null,
+  dealAlerts = null,
   stickyOnMobile = true,
 }: {
   greetingName: string | null;
@@ -46,6 +49,13 @@ export default function TopBarShell({
    * state). Ignored unless `role === "admin"`; app/error.tsx omits it.
    */
   notifications?: AdminNotifications | null;
+  /**
+   * Deal-alerts bell data from `GET /notifications`, resolved by TopBar.tsx
+   * for a registered_user session. `null` = the fetch failed (bell still
+   * renders, in an "unavailable" state). Ignored unless
+   * `role === "registered_user"`; app/error.tsx omits it.
+   */
+  dealAlerts?: NotificationList | null;
   /**
    * Default true (sticky at every width). The location editor passes false: below
    * `md` the header then scrolls away (`relative`, so its dropdown panels still
@@ -108,6 +118,8 @@ export default function TopBarShell({
                   deliberately NOT positioned so the bell's dropdown can anchor
                   to the header on mobile (see AdminNotificationsBell.tsx). */}
               {role === "admin" && <AdminNotificationsBell data={notifications} />}
+              {/* Diner bell: in-app alerts for new deals at followed restaurants. */}
+              {role === "registered_user" && <DealAlertsBell data={dealAlerts} />}
               <AccountMenu greetingName={greetingName} role={role} />
             </>
           ) : (

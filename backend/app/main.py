@@ -25,6 +25,7 @@ from app.routers import (
     listing_report,
     location_reopen,
     locations,
+    notifications,
     restaurants,
     search,
     sitemap,
@@ -50,6 +51,7 @@ app.include_router(data_deletion.router)
 app.include_router(admin.router)
 app.include_router(admin_message.router)
 app.include_router(location_reopen.router)
+app.include_router(notifications.router)
 
 # package_type = "Image" Lambda functions have no separate "handler" config
 # — the Dockerfile's CMD *is* the handler, in "<module>.<callable>" form

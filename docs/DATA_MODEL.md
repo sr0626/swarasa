@@ -157,3 +157,17 @@ remove, and every photo URL in responses). A missing row, an empty value or
 unparsable text all read as **off**. Flipped with the `set_platform_flag`
 management command (`docs/SCRIPTS.md`). Future intent (not implemented): gate
 additionally by `restaurant_location.is_paid` when paid tiers exist.
+
+## user_notification (migration `0019_user_notification`) — in-app deal alerts
+
+One row per (recipient, event). Columns: `id`, `user_sub` (Cognito `sub`,
+bare string like `user_follow.user_id`, not an FK), `kind` (`'deal_new'`,
+plain text), `location_id` (FK `restaurant_location`, CASCADE), `deal_id`
+(FK `deal`, CASCADE, nullable), `title` (deal-title snapshot), `created_at`,
+`read_at` (NULL = unread). Index `(user_sub, read_at, created_at)`.
+
+Follows are brand-level, deals are per location, so the row records the
+specific `location_id` (link target) and is fanned out to every follower of
+that location's brand. Not on the audited-entity list (the `deal` create is
+already audited). Included in CCPA export; hard-deleted on an approved
+deletion request.

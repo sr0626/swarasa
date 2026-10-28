@@ -41,7 +41,9 @@ import TopBarShell from "./TopBarShell";
 import { getServerSession } from "@/lib/auth/session";
 import { getCurrentUser } from "@/lib/api/auth";
 import { getAdminNotifications } from "@/lib/api/adminNotifications";
+import { getNotifications } from "@/lib/api/notifications";
 import type { AdminNotifications } from "@/types/adminNotifications";
+import type { NotificationList } from "@/types/notification";
 
 /**
  * Best-effort greeting name for a signed-in session: `GET /auth/me`'s
@@ -81,6 +83,19 @@ async function resolveNotifications(accessToken: string): Promise<AdminNotificat
   }
 }
 
+/**
+ * Diner deal-alerts bell data (`GET /notifications`) -- same best-effort
+ * contract as the admin bell: a failure returns `null` and never breaks the
+ * header or the page.
+ */
+async function resolveDealAlerts(accessToken: string): Promise<NotificationList | null> {
+  try {
+    return await getNotifications(accessToken);
+  } catch {
+    return null;
+  }
+}
+
 export default async function TopBar({
   stickyOnMobile = true,
 }: {
@@ -89,20 +104,22 @@ export default async function TopBar({
   stickyOnMobile?: boolean;
 } = {}) {
   const session = await getServerSession();
-  // Run the two independent backend calls concurrently; the admin fetch is
+  // Run the independent backend calls concurrently; each bell's fetch is
   // skipped entirely for every other role.
-  const [greetingName, notifications] = session
+  const [greetingName, notifications, dealAlerts] = session
     ? await Promise.all([
         resolveGreetingName(session.accessToken, session.email),
         session.role === "admin" ? resolveNotifications(session.accessToken) : null,
+        session.role === "registered_user" ? resolveDealAlerts(session.accessToken) : null,
       ])
-    : [null, null];
+    : [null, null, null];
 
   return (
     <TopBarShell
       greetingName={greetingName}
       role={session?.role ?? null}
       notifications={notifications}
+      dealAlerts={dealAlerts}
       stickyOnMobile={stickyOnMobile}
     />
   );
