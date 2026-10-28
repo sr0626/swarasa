@@ -2691,6 +2691,92 @@ Built in PR #185 (`backend/app/services/restaurant_service.py`'s
 directly contradicts the 2026-09-23 instruction; paid-tier gating — directly
 contradicts the free-for-everyone confirmation*
 
+**Deals engine amendment: deal content visible to every signed-in account**
+2026-09-25 | Built in PR #237. Direct user decision (2026-09-25): an owner
+viewing ANOTHER owner's restaurant saw only the content-free pill with no
+way to see the deal and no sign-in prompt, so content visibility widens from
+"registered_user and up" to EVERY signed-in account (registered_user, any
+owner, manager, admin). Signed-out visitors still get only the boolean
+`has_deal_today` signal. `deals_hidden` and a deal's `is_active` still
+suppress content for everyone. Single choke point:
+`deal_service.caller_may_view_deal_content_for_location` (now just
+`current_user is not None`), used by `location_service._location_to_out`
+so `GET /locations/{id}` and the by-slug endpoint cannot diverge. Frontend
+decides the panel with the pure `dealsPanelMode`.
+*Rejected: keeping registered_user-only content (confusing for owners and
+managers browsing the site, contradicts the user's request); showing content
+to signed-out visitors (registration remains the gate to the deal itself)*
+
+**Open/closed label is time-aware, computed server-side in the location's timezone**
+2026-10-07 | Built in PR #239. "Open today 10am-10pm" was shown at any hour.
+Labels now: "Open now - until 10pm", "Closed now - opens 10am", "Closed now"
+(past the last window), "Closed today" (closed all day), nothing when hours
+are unknown. The backend adds `opens_later_today` (bool or null) to the
+location payloads, computed in `hours_service` from the LOCATION's timezone,
+never the browser clock; one shared `describeOpenStatus` helper renders it
+everywhere. Latitude/longitude from geocoding are shown read-only in the
+editor (owners cannot hand-edit coordinates, which would silently break geo
+search).
+*Rejected: computing open/closed in the browser (wrong for viewers in other
+timezones, and mismatches SSR); editable lat/lng (search correctness)*
+
+**Admin timestamps are serialized as explicit UTC (`UtcDatetime`)**
+2026-10-07 | Built in PR #240. Admin pages showed bare UTC clock times with
+no zone label because Server Components format on the Amplify server (UTC).
+`backend/app/schemas/utc.py` `UtcDatetime` stamps naive datetimes as UTC on
+serialization and is applied to every admin-facing timestamp field;
+the frontend renders them through `LocalDateTime` (viewer's local zone after
+mount, UTC on first render so there is no hydration mismatch).
+Admin additions in the same PR: `GET /admin/listings` as a dedicated
+endpoint (per-location `matches_filter` and provenance must never leak onto
+public/owner payloads), `GET /admin/managers` listing anyone with at least
+one assignment row ever (active or revoked; a Cognito manager with zero
+assignments is not listed, as that would need a full Cognito sweep), batched
+Cognito email lookups with a capped per-sub fallback, and
+`manager_count` on `/admin/overview`.
+*Rejected: formatting timestamps on the server with a fixed zone; adding the
+admin-only fields to `GET /restaurants`*
+
+**Data export / deletion lives on a signed-in /privacy page; footer links are "Terms & Privacy" and "Your Data"**
+2026-10-07 | Built in PRs #241 and #244. The "Your data" controls moved out of
+the Owner, Admin, Diner and Manager account views onto `/privacy`
+(`DataPrivacySection` unchanged, backend unchanged). Signed-out visitors are
+redirected to login and returned; admins see a note that admin accounts are
+staff. The footer shows "Terms & Privacy" (`/terms`, policy text) and
+"Your Data" (`/privacy`); the second was first labelled "Privacy" and
+renamed because the pair read as a duplicate.
+*Rejected: one merged page (policy text is public, controls are signed-in
+only); keeping controls on each account view (four copies to maintain)*
+
+**Contact admin: in-console messages from owners and managers**
+2026-10-07 | Built in PR #242 (migration `0017_admin_message`). Owners and
+managers message the admins from `/portal/contact-admin`, optionally
+attaching one of their own locations; admins triage at `/admin/messages`
+(Open/Resolved/All, resolve and re-open, audit_log entry on each). Subject
+3-120 and message 10-4000 characters, 5 messages per sender per rolling
+hour (429). A location the sender does not own or manage returns a generic
+`invalid_location` 400, so the response never discloses another tenant.
+No email notification to admins (SES deferred; admins see an Overview count)
+and no in-app reply thread (admin replies via `mailto:` to the sender).
+The public `/contact` page is unchanged.
+*Rejected: SES email to admins now (production access pending); a threaded
+reply system (scope, revisit if volume warrants)*
+
+**Registered users must give city and ZIP**
+2026-10-07 | Built in PR #243 (migration `0018_user_profile_location`).
+`user_profile.city` (2-100 chars) and `postal_code` (US 5-digit or ZIP+4)
+are required at diner signup and collected for existing diners via a form
+pinned on `/account` plus a banner on `/` and `/search` that can be dismissed
+for the session. Both-or-neither is enforced (422). Registered users only;
+owner signup is unchanged. No Cognito or Terraform change: signup has no
+session until email confirmation, so the values wait in `sessionStorage`
+(email-keyed, tab-scoped) and are PATCHed to `/auth/me` on first sign-in; if a
+diner confirms on another device, the account prompt catches them. Included
+in the CCPA export and shown as a Location column in the admin registered-users
+report. Follow-up, not built: default search location from the saved ZIP.
+*Rejected: custom Cognito attributes (Terraform change, no session at
+signup anyway); making the fields optional (user wants every diner located)*
+
 **Online ordering = redirect link model in Phase 4 (not on-platform checkout)**
 May 2026 | Platform links to restaurant's own ordering system (DoorDash, their own URL).
 Avoids food delivery logistics, payment processing liability, and fulfilment complexity.
