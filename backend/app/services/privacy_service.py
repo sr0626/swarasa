@@ -10,7 +10,9 @@ behind every judgment call referenced inline below. Short version:
   table that stores it (`owner_account.cognito_sub`,
   `location_manager.user_id`, `user_follow.user_id`,
   `claim_request.claimant_user_id`, `listing_report.reporter_user_id`,
-  `audit_log.actor_id`, `user_profile.cognito_sub`) — not gated by their *current* role claim, since
+  `audit_log.actor_id`, `user_profile.cognito_sub`, plus
+  `manager_invite` by the owner's `owner_account.id` and by the identity's
+  login email) — not gated by their *current* role claim, since
   the same identity can appear in more than one of these regardless of
   which pool group they're in right now (e.g. a `registered_user` can
   have historic `claim_request` rows — `POST /claim` allows any
@@ -39,6 +41,9 @@ behind every judgment call referenced inline below. Short version:
   `location_manager`/`claim_request` rows are kept but have their
   identifying column redacted to `_REDACTED_MARKER` (preserves
   access-control/business history shape without the identifier);
+  `manager_invite` rows (invitee email = third-party PII) have their
+  `email` redacted and any still-live link revoked, the row kept for
+  per-owner rate-limit bookkeeping;
   `listing_report` rows are kept with only `reporter_email` nulled out —
   `reporter_user_id` is left in place, same treatment as
   `audit_log.actor_id`, since a report is an attribution/triage trail
@@ -52,7 +57,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
@@ -62,6 +67,7 @@ from app.models.claim_request import ClaimRequest
 from app.models.data_deletion_request import DataDeletionRequest
 from app.models.listing_report import ListingReport
 from app.models.location_manager import LocationManager
+from app.models.manager_invite import REDACTED_EMAIL, ManagerInvite
 from app.models.owner_account import OwnerAccount
 from app.models.user_activity_event import UserActivityEvent
 from app.models.user_follow import UserFollow
@@ -78,11 +84,13 @@ from app.schemas.privacy import (
     FollowExportOut,
     ListingReportExportOut,
     LocationManagerExportOut,
+    ManagerInviteExportOut,
     NotificationExportOut,
     OwnerAccountExportOut,
     UserProfileExportOut,
 )
-from app.services import activity_service, audit_service
+from app.services import activity_service, audit_service, cognito_service
+from app.services.manager_invite_service import invite_status
 from app.services.auth_service import get_owner_account_by_sub, get_user_profile_by_sub
 
 # Shared tombstone value for a redacted identity column — not per-row
@@ -93,7 +101,8 @@ _REDACTED_MARKER = "deleted-user"
 
 _EXPORT_NOTICE = (
     "This export covers personal data held directly by this app "
-    "(location manager assignments, restaurant follows, in-app deal "
+    "(location manager assignments, manager invitations you sent or that "
+    "were addressed to your email, restaurant follows, in-app deal "
     "notifications, claim requests, "
     "listing reports you submitted while signed in, your display name and "
     "last-seen time if you are a registered user or manager, the searches and "
@@ -107,11 +116,28 @@ _EXPORT_NOTICE = (
 )
 
 
-async def _gather(db: AsyncSession, cognito_sub: str) -> dict[str, Any]:
+def _email_for_sub_best_effort(cognito_sub: str) -> str | None:
+    """The identity's login email, for matching `manager_invite.email` on an
+    approved deletion (the request only records the sub). Cognito lookup,
+    best-effort: any failure just means invitee-side invites are not matched
+    (they are redacted on accept/revoke anyway and expire in 14 days)."""
+    try:
+        return cognito_service.find_email_by_sub(cognito_sub)
+    except Exception:  # noqa: BLE001 - never block a deletion on a display lookup
+        return None
+
+
+async def _gather(
+    db: AsyncSession, cognito_sub: str, email: str | None = None
+) -> dict[str, Any]:
     """Every row across the schema keyed to this Cognito sub. Shared by
     export and by both the submission-time and approval-time deletion
     scope computations, so the two never drift out of sync with each
     other about what "this identity's data" actually means.
+
+    `email` (the identity's login email, when known) additionally matches
+    `manager_invite` rows addressed to it; invites the identity SENT as an
+    owner are matched through `owner_account.id` regardless.
     """
     owner = await get_owner_account_by_sub(db, cognito_sub)
 
@@ -152,6 +178,24 @@ async def _gather(db: AsyncSession, cognito_sub: str) -> dict[str, Any]:
         )
     ).scalars().all()
 
+    # Manager invites: ones this identity sent (as an owner) and ones
+    # addressed to its email. Keyed by email only when it is known.
+    invite_filters = []
+    if owner is not None:
+        invite_filters.append(ManagerInvite.invited_by_owner_id == owner.id)
+    normalized_email = (email or "").strip().lower()
+    if normalized_email:
+        invite_filters.append(ManagerInvite.email == normalized_email)
+    invite_rows = []
+    if invite_filters:
+        invite_rows = (
+            await db.execute(
+                select(ManagerInvite)
+                .where(or_(*invite_filters))
+                .order_by(ManagerInvite.created_at.desc())
+            )
+        ).scalars().all()
+
     audit_rows = (
         await db.execute(
             select(AuditLog)
@@ -169,6 +213,7 @@ async def _gather(db: AsyncSession, cognito_sub: str) -> dict[str, Any]:
         "listing_reports": listing_report_rows,
         "activity": activity_rows,
         "notifications": notification_rows,
+        "manager_invites": list(invite_rows),
         "audit": audit_rows,
     }
 
@@ -185,6 +230,7 @@ def _data_scope(gathered: dict[str, Any]) -> dict[str, int]:
         "listing_reports": len(gathered["listing_reports"]),
         "activity_events": len(gathered["activity"]),
         "notifications": len(gathered["notifications"]),
+        "manager_invites": len(gathered["manager_invites"]),
         "audit_log_entries": len(gathered["audit"]),
     }
 
@@ -196,7 +242,7 @@ async def export_my_data(db: AsyncSession, current_user) -> DataExportOut:
     role; a read of possibly-nonexistent data shouldn't have that
     side effect).
     """
-    gathered = await _gather(db, current_user.cognito_sub)
+    gathered = await _gather(db, current_user.cognito_sub, current_user.email)
 
     owner_out = None
     if gathered["owner"] is not None:
@@ -284,6 +330,25 @@ async def export_my_data(db: AsyncSession, current_user) -> DataExportOut:
             )
             for n in gathered["notifications"]
         ],
+        manager_invites=[
+            ManagerInviteExportOut(
+                invite_id=i.id,
+                direction=(
+                    "sent"
+                    if gathered["owner"] is not None
+                    and i.invited_by_owner_id == gathered["owner"].id
+                    else "received"
+                ),
+                location_id=i.location_id,
+                email=i.email,
+                status=invite_status(i, datetime.now(timezone.utc)),
+                created_at=i.created_at,
+                expires_at=i.expires_at,
+                accepted_at=i.accepted_at,
+                revoked_at=i.revoked_at,
+            )
+            for i in gathered["manager_invites"]
+        ],
         audit_log_entries=[
             AuditLogExportOut(
                 table_name=a.table_name,
@@ -333,7 +398,7 @@ async def create_deletion_request(
             "deletion_already_pending",
         )
 
-    gathered = await _gather(db, current_user.cognito_sub)
+    gathered = await _gather(db, current_user.cognito_sub, current_user.email)
     request = DataDeletionRequest(
         requester_user_id=current_user.cognito_sub,
         requester_role=current_user.role,
@@ -415,7 +480,7 @@ async def approve_deletion_request(
     request = await _get_pending_or_409(db, request_id)
     cognito_sub = request.requester_user_id
 
-    gathered = await _gather(db, cognito_sub)
+    gathered = await _gather(db, cognito_sub, _email_for_sub_best_effort(cognito_sub))
 
     # Safety guard: a PENDING claim under this identity can't be silently
     # redacted mid-review — admin has to resolve it first (approve/reject
@@ -458,6 +523,15 @@ async def approve_deletion_request(
     # activity, not stale data, and the name is unlocked again.
     if gathered["user_profile"] is not None:
         await db.delete(gathered["user_profile"])
+
+    # manager_invite: redact the invitee address and kill any still-live link
+    # (invites this identity sent as an owner, and ones addressed to its
+    # email). Not on the audit-required list; the row itself is kept only for
+    # rate-limit bookkeeping.
+    for invite in gathered["manager_invites"]:
+        invite.email = REDACTED_EMAIL
+        if invite.accepted_at is None and invite.revoked_at is None:
+            invite.revoked_at = now
 
     # location_manager: redact the identifying column, deactivate if
     # still active. On root CLAUDE.md's audit-required table list, so

@@ -9,7 +9,8 @@ ListUsers`, filtered to this one user pool:
     request body's `manager_email` to the `sub` written into
     `location_manager.user_id`. Returns `None` when nobody has signed up
     with that email yet; the router/service layer turns that into the
-    contract's `404 manager_not_found` (no invite-by-email flow exists).
+    contract's `404 manager_not_found` (a not-yet-registered person is invited
+    via a link instead: `manager_invite_service`).
   - `find_email_by_sub` — read-time resolution of `location_manager.
     user_id` back to a display `email` on GET responses (never stored —
     same "resolve the external identifier back to something human-

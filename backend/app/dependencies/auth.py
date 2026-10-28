@@ -136,10 +136,20 @@ class CurrentUser:
     owner_account_id: int | None = None
 
 
+# Highest privilege first. A user can legitimately be in two groups: an
+# invitee who signed up as a diner (`registered_user`) and then accepted a
+# manager invite is added to `manager` as well (Cognito's AdminRemoveUserFromGroup
+# is deliberately not granted). Resolving by this fixed order — not by the
+# order Cognito happens to list the groups in the token — keeps the role
+# deterministic. Same precedence as admin_users ("admin > owner > manager >
+# registered_user").
+_ROLE_PRECEDENCE = ("admin", "owner", "manager", "registered_user")
+
+
 def _extract_role(groups: list[str]) -> str:
-    for group in groups:
-        if group in _ROLE_GROUPS:
-            return group
+    for role in _ROLE_PRECEDENCE:
+        if role in groups:
+            return role
     # Authenticated but in no recognized pool group -> treat as the
     # least-privileged authenticated role (read-only + follow, per root
     # CLAUDE.md "Permission model").

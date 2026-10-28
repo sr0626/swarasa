@@ -41,8 +41,9 @@ const ALL_SECTIONS: readonly EditorSection[] = [
   { id: "managers", anchorId: "sec-managers", label: "Managers" },
 ];
 
-/** Sections the editor renders for a role. Managers-assignment is owner-only
- * (an admin does not get that panel on this page today). */
+/** Sections the editor renders for a role. The Managers panel (assign by
+ * email + invite by link) is for the owner; an admin gets it too, but only the
+ * invite part (acting for the owner). An assigned manager never sees it. */
 export function editorSectionsForRole(role: string): EditorSection[] {
-  return ALL_SECTIONS.filter((s) => s.id !== "managers" || role === "owner");
+  return ALL_SECTIONS.filter((s) => s.id !== "managers" || role === "owner" || role === "admin");
 }

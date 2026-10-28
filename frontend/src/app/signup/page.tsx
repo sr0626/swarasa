@@ -7,6 +7,7 @@ import type { Metadata } from "next";
 import TopBar from "@/components/home/TopBar";
 import SignUpForm from "@/components/auth/SignUpForm";
 import { safeNextPath } from "@/lib/auth/safeNext";
+import { isInviteNextPath } from "@/lib/manager/invite";
 
 export const metadata: Metadata = {
   title: "Create an Account",
@@ -43,7 +44,7 @@ export default function SignUpPage({
           </p>
 
           <div className="mt-6">
-            <SignUpForm initialRole={initialRole} nextPath={next} />
+            <SignUpForm initialRole={initialRole} nextPath={next} inviteMode={isInviteNextPath(next)} />
           </div>
         </div>
       </div>

@@ -96,6 +96,23 @@ class NotificationExportOut(BaseModel):
     read_at: datetime | None
 
 
+class ManagerInviteExportOut(BaseModel):
+    """A manager invitation the caller SENT (as an owner; `direction="sent"`)
+    or that is addressed to the caller's own email (`direction="received"`)
+    — see `app/models/manager_invite.py`. Accepted/revoked invites carry no
+    address any more (redacted on reaching that state)."""
+
+    invite_id: int
+    direction: str
+    location_id: int
+    email: str
+    status: str
+    created_at: datetime
+    expires_at: datetime
+    accepted_at: datetime | None
+    revoked_at: datetime | None
+
+
 class AuditLogExportOut(BaseModel):
     """Actions the caller themselves performed, per DECISIONS.md "CCPA
     data export/deletion" — included for transparency, but retained (not
@@ -123,6 +140,7 @@ class DataExportOut(BaseModel):
     listing_reports: list[ListingReportExportOut]
     activity_events: list[ActivityEventExportOut]
     notifications: list[NotificationExportOut] = []
+    manager_invites: list[ManagerInviteExportOut] = []
     audit_log_entries: list[AuditLogExportOut]
     notice: str
 

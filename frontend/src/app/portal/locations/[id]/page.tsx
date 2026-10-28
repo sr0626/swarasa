@@ -27,6 +27,9 @@ import LocationDealsManager from "@/components/portal/LocationDealsManager";
 import LocationMenuManager from "@/components/portal/LocationMenuManager";
 import LocationPhotoManager from "@/components/portal/LocationPhotoManager";
 import LocationManagerAssignment from "@/components/portal/LocationManagerAssignment";
+import LocationManagerInvites from "@/components/portal/LocationManagerInvites";
+import { getManagerInvites } from "@/lib/api/managerInvites";
+import type { ManagerInvite } from "@/types/managerInvite";
 import GoLiveBar from "@/components/portal/GoLiveBar";
 import ListingLiveNotice, { parseLiveParam } from "@/components/portal/ListingLiveNotice";
 import ListingSetupBanner from "@/components/portal/ListingSetupBanner";
@@ -160,6 +163,18 @@ export default async function PortalLocationPage({ params, searchParams }: Locat
 
   const isOwner = session.role === "owner";
   const isAdmin = session.role === "admin";
+
+  // Outstanding manager invites (owner, or admin acting for the owner). A load
+  // failure just shows an empty list — the panel's create form still works and
+  // the API remains the authority.
+  let invites: ManagerInvite[] = [];
+  if (isOwner || isAdmin) {
+    try {
+      invites = (await getManagerInvites(locationId, session.accessToken)).results;
+    } catch {
+      invites = [];
+    }
+  }
   const back = backTarget(session.role);
   // Owners and admins create listings (Add restaurant / Add location); ignore
   // the flag for anyone else.
@@ -241,12 +256,19 @@ export default async function PortalLocationPage({ params, searchParams }: Locat
       />
     ),
     info: anchored(sectionById("info"), <LocationInfoForm location={location} role={session.role} />),
-    managers: isOwner
-      ? anchored(
-          sectionById("managers"),
-          <LocationManagerAssignment locationId={location.id} isPaid={location.is_paid} initialManagers={managers} />
-        )
-      : null,
+    managers:
+      isOwner || isAdmin
+        ? anchored(
+            sectionById("managers"),
+            <div className="flex flex-col gap-6">
+              {/* "Assign by email" is owner-only (API has no admin path). */}
+              {isOwner && (
+                <LocationManagerAssignment locationId={location.id} isPaid={location.is_paid} initialManagers={managers} />
+              )}
+              <LocationManagerInvites locationId={location.id} initialInvites={invites} />
+            </div>
+          )
+        : null,
   };
 
   return (

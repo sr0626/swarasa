@@ -287,10 +287,10 @@ async def assign_manager(
          "unknown email" — should not be preceded by any DB work at all).
          No invite email is sent and no Cognito user is created on a miss
          (SES/email is Phase-2-deferred, root CLAUDE.md "Email: AWS
-         SES (deferred)") — this stays a clear, immediate error. The
-         "auto-invite a not-yet-registered email + auto-link on their
-         later signup" flow is an explicit, intentionally NOT built here,
-         backlog item (see this task's PR description).
+         SES (deferred)") — this stays a clear, immediate error. For a
+         not-yet-registered person the owner uses the invite-by-link flow
+         instead (`manager_invite_service`, docs/API_CONTRACTS.md "Manager
+         invites"), which ends in the same validation below.
       2. Cross-owner check (`assert_manager_belongs_to_same_owner`) — a
          manager scoped to a different owner is rejected before either
          cap check runs (an identity/ownership violation, not a capacity
