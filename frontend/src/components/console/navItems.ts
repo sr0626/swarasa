@@ -36,6 +36,8 @@ export const ADMIN_NAV_ITEMS: ReadonlyArray<ConsoleNavItem> = [
   { href: "/admin/reports", label: "Reports", icon: "reports" },
   { href: "/admin/reopen-requests", label: "Reopen requests", icon: "clock" },
   { href: "/admin/listings", label: "Listings", icon: "store" },
+  // Bulk CSV import of unclaimed listings (POST /admin/import/validate + /commit).
+  { href: "/admin/import", label: "Import", icon: "plus" },
   // "Contact admin" messages from owners/managers (GET /admin/messages).
   { href: "/admin/messages", label: "Messages", icon: "mail" },
   // Cuisine / dietary / restaurant-type tags (GET/POST/PATCH /admin/taxonomy).

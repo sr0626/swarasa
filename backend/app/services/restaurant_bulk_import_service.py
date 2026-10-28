@@ -180,13 +180,18 @@ async def _sync_geom(db: AsyncSession, location_id: int, lat: float, lng: float)
 async def _find_or_create_brand(
     db: AsyncSession,
     *,
-    owner_id: int,
+    owner_id: int | None,
     name: str,
     description: str | None,
     actor_id: str,
     actor_role: str,
     website: str | None = None,
+    provenance: str | None = None,
 ) -> tuple[RestaurantBrand, bool]:
+    """`owner_id=None` creates an UNCLAIMED brand (`is_claimed=false`,
+    `claimed_at=NULL`) -- the admin bulk-import UI's seeded listings
+    (`admin_bulk_import_service`). `provenance` is recorded in the audit
+    row's `new_val` when given."""
     slug = slugify(name)
     result = await db.execute(select(RestaurantBrand).where(RestaurantBrand.slug == slug))
     existing = result.scalar_one_or_none()
@@ -217,8 +222,8 @@ async def _find_or_create_brand(
         slug=slug,
         description=description,
         website=website,
-        is_claimed=True,
-        claimed_at=datetime.now(timezone.utc),
+        is_claimed=owner_id is not None,
+        claimed_at=datetime.now(timezone.utc) if owner_id is not None else None,
     )
     db.add(brand)
     await db.flush()
@@ -236,6 +241,7 @@ async def _find_or_create_brand(
             "slug": brand.slug,
             "owner_id": brand.owner_id,
             "website": brand.website,
+            **({"provenance": provenance} if provenance else {}),
         },
     )
     return brand, True
@@ -248,6 +254,7 @@ async def _find_or_create_location(
     row: RestaurantBasicDetailIn,
     actor_id: str,
     actor_role: str,
+    provenance: str | None = None,
 ) -> tuple[RestaurantLocation, bool]:
     result = await db.execute(
         select(RestaurantLocation).where(
@@ -297,6 +304,7 @@ async def _find_or_create_location(
             "brand_id": brand_id,
             "address_line1": location.address_line1,
             "city": location.city,
+            **({"provenance": provenance} if provenance else {}),
         },
     )
     return location, True
@@ -542,29 +550,38 @@ async def _resolve_owner_by_email(db: AsyncSession, email: str) -> OwnerAccount 
     return result.scalar_one_or_none()
 
 
-async def _match_cuisine_tag(db: AsyncSession, type_text: str) -> CuisineTag | None:
+def match_cuisine_tag_text(tags: list[CuisineTag], type_text: str) -> CuisineTag | None:
     """Case-insensitive match of free-text `type_text` (e.g. "south
     indian") against `cuisine_tag.name` (a slug, e.g. "south_indian" --
     spaces/hyphens normalized to underscores before comparing) OR
     `cuisine_tag.display_name` (e.g. "South Indian", compared as-is,
-    case-insensitively). Only `is_active` tags match, same scope
-    `cuisine_service.list_active_cuisine_tags` uses. Returns `None` (not
-    an error) when nothing matches -- caller reports this per-row, per
-    the task's explicit "don't fail the row" requirement.
+    case-insensitively), over an already-loaded list of ACTIVE tags. Pure,
+    so the admin import UI (`admin_bulk_import_service`) can match a whole
+    file against one tag load. Returns `None` (not an error) on no match.
     """
     normalized = type_text.strip().lower()
     if not normalized:
         return None
     slug_form = normalized.replace(" ", "_").replace("-", "_")
+    for tag in tags:
+        if tag.name.lower() == slug_form or tag.display_name.lower() == normalized:
+            return tag
+    return None
 
-    result = await db.execute(
-        select(CuisineTag).where(
-            CuisineTag.is_active == True,  # noqa: E712
-            (func.lower(CuisineTag.name) == slug_form)
-            | (func.lower(CuisineTag.display_name) == normalized),
-        )
-    )
-    return result.scalars().first()
+
+async def load_active_cuisine_tags(db: AsyncSession) -> list[CuisineTag]:
+    """Only `is_active` tags match, same scope
+    `cuisine_service.list_active_cuisine_tags` uses."""
+    result = await db.execute(select(CuisineTag).where(CuisineTag.is_active == True))  # noqa: E712
+    return list(result.scalars().all())
+
+
+async def _match_cuisine_tag(db: AsyncSession, type_text: str) -> CuisineTag | None:
+    """DB-backed wrapper over `match_cuisine_tag_text` for the CSV path;
+    returns `None` (not an error) when nothing matches -- caller reports
+    this per-row, per the task's explicit "don't fail the row" requirement.
+    """
+    return match_cuisine_tag_text(await load_active_cuisine_tags(db), type_text)
 
 
 async def _link_cuisine_tag(db: AsyncSession, *, location_id: int, cuisine_tag_id: int) -> None:

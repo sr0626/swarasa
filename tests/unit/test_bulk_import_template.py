@@ -76,10 +76,10 @@ def test_script_validation_rejects_bad_rows():
     assert script.validate_rows([good]) == ([], [])
 
     bad_phone, _ = script.validate_rows([{**good, "phone": "123-456-7890"}])
-    assert any("invalid phone" in e for e in bad_phone)
+    assert any("invalid phone" in e.lower() for e in bad_phone)
 
     bad_state, _ = script.validate_rows([{**good, "state": "Texas"}])
-    assert any("state" in e for e in bad_state)
+    assert any("state" in e.lower() for e in bad_state)
 
     missing, _ = script.validate_rows([{**good, "owner_email": ""}])
     assert any("owner_email" in e for e in missing)

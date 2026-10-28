@@ -4181,6 +4181,73 @@ for a batch-level problem (no header row, a required column entirely
 missing, zero data rows, or over the 500-row cap) — same
 per-row-vs-batch-level split as the JSON path.
 
+### Admin bulk listing import (`/admin/import`)
+
+Admin-only UI flow (page `/admin/import`) over two stateless endpoints. No
+import-batch table: the browser parses the CSV, validates the WHOLE file in one
+dry run, then commits in small sequential chunks; every commit chunk re-validates
+server-side, so the client's verdict is never trusted. Reuses the field rules in
+`app/core/bulk_import_rules.py` (also used by `scripts/bulk_import_restaurants_csv.py`)
+and the brand/location create + cuisine-link code in
+`restaurant_bulk_import_service.py`.
+
+**Row** (`ImportRowIn`): `row_number` (spreadsheet row, header = 1, first data row = 2)
+plus string cells `name, address_line1, address_line2, city, state, postal_code,
+country, phone, website, type, description` and `latitude`/`longitude` (string or
+number). Unknown columns (e.g. `owner_email`) are ignored. Cells over 2100 chars
+are a 422; the browser truncates to 2050 so an over-long cell becomes a per-row
+`too_long` error instead.
+
+**`POST /admin/import/validate`** — auth: admin. Body `{rows: [...]}`, 1..500 rows
+(else 422). Writes nothing. Response `{rows: [...], summary}`; each row:
+`row_number, name, status, issues[{field, severity (error|warning|info), code,
+message}], needs_geocoding, matched_tag, duplicate_of_row, duplicate_of_listing_id`.
+`status`:
+- `valid` — will import.
+- `warning` — imports only if the admin opts in: unknown `type` tag (imported
+  without a tag) or a *possible* duplicate.
+- `error` — not imported: missing name/address/city/state/ZIP, bad state/ZIP/phone/
+  website, over-long or control-character cells, half or non-US coordinates, or a
+  brand-name conflict (`brand_deleted`: restore it instead; `brand_owned`: the name
+  already belongs to an owned restaurant).
+- `duplicate` — a *definite* duplicate; never imported.
+`needs_geocoding` = no coordinates in the file (info only; does not change status).
+
+**Duplicate rule** (one rule, applied to existing listings and to earlier rows of the
+same file; `app/services/bulk_import_keys.py`). Keys: `name_key` = lower-cased name,
+accents and every non-alphanumeric removed; `addr_key` = normalized street (lower-case,
+punctuation and unit designators `Ste/Suite/Unit/Apt/Bldg/Fl/Rm/#n` dropped, `Street`->`st`,
+`North`->`n`, ...) + ZIP5; `phone` = E.164 `+1XXXXXXXXXX`. *Definite* (skipped): same
+`name_key` AND same `addr_key`, OR same `name_key` AND same phone. *Possible* (warning):
+same `addr_key` with a different name, OR same phone alone. Existing listings are matched
+in EVERY status (active, owner_deactivated, coming_soon, closed_pending_reopen) and
+including soft-deleted brands. Within a file the second occurrence is the one flagged and
+`duplicate_of_row` names the earlier row; against the database `duplicate_of_listing_id`
+names the listing.
+
+**`POST /admin/import/commit`** — auth: admin. Body `{rows: [...], include_warnings: false}`,
+1..50 rows (else 422); the UI sends 20 per request, one request at a time. Each row is
+re-evaluated with the same logic against the database as it stands (so rows created by earlier
+chunks, or by an earlier upload of the same file, are duplicates). Response `{rows, summary}`;
+per row `result` is `created | skipped_duplicate | skipped_warning | failed`, with `reason`,
+`brand_id`, `location_id`, `needs_geocoding`. Created listings: brand `owner_id` NULL /
+`is_claimed=false`; location `status='active'`, `is_verified=true`, free tier, hours unknown
+(DECISIONS.md "Data seeding"); `type` linked as a location cuisine tag; rows sharing a brand
+name with an *unclaimed* brand become another location of it. One SAVEPOINT per row, one commit
+per chunk; `audit_log` `create` rows for every brand and location with `actor_id` = the admin's
+Cognito sub, `actor_role='admin'` and `new_val.provenance = "bulk_import"`. Failure reasons are
+fixed plain-language strings; internals are never returned.
+
+**Geocoding** is not done by the API (the Lambda has no internet route and a NAT Gateway is
+forbidden). The Next.js server action behind the page geocodes rows lacking coordinates just
+before each chunk (US Census, Nominatim fallback — the same chain as owner "Add restaurant",
+bounded to 4 concurrent lookups / 14 s per chunk). A row that cannot be placed is still created
+and reported with `needs_geocoding: true`; fix via Admin > Listings or
+`scripts/geocode_missing_locations.py`.
+
+Downloaded reports (check + results) are generated in the browser with every string cell
+prefixed by `'` when it starts with `= + - @ TAB CR` (spreadsheet formula injection guard).
+
 ---
 
 ## Contact admin (`/contact-admin`, `/admin/messages`)
