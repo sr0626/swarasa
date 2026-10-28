@@ -24,6 +24,7 @@ export interface SearchEventPayload {
   type?: string[];
   loc?: string;
   has_deals_today?: boolean;
+  open_now?: boolean;
   result_count?: number;
 }
 

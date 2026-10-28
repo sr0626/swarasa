@@ -31,7 +31,14 @@
 // anything about that.
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { FilterIcon, LocationPinIcon, SearchIcon, TagIcon, XIcon } from "@/components/ui/icons";
+import {
+  ClockIcon,
+  FilterIcon,
+  LocationPinIcon,
+  SearchIcon,
+  TagIcon,
+  XIcon,
+} from "@/components/ui/icons";
 import { ActiveFilters, TagFilterPanel } from "@/components/search/TagFilterPanel";
 import {
   buildSearchHref,
@@ -39,6 +46,7 @@ import {
   EMPTY_FILTERS,
   toggleDealsToday,
   toggleFilter,
+  toggleOpenNow,
   type FilterGroup,
   type FilterParam,
   type SearchFilters,
@@ -53,6 +61,14 @@ interface SearchFilterBarProps {
 }
 
 const PANEL_ID = "tag-filter-panel";
+
+/** Shared look of the boolean toggle chips (Deals today / Open now); 44px
+ * tall on touch screens, 36px from `sm` up like the tag chips. */
+function toggleChipClass(active: boolean): string {
+  return active
+    ? "flex min-h-[44px] items-center gap-2 rounded-brand-pill bg-brand-ink px-4 text-sm font-medium text-brand-bg transition sm:min-h-[36px]"
+    : "flex min-h-[44px] items-center gap-2 rounded-brand-pill bg-brand-chip px-4 text-sm font-medium text-brand-chip-ink transition hover:bg-brand-chip/80 sm:min-h-[36px]";
+}
 
 export default function SearchFilterBar({
   initialLocation,
@@ -121,6 +137,10 @@ export default function SearchFilterBar({
 
   function handleToggleDealsToday() {
     navigate(toggleDealsToday(filters));
+  }
+
+  function handleToggleOpenNow() {
+    navigate(toggleOpenNow(filters));
   }
 
   return (
@@ -214,20 +234,30 @@ export default function SearchFilterBar({
           </div>
           <div className="flex-1 overflow-y-auto p-4">
             <div className="mb-5">
-              <h3 className="mb-2 font-display text-sm font-semibold text-brand-ink">Deals</h3>
-              <button
-                type="button"
-                aria-pressed={filters.dealsToday}
-                onClick={handleToggleDealsToday}
-                className={
-                  filters.dealsToday
-                    ? "flex min-h-[44px] items-center gap-2 rounded-brand-pill bg-brand-ink px-4 text-sm font-medium text-brand-bg transition sm:min-h-[36px]"
-                    : "flex min-h-[44px] items-center gap-2 rounded-brand-pill bg-brand-chip px-4 text-sm font-medium text-brand-chip-ink transition hover:bg-brand-chip/80 sm:min-h-[36px]"
-                }
-              >
-                <TagIcon className="h-4 w-4" />
-                Deals today
-              </button>
+              <h3 className="mb-2 font-display text-sm font-semibold text-brand-ink">Deals &amp; hours</h3>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  aria-pressed={filters.dealsToday}
+                  onClick={handleToggleDealsToday}
+                  className={toggleChipClass(filters.dealsToday)}
+                >
+                  <TagIcon className="h-4 w-4" />
+                  Deals today
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={filters.openNow}
+                  onClick={handleToggleOpenNow}
+                  className={toggleChipClass(filters.openNow)}
+                >
+                  <ClockIcon className="h-4 w-4" />
+                  Open now
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-brand-ink-muted">
+                Open now uses each restaurant&apos;s own local time and leaves out listings with unknown hours.
+              </p>
             </div>
             <TagFilterPanel groups={groups} filters={filters} onToggle={handleToggle} />
           </div>
@@ -264,6 +294,19 @@ export default function SearchFilterBar({
               className="flex min-h-[36px] items-center gap-1.5 rounded-brand-pill border border-brand-border bg-white px-3 text-xs font-medium text-brand-ink transition hover:bg-brand-chip"
             >
               Deals today
+              <span aria-hidden="true" className="text-base leading-none text-brand-ink-subtle">
+                &times;
+              </span>
+            </button>
+          )}
+          {filters.openNow && (
+            <button
+              type="button"
+              onClick={handleToggleOpenNow}
+              aria-label="Remove filter Open now"
+              className="flex min-h-[36px] items-center gap-1.5 rounded-brand-pill border border-brand-border bg-white px-3 text-xs font-medium text-brand-ink transition hover:bg-brand-chip"
+            >
+              Open now
               <span aria-hidden="true" className="text-base leading-none text-brand-ink-subtle">
                 &times;
               </span>

@@ -22,15 +22,21 @@ import RestaurantCard from "@/components/listing/RestaurantCard";
 import InfoPanel from "@/components/ui/InfoPanel";
 import { getServerSession } from "@/lib/auth/session";
 import { getViewerFollowState } from "@/lib/follow/viewerFollowState";
+import SearchOriginNote from "@/components/search/SearchOriginNote";
+import { loadSavedLocation } from "@/lib/search/loadSavedLocation";
+import { originNote, originSearchParams, resolveSearchOrigin } from "@/lib/search/searchOrigin";
 
 const POPULAR_NEAR_YOU_PAGE_SIZE = 6;
 
 export default async function PopularNearYou() {
+  // A signed-in diner's saved ZIP is the origin (null/unchanged for everyone
+  // else, so signed-out visitors keep the shared cached default call).
+  const origin = resolveSearchOrigin({ saved: await loadSavedLocation() });
   // Resolved once per grid render, not per tile — see
   // lib/follow/viewerFollowState.ts for the client-side-match approach and
   // its documented limitation.
   const [data, followState] = await Promise.all([
-    searchRestaurants({ page_size: POPULAR_NEAR_YOU_PAGE_SIZE }).catch(() => null),
+    searchRestaurants({ page_size: POPULAR_NEAR_YOU_PAGE_SIZE, ...originSearchParams(origin) }).catch(() => null),
     getServerSession().then(getViewerFollowState),
   ]);
 
@@ -52,19 +58,28 @@ export default async function PopularNearYou() {
     );
   }
 
+  const note = originNote(origin, data.origin_source);
+
   return (
-    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-      {data.results.map((item) => (
-        <RestaurantCard
-          key={item.brand_id}
-          item={item}
-          showFollowButton={followState.showFollowButton}
-          isRegisteredUser={followState.isRegisteredUser}
-          isFollowed={followState.followedBrandIds.has(item.brand_id)}
-          currentPath="/"
-          clickSource="homepage"
-        />
-      ))}
+    <div>
+      {note && (
+        <div className="-mt-3 mb-3">
+          <SearchOriginNote text={note.text} resolved={note.resolved} />
+        </div>
+      )}
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        {data.results.map((item) => (
+          <RestaurantCard
+            key={item.brand_id}
+            item={item}
+            showFollowButton={followState.showFollowButton}
+            isRegisteredUser={followState.isRegisteredUser}
+            isFollowed={followState.followedBrandIds.has(item.brand_id)}
+            currentPath="/"
+            clickSource="homepage"
+          />
+        ))}
+      </div>
     </div>
   );
 }

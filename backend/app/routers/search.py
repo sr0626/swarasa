@@ -29,6 +29,25 @@ async def search(
         "location within the radius/filter set, not just the nearest one "
         "shown on the card).",
     ),
+    open_now: bool | None = Query(
+        default=None,
+        description="When true, only locations that are open right now "
+        "(computed server-side in each location's own timezone from "
+        "restaurant_hours) are candidates. Locations with unknown hours are "
+        "excluded. Applied per location, like the tag filters.",
+    ),
+    near_zip: str | None = Query(
+        default=None,
+        description="A signed-in diner's saved ZIP, used ONLY as the search "
+        "origin when lat/lng are absent: the centroid of our own active "
+        "locations in that ZIP. Invalid values are ignored (never a 422). "
+        "Explicit lat/lng always wins.",
+    ),
+    near_city: str | None = Query(
+        default=None,
+        description="Saved city; origin fallback when near_zip matches no "
+        "location. Same rules as near_zip.",
+    ),
     loc: str | None = Query(
         default=None,
         description="The location text the user typed (city/ZIP). Used ONLY "
@@ -41,8 +60,16 @@ async def search(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser | None = Depends(get_current_user_lenient),
 ) -> SearchResponse:
+    origin_source: search_service.OriginSource = (
+        "coordinates" if lat is not None and lng is not None else "default"
+    )
+    if lat is None and lng is None and (near_zip or near_city):
+        saved = await search_service.resolve_saved_origin(db, near_zip, near_city)
+        if saved is not None:
+            lat, lng, origin_source = saved
+
     results, total = await search_service.search(
-        db, lat, lng, radius, cuisine, dietary, type_, pagination, q, has_deals_today
+        db, lat, lng, radius, cuisine, dietary, type_, pagination, q, has_deals_today, open_now
     )
 
     # Search-history recording for a signed-in registered_user only — a
@@ -59,9 +86,14 @@ async def search(
             type_=type_,
             loc=loc,
             has_deals_today=has_deals_today,
+            open_now=open_now,
             result_count=total,
         )
 
     return SearchResponse(
-        results=results, page=pagination.page, page_size=pagination.page_size, total=total
+        results=results,
+        page=pagination.page,
+        page_size=pagination.page_size,
+        total=total,
+        origin_source=origin_source,
     )

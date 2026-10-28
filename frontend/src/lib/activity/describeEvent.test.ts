@@ -43,3 +43,7 @@ test("sourceLabel maps known surfaces and passes unknown ones through", () => {
   assert.equal(sourceLabel("favourites"), "Favourites");
   assert.equal(sourceLabel("future_surface"), "future_surface");
 });
+
+test("describeSearch mentions the open-now filter", () => {
+  assert.deepEqual(describeSearch({ open_now: true }), ["Open now only"]);
+});

@@ -30,6 +30,7 @@ export function describeSearch(payload: SearchEventPayload): string[] {
   if (payload.type?.length) lines.push(`Type: ${payload.type.map(readable).join(", ")}`);
   if (payload.loc) lines.push(`Location: ${payload.loc}`);
   if (payload.has_deals_today) lines.push("Deals today only");
+  if (payload.open_now) lines.push("Open now only");
   return lines.length ? lines : ["No details recorded"];
 }
 

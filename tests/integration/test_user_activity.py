@@ -44,7 +44,7 @@ def _reset_purge_throttle():
 
 @pytest.fixture
 def stub_search(monkeypatch):
-    async def _fake_search(db, lat, lng, radius, cuisine, dietary, type_, pagination, q=None, has_deals_today=None):
+    async def _fake_search(db, lat, lng, radius, cuisine, dietary, type_, pagination, q=None, has_deals_today=None, open_now=None):
         return [], 7
 
     monkeypatch.setattr(search_service, "search", _fake_search)

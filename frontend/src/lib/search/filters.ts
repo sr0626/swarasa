@@ -28,6 +28,13 @@ export interface SearchFilters {
    * `toggleFilter` for the tag facets.
    */
   dealsToday: boolean;
+  /**
+   * "Open now" filter (docs/API_CONTRACTS.md "GET /search" `open_now`) --
+   * also a single boolean toggle outside `FILTER_PARAMS`. Evaluated
+   * server-side in each location's own timezone; the browser clock is never
+   * used, so the URL is shareable and SSR-cacheable.
+   */
+  openNow: boolean;
 }
 
 export const FILTER_PARAMS: readonly FilterParam[] = ["cuisine", "dietary", "type"];
@@ -35,7 +42,16 @@ export const FILTER_PARAMS: readonly FilterParam[] = ["cuisine", "dietary", "typ
 /** URL query param for the "Deals today" toggle. */
 export const DEALS_TODAY_PARAM = "deals_today";
 
-export const EMPTY_FILTERS: SearchFilters = { cuisine: [], dietary: [], type: [], dealsToday: false };
+/** URL query param for the "Open now" toggle. */
+export const OPEN_NOW_PARAM = "open_now";
+
+export const EMPTY_FILTERS: SearchFilters = {
+  cuisine: [],
+  dietary: [],
+  type: [],
+  dealsToday: false,
+  openNow: false,
+};
 
 /** Tag slugs are lower_snake (docs/TAXONOMY.md). URL input is untrusted,
  * so anything else is dropped rather than forwarded to the API. */
@@ -60,7 +76,7 @@ function toList(value: string | string[] | undefined): string[] {
  * one as string — both parse to the same shape, so the legacy single
  * `?cuisine=north_indian` link keeps working. */
 export function parseFilters(searchParams: RawSearchParams): SearchFilters {
-  const parsed: SearchFilters = { cuisine: [], dietary: [], type: [], dealsToday: false };
+  const parsed: SearchFilters = { cuisine: [], dietary: [], type: [], dealsToday: false, openNow: false };
   for (const param of FILTER_PARAMS) {
     const seen = new Set<string>();
     for (const raw of toList(searchParams[param])) {
@@ -71,6 +87,7 @@ export function parseFilters(searchParams: RawSearchParams): SearchFilters {
     parsed[param] = Array.from(seen);
   }
   parsed.dealsToday = firstOf(searchParams[DEALS_TODAY_PARAM]) === "true";
+  parsed.openNow = firstOf(searchParams[OPEN_NOW_PARAM]) === "true";
   return parsed;
 }
 
@@ -80,13 +97,19 @@ function firstOf(value: string | string[] | undefined): string | undefined {
 
 export function countFilters(filters: SearchFilters): number {
   return (
-    filters.cuisine.length + filters.dietary.length + filters.type.length + (filters.dealsToday ? 1 : 0)
+    filters.cuisine.length +
+    filters.dietary.length +
+    filters.type.length +
+    (filters.dealsToday ? 1 : 0) +
+    (filters.openNow ? 1 : 0)
   );
 }
 
 /** True when the search URL carries at least one real search criterion:
  * non-blank location text, non-blank free-text `q`, any tag facet, or the
- * "Deals today" toggle. `page`/`sort` (and any unknown param) are NOT
+ * "Deals today" / "Open now" toggles. (A diner's SAVED ZIP is deliberately
+ * NOT a criterion -- it only picks the origin of a search that already has
+ * one, so /search stays empty-by-default; see lib/search/searchOrigin.ts.) `page`/`sort` (and any unknown param) are NOT
  * criteria — they only shape how a search is displayed. When this is false
  * the /search page renders its empty "start a search" state and makes no
  * backend call (the homepage already shows "Popular near you"). */
@@ -123,6 +146,11 @@ export function toggleDealsToday(filters: SearchFilters): SearchFilters {
   return { ...filters, dealsToday: !filters.dealsToday };
 }
 
+/** Flips the "Open now" toggle. */
+export function toggleOpenNow(filters: SearchFilters): SearchFilters {
+  return { ...filters, openNow: !filters.openNow };
+}
+
 export interface SearchHrefInput {
   location?: string;
   query?: string;
@@ -139,6 +167,7 @@ export function buildSearchHref({ location, query, filters, page }: SearchHrefIn
     for (const name of filters[param]) params.append(param, name);
   }
   if (filters.dealsToday) params.set(DEALS_TODAY_PARAM, "true");
+  if (filters.openNow) params.set(OPEN_NOW_PARAM, "true");
   if (page && page > 1) params.set("page", String(page));
   const qs = params.toString();
   return qs ? `/search?${qs}` : "/search";

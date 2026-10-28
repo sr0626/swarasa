@@ -116,6 +116,7 @@ def build_search_payload(
     type_: list[str] | None,
     loc: str | None,
     has_deals_today: bool | None,
+    open_now: bool | None = None,
     result_count: int | None,
 ) -> dict[str, Any] | None:
     """Bounded search payload, or `None` when the search carried no
@@ -133,6 +134,8 @@ def build_search_payload(
         payload["loc"] = clipped_loc
     if has_deals_today:
         payload["has_deals_today"] = True
+    if open_now:
+        payload["open_now"] = True
 
     if not payload:
         return None
@@ -183,6 +186,7 @@ async def record_search_best_effort(
     type_: list[str] | None,
     loc: str | None,
     has_deals_today: bool | None,
+    open_now: bool | None = None,
     result_count: int | None,
 ) -> None:
     """Record a search for a signed-in `registered_user`. No-op for every
@@ -197,6 +201,7 @@ async def record_search_best_effort(
             type_=type_,
             loc=loc,
             has_deals_today=has_deals_today,
+            open_now=open_now,
             result_count=result_count,
         )
         if payload is None:
