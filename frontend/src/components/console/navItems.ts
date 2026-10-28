@@ -23,6 +23,8 @@ export const CONTACT_ADMIN_HREF = "/portal/contact-admin";
 export const ADMIN_NAV_ITEMS: ReadonlyArray<ConsoleNavItem> = [
   { href: "/account", label: "Profile", icon: "user" },
   { href: "/admin/overview", label: "Overview", icon: "chart" },
+  // Every account across all roles, with disable/confirm/reset actions.
+  { href: "/admin/users", label: "Users", icon: "user" },
   { href: "/admin/owners", label: "Owners", icon: "user" },
   { href: "/admin/managers", label: "Managers", icon: "user" },
   { href: "/admin/registered-users", label: "Registered users", icon: "user" },
@@ -36,6 +38,8 @@ export const ADMIN_NAV_ITEMS: ReadonlyArray<ConsoleNavItem> = [
   { href: "/admin/listings", label: "Listings", icon: "store" },
   // "Contact admin" messages from owners/managers (GET /admin/messages).
   { href: "/admin/messages", label: "Messages", icon: "mail" },
+  // Read-only history of audit_log (GET /admin/audit-log).
+  { href: "/admin/audit-log", label: "Audit log", icon: "clock" },
 ];
 
 export const OWNER_NAV_ITEMS: ReadonlyArray<ConsoleNavItem> = [

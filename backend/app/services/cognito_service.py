@@ -31,6 +31,15 @@ docs/API_CONTRACTS.md) reuses that exact same `ListUsersInGroup` grant —
 no new IAM action or scope needed, same call shape, just returning the
 per-user records instead of only a running count.
 
+`list_group_users` / `admin_get_user` / `admin_disable_user` /
+`admin_enable_user` / `admin_confirm_sign_up` / `admin_reset_user_password`
+back the admin user directory (`GET /admin/users` and the
+`POST /admin/users/{username}/<action>` endpoints, docs/API_CONTRACTS.md).
+The first two reuse existing grants (`ListUsersInGroup`, `AdminGetUser`); the
+four admin actions need `AdminDisableUser`, `AdminEnableUser`,
+`AdminConfirmSignUp` and `AdminResetUserPassword` on this one pool ARN (see
+infra/modules/iam/main.tf, Sid `CognitoAdminUserManagementOnThisPoolOnly`).
+
 IAM (root CLAUDE.md "AWS Best Practices" — least privilege): the lookups need
 exactly one new action, `cognito-idp:ListUsers`, scoped to exactly one
 resource — this app's single user pool ARN. No write actions
@@ -299,3 +308,102 @@ def add_user_to_group(username: str, group_name: str) -> None:
     _get_client().admin_add_user_to_group(
         UserPoolId=_user_pool_id(), Username=username, GroupName=group_name
     )
+
+
+# --------------------------------------------------------------------------
+# Admin user directory (GET /admin/users) + admin account actions
+# --------------------------------------------------------------------------
+
+# Hard cap on members read per group so a runaway pool can't make one admin
+# page-load sweep unboundedly (60/page * 50 pages = 3000 users per group).
+MAX_USERS_PER_GROUP = 3000
+_PAGE_LIMIT = 60
+_MAX_PAGES_PER_GROUP = MAX_USERS_PER_GROUP // _PAGE_LIMIT
+
+
+@dataclass(frozen=True)
+class PoolUserRecord:
+    """One Cognito pool user, from `ListUsersInGroup` or `AdminGetUser`.
+
+    `username` is Cognito's own per-pool identifier -- the value the Admin
+    APIs take -- and may differ from `cognito_sub`. `enabled` is Cognito's
+    `Enabled` flag (False = disabled by an admin); `status` is `UserStatus`
+    verbatim.
+    """
+
+    username: str
+    cognito_sub: str
+    email: str | None
+    name: str | None
+    status: str
+    enabled: bool
+    created_at: datetime | None
+
+
+def _parse_pool_user(user: dict) -> PoolUserRecord:
+    # ListUsersInGroup uses "Attributes"; AdminGetUser uses "UserAttributes".
+    raw_attrs = user.get("Attributes") or user.get("UserAttributes") or []
+    attrs = {a.get("Name"): a.get("Value") for a in raw_attrs}
+    username = user.get("Username", "")
+    return PoolUserRecord(
+        username=username,
+        cognito_sub=attrs.get("sub") or username,
+        email=attrs.get("email"),
+        name=attrs.get("name"),
+        status=user.get("UserStatus", "UNKNOWN"),
+        enabled=bool(user.get("Enabled", True)),
+        created_at=user.get("UserCreateDate"),
+    )
+
+
+def list_group_users(group_name: str) -> tuple[list[PoolUserRecord], bool]:
+    """Every member of one pool group (capped at `MAX_USERS_PER_GROUP`) as
+    `(records, truncated)`. Same `ListUsersInGroup` grant as the sibling list
+    functions -- no new IAM. Raises `RuntimeError`/`ClientError`/
+    `BotoCoreError`; callers decide whether to degrade or 502."""
+    client = _get_client()
+    pool_id = _user_pool_id()
+    records: list[PoolUserRecord] = []
+    next_token: str | None = None
+    for _ in range(_MAX_PAGES_PER_GROUP):
+        kwargs = {"UserPoolId": pool_id, "GroupName": group_name, "Limit": _PAGE_LIMIT}
+        if next_token:
+            kwargs["NextToken"] = next_token
+        response = client.list_users_in_group(**kwargs)
+        records.extend(_parse_pool_user(u) for u in response.get("Users") or [])
+        next_token = response.get("NextToken")
+        if not next_token:
+            return records, False
+    return records, True
+
+
+def admin_get_user(username: str) -> PoolUserRecord | None:
+    """`AdminGetUser`; `None` when the user doesn't exist. Other failures raise."""
+    try:
+        response = _get_client().admin_get_user(UserPoolId=_user_pool_id(), Username=username)
+    except ClientError as exc:
+        if exc.response.get("Error", {}).get("Code") == "UserNotFoundException":
+            return None
+        raise
+    return _parse_pool_user(response)
+
+
+def admin_disable_user(username: str) -> None:
+    """`AdminDisableUser` -- blocks sign-in; idempotent."""
+    _get_client().admin_disable_user(UserPoolId=_user_pool_id(), Username=username)
+
+
+def admin_enable_user(username: str) -> None:
+    """`AdminEnableUser` -- idempotent."""
+    _get_client().admin_enable_user(UserPoolId=_user_pool_id(), Username=username)
+
+
+def admin_confirm_sign_up(username: str) -> None:
+    """`AdminConfirmSignUp` -- confirms an UNCONFIRMED sign-up without the code."""
+    _get_client().admin_confirm_sign_up(UserPoolId=_user_pool_id(), Username=username)
+
+
+def admin_reset_user_password(username: str) -> None:
+    """`AdminResetUserPassword` -- invalidates the password; the user must
+    complete forgot-password on next sign-in (Cognito sends the code)."""
+    _get_client().admin_reset_user_password(UserPoolId=_user_pool_id(), Username=username)
