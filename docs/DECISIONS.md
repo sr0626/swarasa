@@ -888,6 +888,16 @@ on the Aurora cluster — cheaper and worth reconsidering later, but changes the
 app's DB access story more broadly than one seed script warrants; flagged for
 Infra to revisit if this pattern gets used often enough to want it).*
 
+**Backend deploy pushes a single-manifest image (no provenance/SBOM attestations)**
+2026-10-28 | Fixed in PR #250. Deploys for #247/#248 failed at the ECR scan
+gate: the runner's docker pushed an `application/vnd.oci.image.index.v1+json`,
+which ECR cannot scan (`UnsupportedImageTypeException`, swallowed by `|| true`)
+and the waiter then failed with `ScanNotFoundException`. The build now uses
+`docker buildx build --provenance=false --sbom=false --push`. The scan gate
+(stop on critical findings) is unchanged, and the workflow file is in the
+`paths` filter so a change to it redeploys.
+*Rejected: removing or softening the scan gate (defeats the standing "stop on critical findings" rule)*
+
 ---
 
 ## Database & Data Model
@@ -2776,6 +2786,48 @@ in the CCPA export and shown as a Location column in the admin registered-users
 report. Follow-up, not built: default search location from the saved ZIP.
 *Rejected: custom Cognito attributes (Terraform change, no session at
 signup anyway); making the fields optional (user wants every diner located)*
+
+**Deal alerts: in-app bell only, brand-follow fan-out**
+2026-10-28 | Built in PR #247 (migration `0019_user_notification`). A new deal
+creates one `user_notification` row per follower of the deal's BRAND (follows
+are brand-level, so any location's new deal notifies all brand followers; the
+alert links to that location's `#deals`). Fan-out is one INSERT..SELECT inside
+`create_deal`'s transaction, capped at 1000 followers, in a SAVEPOINT and
+best-effort so it can never fail deal creation. Skipped for inactive/ended
+deals, `deals_hidden`, non-active locations, soft-deleted brands, and the
+actor. Only NEW deals notify (not updates or re-activations). Rows cascade
+away with their deal or location, and are covered by CCPA export and
+deletion. Registered users only, own rows only. Email (SES) stays deferred.
+No history page or retention pruning yet.
+*Rejected: queue/worker fan-out (new infra for a capped, small fan-out); per-location follows (follow model is brand-level); notifying on updates (noise)*
+
+**Admin owner assignment bypasses the claim flow for unclaimed brands only**
+2026-10-28 | Built in PR #248, no migration. `POST /admin/restaurants/{id}/assign-owner`
+(owner by id or email) and `POST /admin/owners` (pre-create an owner_account for
+an existing Cognito owner-group user). Only brands with no owner and not
+soft-deleted can be assigned; a pending claim blocks it (so a later approval
+cannot overwrite); `is_paid`/`paid_until` are never touched. Active managers
+who also work under a different owner have their assignment on this brand
+revoked, audited, without naming the other owner ("Manager scoped to one
+owner" rule). No unassign endpoint: it cannot distinguish admin-assigned from
+claimed brands and would orphan managers and portal access. Invite-by-email
+for brand-new Cognito users stays a separate backlog item.
+*Rejected: unassign now (unsafe); letting assign override a pending claim*
+
+**Admin user directory and audit-log viewer; Cognito admin actions audited as `cognito_user`**
+2026-10-28 | Built in PR #249, no migration. `/admin/users` (search, role/status
+filters) and `/admin/audit-log` (entity, action, actor, date filters), admin
+only. Actions disable / enable / confirm / reset-password call Cognito Admin
+APIs, are audited only AFTER Cognito succeeds, and are blocked on self and on
+the last enabled admin (fail closed: 502 if the admin-group lookup fails);
+`confirm` applies only to unconfirmed users. Because `audit_log.record_id` is
+a non-null integer and a migration was out of scope, these rows use
+`table_name="cognito_user"`, `record_id=0` with username/sub/email in the
+snapshot. The directory lists a multi-group user once under the highest role,
+caps each group at 3000 with a `truncated` flag, and omits pool users in no
+role group. IAM: one statement scoped to the single user-pool ARN with exactly
+the four actions (human applies Terraform; until then the actions return 502).
+*Rejected: AdminCreateUser/AdminDeleteUser/AdminSetUserPassword (not needed, wider blast radius); a migration to add a text record_id now*
 
 **Online ordering = redirect link model in Phase 4 (not on-platform checkout)**
 May 2026 | Platform links to restaurant's own ordering system (DoorDash, their own URL).
