@@ -47,10 +47,6 @@ def _event(*, user_pool_id: str = "us-east-1_w2387tOf6", username: str = "abc-12
     [
         ("owner", "owner"),
         ("registered_user", "registered_user"),
-        # Defensive mapping — see module docstring: no current sign-up flow
-        # sends these, but the handler still honors them if it ever gets one.
-        ("manager", "manager"),
-        ("admin", "admin"),
         # Case-insensitive match on the attribute value.
         ("Owner", "owner"),
         (" owner ", "owner"),
@@ -73,6 +69,20 @@ def test_handler_assigns_recognized_role_to_matching_group(
             "group_name": expected_group,
         }
     ]
+
+
+@pytest.mark.parametrize("role", ["admin", "Admin", "manager", " MANAGER "])
+def test_handler_never_assigns_privileged_groups_from_self_service_role(
+    monkeypatch: pytest.MonkeyPatch, role
+):
+    fake_client = _FakeCognitoClient()
+    monkeypatch.setattr(cognito_post_confirmation, "_get_cognito_client", lambda: fake_client)
+
+    event = _event(role=role)
+    out = cognito_post_confirmation.handler(event, None)
+
+    assert out is event
+    assert fake_client.calls == []
 
 
 def test_handler_no_ops_when_custom_role_missing(monkeypatch: pytest.MonkeyPatch):
