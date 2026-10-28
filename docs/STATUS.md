@@ -28,17 +28,16 @@ fully satisfied and asked to stop iterating for now, with an explicit intent
 to revisit later, not a final sign-off.
 
 ## Open PRs
-- Only in-flight docs PRs as of 2026-10-28: this wave-13 tracker/status/
-  cmd-log batch and the DECISIONS.md wave-13 entries. No code PRs open.
+- Only in-flight docs PRs as of 2026-10-28: this wave-14 tracker/status/
+  cmd-log batch and the DECISIONS.md wave-14 entries. No code PRs open.
 
 ## Live state (2026-10-28)
-- Migrations on main through `0020_manager_invite`, all applied to dev.
-- Terraform applied by the human 2026-10-28: IAM statement for the admin
-  user actions (#249) and the post-confirmation Lambda update (#254). Admin
-  disable/enable/confirm/reset-password now work.
-- Backend deploys: scan-gate failure fixed in #250; latest deploys green.
-- Human follow-up: review Admin > Users for unrecognized admin/manager
-  accounts (checked by the human, not by an agent).
+- Migrations on main through `0021_food_truck_type`. 0017-0020 applied to
+  dev; `0021` needs `alembic_upgrade` after the #259 deploy (confirm it ran;
+  it only inserts the Food Truck type if missing).
+- Terraform applied by the human 2026-10-28: admin Cognito IAM statement
+  (#249) and the post-confirmation Lambda update (#254).
+- Backend deploys green since the scan-gate fix (#250).
 
 ## Live state (2026-09-25, earlier)
 - Migrations through `0016_location_cuisine` applied to dev via
@@ -54,6 +53,17 @@ to revisit later, not a final sign-off.
   the `set_platform_flag` management command when paid tiers exist.
 - Repo now has "Automatically delete head branches" enabled; the 200+
   merged branches were cleaned up by the user on 2026-09-23.
+
+## Landed 2026-10-28, wave 14 (#257-#259)
+- **City landing pages** (#257): `/indian-restaurants` index and
+  `/indian-restaurants/{city}` (SSR, canonical, ItemList JSON-LD, sitemap,
+  footer link). Brand-first location URLs unchanged.
+- **Saved-ZIP default search + open-now filter** (#258): saved ZIP/city is
+  the default search origin (centroid of our own listings); `open_now`
+  filter evaluated per location timezone. Pulled forward from Phase 3.
+- **Admin taxonomy management** (#259, migration `0021_food_truck_type`):
+  add/rename/deactivate tags, usage counts, no delete; Food Truck type
+  guaranteed.
 
 ## Landed 2026-10-28, wave 13 (#253-#254)
 - **Manager invite-by-email** (#253, migration `0020_manager_invite`):
