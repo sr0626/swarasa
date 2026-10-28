@@ -627,4 +627,16 @@ git push -u origin feat/deals-button-state   # claude
 git push -u origin docs/wave10-tracker-status-cmdlog   # claude
 aws sso login --profile swarasa-dev   # user  (expired session, x2 this evening)
 aws lambda invoke --function-name swarasa-api-dev --payload '{"_management_command": "alembic_upgrade"}' --profile swarasa-dev --region us-east-1 ...   # user  (after the #230 deploy, applying 0016_location_cuisine; first attempt failed on the expired SSO token, succeeded after re-login)
+git push -u origin fix/jump-links-need-two   # claude
+git push -u origin feat/deal-content-all-signed-in   # claude
+git push -u origin docs/bulk-import-template   # claude
+git push -u origin feat/ui-fixes-batch-a   # claude
+git push -u origin feat/admin-console-batch   # claude
+git push -u origin feat/privacy-page   # claude
+git push -u origin feat/contact-admin   # claude
+git push -u origin feat/registered-user-location   # claude
+aws sts get-caller-identity --profile swarasa-dev   # user  (expired token, then re-login)
+aws sso login --profile swarasa-dev   # user
+aws lambda invoke --function-name swarasa-api-dev --payload '{"_management_command": "alembic_upgrade"}' --profile swarasa-dev --region us-east-1 ...   # user  (after the #242 deploy, applying 0017_admin_message; re-run after #243 for 0018_user_profile_location)
+git push -u origin fix/footer-your-data-label   # claude
 ```
