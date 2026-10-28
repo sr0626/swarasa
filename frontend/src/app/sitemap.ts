@@ -13,7 +13,9 @@
 //   - multi-location brand   -> /restaurant/{brand} (the landing page) AND
 //                               /restaurant/{brand}/{location} for each location
 import type { MetadataRoute } from "next";
+import { getAllCities } from "@/lib/api/cities";
 import { getPublicLocationIndex } from "@/lib/api/sitemap";
+import { CITY_INDEX_PATH, cityPath } from "@/lib/city/paths";
 import { canonicalPathsForRow } from "@/lib/restaurant/sitemapPaths";
 import { SITE_URL } from "@/lib/site";
 import type { PublicLocationIndexItem } from "@/types/restaurant";
@@ -67,6 +69,30 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // Backend unreachable at build/request time — still serve a valid
     // sitemap with just the homepage rather than failing the whole route
     // (frontend/CLAUDE.md "ALWAYS handle API errors gracefully").
+  }
+
+  // City landing pages (/indian-restaurants + one per city). Separate try so a
+  // failure here can't drop the restaurant URLs above, and vice versa.
+  try {
+    const cities = await getAllCities();
+    if (cities.length > 0) {
+      entries.push({
+        url: `${SITE_URL}${CITY_INDEX_PATH}`,
+        lastModified: new Date(),
+        changeFrequency: "daily",
+        priority: 0.7,
+      });
+      for (const city of cities) {
+        entries.push({
+          url: `${SITE_URL}${cityPath(city.slug)}`,
+          lastModified: new Date(),
+          changeFrequency: "daily",
+          priority: 0.7,
+        });
+      }
+    }
+  } catch {
+    // Backend unreachable — omit the city pages rather than fail the route.
   }
 
   return entries;
