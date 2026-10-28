@@ -28,14 +28,19 @@ fully satisfied and asked to stop iterating for now, with an explicit intent
 to revisit later, not a final sign-off.
 
 ## Open PRs
-- Only in-flight docs PRs as of 2026-10-28: this wave-11 tracker/status/
-  cmd-log batch and the DECISIONS.md wave-11 entries. No code PRs open.
+- Only in-flight docs PRs as of 2026-10-28: this wave-12 tracker/status/
+  cmd-log batch and the DECISIONS.md wave-12 entries. No code PRs open.
 
 ## Live state (2026-10-28)
-- Migrations on main through `0018_user_profile_location`. `0017_admin_message`
-  confirmed applied to dev (2026-10-07). `0018` needs `alembic_upgrade` after
-  the #243 deploy (green 2026-10-07); confirm it was run before relying on
-  diner city/ZIP.
+- Migrations on main through `0019_user_notification`. 0017 and 0018 applied
+  to dev. `0019` needs `alembic_upgrade` after the #247 deploy (green after
+  #250); confirm it was run before relying on deal alerts (deal creation
+  and the bell error until it is).
+- Backend deploys were failing at the ECR scan gate from #247 (image pushed
+  as an OCI index, unscannable); fixed in #250, deploy green.
+- Pending human step: apply the Terraform IAM statement from #249
+  (`CognitoAdminUserManagementOnThisPoolOnly`); until then the admin user
+  disable/enable/confirm/reset-password actions return 502.
 
 ## Live state (2026-09-25, earlier)
 - Migrations through `0016_location_cuisine` applied to dev via
@@ -51,6 +56,19 @@ to revisit later, not a final sign-off.
   the `set_platform_flag` management command when paid tiers exist.
 - Repo now has "Automatically delete head branches" enabled; the 200+
   merged branches were cleaned up by the user on 2026-09-23.
+
+## Landed 2026-10-28, wave 12 (#247-#250)
+- **In-app deal alerts** (#247, migration `0019_user_notification`): bell in
+  the top bar for registered users; new deals notify followers of the brand.
+  Email stays deferred.
+- **Admin assign owner** (#248): assign an unclaimed listing to an owner,
+  add an owner_account for an existing Cognito owner. No migration.
+- **Admin user directory + audit log viewer** (#249): `/admin/users` with
+  confirm/disable/enable/reset-password, `/admin/audit-log`. IAM statement
+  pending apply (see Live state).
+- Deploy fix (#250): single-manifest image push so the ECR scan gate and
+  Lambda accept it.
+- Menu hide toggle was found already built (#223); backlog corrected.
 
 ## Landed 2026-09-25 to 2026-10-07, wave 11 (#236-#244)
 - Jump-link pills removed from public location pages (#236).
