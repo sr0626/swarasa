@@ -3893,3 +3893,43 @@ resolved_at, resolved_by`.
 Auth: admin. Body: `{"status": "open" | "resolved"}`. Resolving stamps
 `resolved_at`/`resolved_by`; re-opening clears them. A real status change
 writes an `audit_log` row (`admin_message`, `update`). `404` when missing.
+
+---
+
+## Notifications (`/notifications`) — in-app deal alerts
+
+The diner's bell. Table: `user_notification` (migration
+`0019_user_notification`). First and only kind today: `deal_new`. No email /
+SES (deferred). **registered_user only** on every route (any other role ->
+403, anonymous -> 401); every query is scoped to the caller's own `sub`, and
+another user's notification id is a `404`, never a `403`.
+
+**Creation (fan-out).** When `POST /locations/{id}/deals` creates a deal,
+every user following that location's **brand** (follows are brand-level,
+see "Follows") gets one `deal_new` row, inserted in the same transaction.
+Not notified: the acting user; anyone when the deal is inactive
+(`is_active=false`) or already ended, when the location has
+`deals_hidden=true`, when the location's `status` is not `active`, or when
+the brand is soft-deleted. At most 1000 followers per deal (lowest
+`user_follow.id` first). Best-effort: a fan-out failure never fails the deal
+create. Updating/re-activating an existing deal does NOT notify (new deals
+only). Deleting the deal or location removes its alerts (`ON DELETE
+CASCADE`).
+
+### `GET /notifications`
+Auth: registered_user. Query: `page`, `page_size` (default 20, max 100).
+Newest first. Response: `{results, page, page_size, total, unread_count}`
+where `unread_count` spans all pages. Row: `id, kind, title` (deal-title
+snapshot), `location_id, restaurant_name` (location name else brand name),
+`city, brand_slug, location_slug` (link: `/restaurant/{brand_slug}/{location_slug}`),
+`created_at, read_at` (null = unread).
+
+### `POST /notifications/{id}/read`
+Auth: registered_user. Idempotent. `204`; `404` if missing or not the caller's.
+
+### `POST /notifications/read-all`
+Auth: registered_user. Response `200`: `{"marked_read": int}`.
+
+**CCPA.** `GET /auth/me/data-export` includes `notifications`
+(`kind, title, location_id, created_at, read_at`); `data_scope.notifications`
+counts them; an approved deletion request hard-deletes them.

@@ -22,6 +22,7 @@ from app.models.listing_report import ListingReport
 from app.models.location_manager import LocationManager
 from app.models.owner_account import OwnerAccount
 from app.models.user_follow import UserFollow
+from app.models.user_notification import UserNotification
 from app.models.user_profile import UserProfile
 from factories import (
     create_brand,
@@ -31,6 +32,7 @@ from factories import (
     create_listing_report,
     create_location,
     create_location_manager,
+    create_notification,
     create_owner,
     create_user_profile,
     submitted_recently,
@@ -713,3 +715,61 @@ async def test_approve_owner_path_unaffected_by_user_profile_handling(client, db
     await db_session.refresh(owner)
     assert owner.full_name is None
     assert owner.personal_data_deleted_at is not None
+
+
+# ---------------------------------------------------------------------------
+# In-app deal notifications (user_notification)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_export_includes_only_the_callers_own_notifications(client, db_session, as_user):
+    brand = await create_brand(db_session)
+    location = await create_location(db_session, brand_id=brand.id)
+    sub = str(uuid.uuid4())
+    await create_notification(db_session, user_sub=sub, location_id=location.id, title="Mine")
+    await create_notification(db_session, user_sub=str(uuid.uuid4()), location_id=location.id, title="Theirs")
+    await db_session.commit()
+
+    as_user("registered_user", sub=sub)
+    response = await client.get("/auth/me/data-export")
+    assert response.status_code == 200, response.text
+    items = response.json()["notifications"]
+    assert [n["title"] for n in items] == ["Mine"]
+    assert items[0]["location_id"] == location.id
+
+
+@pytest.mark.asyncio
+async def test_approve_hard_deletes_notifications_but_not_another_users(client, db_session, as_user):
+    brand = await create_brand(db_session)
+    location = await create_location(db_session, brand_id=brand.id)
+    sub, other = str(uuid.uuid4()), str(uuid.uuid4())
+    await create_notification(db_session, user_sub=sub, location_id=location.id)
+    keep = await create_notification(db_session, user_sub=other, location_id=location.id)
+    request = await create_deletion_request(
+        db_session, requester_user_id=sub, requester_role="registered_user"
+    )
+    await db_session.commit()
+
+    as_user("admin")
+    response = await client.post(f"/data-deletion/{request.id}/approve", json={})
+    assert response.status_code == 200, response.text
+
+    db_session.expire_all()
+    remaining = (await db_session.execute(select(UserNotification))).scalars().all()
+    assert [n.id for n in remaining] == [keep.id]
+
+
+@pytest.mark.asyncio
+async def test_deletion_request_data_scope_counts_notifications(client, db_session, as_user):
+    brand = await create_brand(db_session)
+    location = await create_location(db_session, brand_id=brand.id)
+    sub = str(uuid.uuid4())
+    await create_notification(db_session, user_sub=sub, location_id=location.id)
+    await create_notification(db_session, user_sub=sub, location_id=location.id)
+    await db_session.commit()
+
+    as_user("registered_user", sub=sub)
+    response = await client.post("/auth/me/data-deletion", json={})
+    assert response.status_code == 201, response.text
+    assert response.json()["data_scope"]["notifications"] == 2

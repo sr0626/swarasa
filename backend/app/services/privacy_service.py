@@ -65,6 +65,7 @@ from app.models.location_manager import LocationManager
 from app.models.owner_account import OwnerAccount
 from app.models.user_activity_event import UserActivityEvent
 from app.models.user_follow import UserFollow
+from app.models.user_notification import UserNotification
 from app.models.user_profile import UserProfile
 from app.schemas.privacy import (
     ActivityEventExportOut,
@@ -77,6 +78,7 @@ from app.schemas.privacy import (
     FollowExportOut,
     ListingReportExportOut,
     LocationManagerExportOut,
+    NotificationExportOut,
     OwnerAccountExportOut,
     UserProfileExportOut,
 )
@@ -91,7 +93,8 @@ _REDACTED_MARKER = "deleted-user"
 
 _EXPORT_NOTICE = (
     "This export covers personal data held directly by this app "
-    "(location manager assignments, restaurant follows, claim requests, "
+    "(location manager assignments, restaurant follows, in-app deal "
+    "notifications, claim requests, "
     "listing reports you submitted while signed in, your display name and "
     "last-seen time if you are a registered user or manager, the searches and "
     "restaurant tiles you clicked while signed in as a registered user "
@@ -141,6 +144,14 @@ async def _gather(db: AsyncSession, cognito_sub: str) -> dict[str, Any]:
     # Within the retention window only — see activity_service.
     activity_rows = await activity_service.list_user_activity_for_export(db, cognito_sub)
 
+    notification_rows = (
+        await db.execute(
+            select(UserNotification)
+            .where(UserNotification.user_sub == cognito_sub)
+            .order_by(UserNotification.created_at.desc())
+        )
+    ).scalars().all()
+
     audit_rows = (
         await db.execute(
             select(AuditLog)
@@ -157,6 +168,7 @@ async def _gather(db: AsyncSession, cognito_sub: str) -> dict[str, Any]:
         "claims": claim_rows,
         "listing_reports": listing_report_rows,
         "activity": activity_rows,
+        "notifications": notification_rows,
         "audit": audit_rows,
     }
 
@@ -172,6 +184,7 @@ def _data_scope(gathered: dict[str, Any]) -> dict[str, int]:
         "claim_requests_pending": pending_claims,
         "listing_reports": len(gathered["listing_reports"]),
         "activity_events": len(gathered["activity"]),
+        "notifications": len(gathered["notifications"]),
         "audit_log_entries": len(gathered["audit"]),
     }
 
@@ -260,6 +273,16 @@ async def export_my_data(db: AsyncSession, current_user) -> DataExportOut:
                 event_type=e.event_type, created_at=e.created_at, payload=e.payload
             )
             for e in gathered["activity"]
+        ],
+        notifications=[
+            NotificationExportOut(
+                kind=n.kind,
+                title=n.title,
+                location_id=n.location_id,
+                created_at=n.created_at,
+                read_at=n.read_at,
+            )
+            for n in gathered["notifications"]
         ],
         audit_log_entries=[
             AuditLogExportOut(
@@ -419,6 +442,12 @@ async def approve_deletion_request(
     # retention need, same as user_follow. Not on the audit-required list.
     await db.execute(
         delete(UserActivityEvent).where(UserActivityEvent.user_sub == cognito_sub)
+    )
+
+    # user_notification: hard delete every in-app alert addressed to this
+    # sub — pure delivery state derived from user_follow, no retention need.
+    await db.execute(
+        delete(UserNotification).where(UserNotification.user_sub == cognito_sub)
     )
 
     # user_profile: hard delete (registered_user/manager display name +

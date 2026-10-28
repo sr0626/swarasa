@@ -40,6 +40,7 @@ from app.models.restaurant_location import RestaurantLocation
 from app.models.restaurant_photo import RestaurantPhoto
 from app.models.user_activity_event import UserActivityEvent
 from app.models.user_follow import UserFollow
+from app.models.user_notification import UserNotification
 from app.models.user_profile import UserProfile
 
 
@@ -385,6 +386,21 @@ async def create_activity_event(db: AsyncSession, **overrides) -> UserActivityEv
     db.add(event)
     await db.flush()
     return event
+
+
+async def create_notification(db: AsyncSession, **overrides) -> UserNotification:
+    """A `user_notification` row (defaults to an unread `deal_new` alert).
+    `location_id` is required (FK) — pass the location the alert is about."""
+    values = {
+        "user_sub": _cognito_sub(),
+        "kind": "deal_new",
+        "title": "Two for one thali",
+    }
+    values.update(overrides)
+    notification = UserNotification(**values)
+    db.add(notification)
+    await db.flush()
+    return notification
 
 
 def submitted_recently() -> datetime:

@@ -85,6 +85,17 @@ class ActivityEventExportOut(BaseModel):
     payload: dict[str, Any]
 
 
+class NotificationExportOut(BaseModel):
+    """An in-app (bell) notification delivered to the caller — see
+    `app/models/user_notification.py`. `title` is the deal-title snapshot."""
+
+    kind: str
+    title: str
+    location_id: int
+    created_at: datetime
+    read_at: datetime | None
+
+
 class AuditLogExportOut(BaseModel):
     """Actions the caller themselves performed, per DECISIONS.md "CCPA
     data export/deletion" — included for transparency, but retained (not
@@ -111,6 +122,7 @@ class DataExportOut(BaseModel):
     claim_requests: list[ClaimRequestExportOut]
     listing_reports: list[ListingReportExportOut]
     activity_events: list[ActivityEventExportOut]
+    notifications: list[NotificationExportOut] = []
     audit_log_entries: list[AuditLogExportOut]
     notice: str
 

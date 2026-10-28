@@ -242,7 +242,7 @@ JWT_SECRET            Cognito JWT public key (fetched from Cognito endpoint)
 
 ## Phase 1 — Do NOT Build Yet
 - Stripe checkout, webhooks, subscription management (Phase 2)
-- Menu CRUD, deal alerts (Phase 2) — full menu + prices is a FREE feature,
+- Menu CRUD (Phase 2) — full menu + prices is a FREE feature,
   only dish photos are paid-gated (see DECISIONS.md "Full menu with prices
   moved to free tier"). **Menu CRUD (groups, items, size options, reorder,
   public read) was pulled forward 2026-09-24 by direct user instruction**:
@@ -253,6 +253,9 @@ JWT_SECRET            Cognito JWT public key (fetched from Cognito endpoint)
   Stripe/billing/subscriptions/refunds remained deferred) — see
   DECISIONS.md "Deals engine: free-tier, public-signal + registered-user-content
   visibility". Deals are a FREE-tier feature, not paid-gated, per that decision.
+  **In-app deal alerts to followers (the registered-user bell) are built**
+  (docs/API_CONTRACTS.md "Notifications"); the EMAIL half of deal alerts stays
+  deferred with SES.
   Deal CONTENT visibility (2026-09-25 amendment): ANY signed-in caller of any
   role gets `deals_today`/`upcoming_deals` content; anonymous callers get
   `null` and only the public `has_deal_today` boolean. One choke point:

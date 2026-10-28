@@ -39,7 +39,7 @@ from app.schemas.deal import (
     DealUpdate,
     DealVisibilityOut,
 )
-from app.services import audit_service, hours_service
+from app.services import audit_service, hours_service, notification_service
 
 _AUDITED_FIELDS = (
     "deal_type",  # recorded as the EFFECTIVE (end_at-derived) type — see _snapshot
@@ -236,6 +236,11 @@ async def create_deal(
         actor_role=current_user.role,
         old_val=None,
         new_val=_snapshot(deal),
+    )
+    # In-app bell alerts to followers of this location's brand — same
+    # transaction, capped, best-effort (see notification_service).
+    await notification_service.notify_followers_of_new_deal(
+        db, location, deal, current_user.cognito_sub
     )
     await db.commit()
     await db.refresh(deal)
