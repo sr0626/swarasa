@@ -11,13 +11,18 @@
 // NOT silently dropped: that would fall back to the backend's Dallas-area
 // default and show unrelated results for a typo or a place with no
 // restaurants, so it renders a "no results for that place" empty state
-// instead. An empty location is unchanged — no lat/lng sent, backend
-// default area applies.
+// instead. An empty location falls back to a signed-in diner's SAVED
+// city/ZIP when they have one (sent as near_zip/near_city, resolved by the
+// backend against our own listings -- lib/search/searchOrigin.ts); with no
+// saved location it is unchanged: no lat/lng sent, backend default applies.
 import { searchRestaurants } from "@/lib/api/search";
 import RestaurantCard from "@/components/listing/RestaurantCard";
 import InfoPanel from "@/components/ui/InfoPanel";
 import Pagination from "@/components/search/Pagination";
+import SearchOriginNote from "@/components/search/SearchOriginNote";
 import { buildSearchHref, countFilters, type SearchFilters } from "@/lib/search/filters";
+import { loadSavedLocation } from "@/lib/search/loadSavedLocation";
+import { originNote, originSearchParams, resolveSearchOrigin } from "@/lib/search/searchOrigin";
 import { geocodeSearchLocation } from "@/lib/geocode";
 import { getServerSession } from "@/lib/auth/session";
 import { getViewerFollowState } from "@/lib/follow/viewerFollowState";
@@ -60,6 +65,12 @@ export default async function SearchResults({ filters, page, location, query }: 
   const session = await getServerSession();
   const trackedToken = session?.role === "registered_user" ? session.accessToken : undefined;
 
+  // Explicit location wins (handled above); otherwise the saved ZIP, if any.
+  const origin = resolveSearchOrigin({
+    explicitLocation: trimmedLocation,
+    saved: trimmedLocation ? null : await loadSavedLocation(),
+  });
+
   // Resolved once per results render, not per tile — see
   // lib/follow/viewerFollowState.ts for the client-side-match approach and
   // its documented limitation.
@@ -74,6 +85,8 @@ export default async function SearchResults({ filters, page, location, query }: 
       // Free-text box: matches restaurant name or cuisine tag (backend `q`).
       q: query.trim() || undefined,
       has_deals_today: filters.dealsToday || undefined,
+      open_now: filters.openNow || undefined,
+      ...originSearchParams(origin),
       // Typed location text, for the viewer's search history only — sent
       // only when tracking (keeps anonymous requests on the shared cache key).
       loc: trackedToken ? trimmedLocation || undefined : undefined,
@@ -98,7 +111,9 @@ export default async function SearchResults({ filters, page, location, query }: 
         title="No restaurants match your search"
         body={
           countFilters(filters) > 0
-            ? "No restaurants have all of these tags yet. Try removing a filter, or use Clear all to see everything nearby."
+            ? filters.openNow
+              ? "No matching restaurants are open right now (restaurants with unknown hours are left out). Try removing a filter, or use Clear all to see everything nearby."
+              : "No restaurants have all of these tags yet. Try removing a filter, or use Clear all to see everything nearby."
             : "No restaurants are listed here yet. Check back soon."
         }
       />
@@ -109,12 +124,18 @@ export default async function SearchResults({ filters, page, location, query }: 
   // page links) — the "come back here" destination for a signed-out
   // follow click, filters/page/location/query and all.
   const currentPath = buildSearchHref({ location, query, filters, page });
+  const note = originNote(origin, data.origin_source);
 
   return (
     <div>
-      <p className="mb-4 text-sm text-brand-ink-muted">
+      <p className={`text-sm text-brand-ink-muted ${note ? "mb-1" : "mb-4"}`}>
         {data.total} restaurant{data.total === 1 ? "" : "s"} found
       </p>
+      {note && (
+        <div className="mb-3">
+          <SearchOriginNote text={note.text} resolved={note.resolved} />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {data.results.map((item) => (

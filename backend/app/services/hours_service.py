@@ -1,8 +1,11 @@
 """restaurant_hours CRUD + the open/closed *display* status computation.
 
 DECISIONS.md "Restaurant hours": display open/closed status is Phase 1
-scope (a per-row lookup), the `open_now` *search filter* is Phase 3 — this
-module only ever computes/returns display status, never filters `/search`.
+scope (a per-row lookup). The `open_now` *search filter* was originally
+Phase 3 and was pulled forward (user request, 2026-10-28):
+`open_now_location_ids` below is its pure core, used by
+`search_service.search` as a post-filter on the already geo-limited
+candidate set.
 
 day_of_week convention: 0=Monday..6=Sunday (docs/DATA_MODEL.md judgment
 call, matching Python's `date.weekday()` / `datetime.weekday()`) —
@@ -149,6 +152,54 @@ async def today_status_for_location(
         )
     )
     return compute_today_status(result.scalar_one_or_none(), tz_name)
+
+
+async def get_today_hours_for_candidates(
+    db: AsyncSession, candidates: list[tuple[int, str]], now_utc: dt | None = None
+) -> dict[int, RestaurantHours]:
+    """Today's `restaurant_hours` row per location, where "today" is the
+    weekday in EACH location's own timezone. `candidates` = (location_id,
+    tz_name). One query for the whole set (restricted to the weekdays that
+    actually occur across those timezones, so ~1/7th of the rows); a
+    location with no row for its today is simply absent from the result.
+    """
+    if not candidates:
+        return {}
+    now_utc = now_utc if now_utc is not None else dt.now(ZoneInfo("UTC"))
+    weekday_by_location = {
+        lid: now_utc.astimezone(safe_zone(tz)).weekday() for lid, tz in candidates
+    }
+    result = await db.execute(
+        select(RestaurantHours).where(
+            RestaurantHours.location_id.in_(list(weekday_by_location)),
+            RestaurantHours.day_of_week.in_(set(weekday_by_location.values())),
+        )
+    )
+    return {
+        row.location_id: row
+        for row in result.scalars().all()
+        if row.day_of_week == weekday_by_location.get(row.location_id)
+    }
+
+
+def open_now_location_ids(
+    candidates: list[tuple[int, str]],
+    today_hours: dict[int, RestaurantHours],
+    now_utc: dt | None = None,
+) -> set[int]:
+    """Ids of the candidate locations that are open RIGHT NOW in their own
+    timezone. Reuses `compute_is_open_now` (the same logic as the card's
+    open/closed pill), so the filter can never disagree with the label.
+    Unknown hours (`None`: no row, `is_closed` NULL, or missing times) are
+    NOT open — they are excluded, never guessed.
+    """
+    now_utc = now_utc if now_utc is not None else dt.now(ZoneInfo("UTC"))
+    open_ids: set[int] = set()
+    for lid, tz in candidates:
+        local_now = now_utc.astimezone(safe_zone(tz))
+        if compute_is_open_now(today_hours.get(lid), tz, local_now) is True:
+            open_ids.add(lid)
+    return open_ids
 
 
 async def replace_hours(db: AsyncSession, location_id: int, entries: list[HourEntryIn]) -> None:

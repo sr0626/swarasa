@@ -22,10 +22,12 @@ volume grows.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
+from typing import Literal
 
 from geoalchemy2.functions import ST_DWithin, ST_Distance, ST_MakePoint, ST_SetSRID
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.restaurant_brand import RestaurantBrand
@@ -41,6 +43,62 @@ _METERS_PER_MILE = 1609.34
 # schema.
 _DEFAULT_LAT = 32.7767
 _DEFAULT_LNG = -96.7970
+
+
+OriginSource = Literal["coordinates", "saved_zip", "saved_city", "default"]
+
+_US_ZIP = re.compile(r"^\d{5}(-\d{4})?$")
+_MAX_CITY_LEN = 100
+
+
+def normalise_zip(value: str | None) -> str | None:
+    """The 5-digit ZIP of a US ZIP / ZIP+4, else None (never a 422 — this is
+    only a best-effort origin hint on a public endpoint)."""
+    if value is None:
+        return None
+    value = value.strip()
+    return value[:5] if _US_ZIP.match(value) else None
+
+
+async def resolve_saved_origin(
+    db: AsyncSession, postal_code: str | None, city: str | None
+) -> tuple[float, float, OriginSource] | None:
+    """Search origin derived from a signed-in diner's SAVED home location.
+
+    No geocoding vendor: the centroid (mean lat/lng) of our own active,
+    geocoded locations in that ZIP, else in that city (case-insensitive).
+    Uses the plain `latitude`/`longitude` columns, so it is a cheap indexed-
+    free aggregate over a handful of rows -- no PostGIS call, no idle cost.
+    Returns None when neither matches (caller falls back to the DFW default).
+    """
+    zip5 = normalise_zip(postal_code)
+    city_clean = " ".join((city or "").split())[:_MAX_CITY_LEN]
+    attempts: list[tuple[OriginSource, object]] = []
+    if zip5:
+        attempts.append(
+            ("saved_zip", func.substr(RestaurantLocation.postal_code, 1, 5) == zip5)
+        )
+    if city_clean:
+        attempts.append(
+            ("saved_city", func.lower(RestaurantLocation.city) == city_clean.lower())
+        )
+    for source, predicate in attempts:
+        row = (
+            await db.execute(
+                select(
+                    func.avg(RestaurantLocation.latitude),
+                    func.avg(RestaurantLocation.longitude),
+                    func.count(),
+                )
+                .where(RestaurantLocation.is_active == True)  # noqa: E712
+                .where(RestaurantLocation.latitude.isnot(None))
+                .where(RestaurantLocation.longitude.isnot(None))
+                .where(predicate)
+            )
+        ).one()
+        if row[2] and row[0] is not None and row[1] is not None:
+            return float(row[0]), float(row[1]), source
+    return None
 
 
 def _escape_like(value: str) -> str:
@@ -176,6 +234,7 @@ async def search(
     pagination,
     q: str | None = None,
     has_deals_today: bool | None = None,
+    open_now: bool | None = None,
 ) -> tuple[list[SearchResultOut], int]:
     effective_lat = lat if lat is not None else _DEFAULT_LAT
     effective_lng = lng if lng is not None else _DEFAULT_LNG
@@ -185,6 +244,20 @@ async def search(
     )
     if not candidates:
         return [], 0
+
+    # `open_now`: post-filter on the already geo/tag-limited candidate set
+    # (never a scan of all locations) -- one bulk hours query for just these
+    # candidates, evaluated in EACH location's own timezone. Per-LOCATION like
+    # the tag filters: a closed sibling branch is not a candidate, so it is
+    # never the card's nearest_location nor counted in location_count_nearby.
+    # Unknown hours are excluded.
+    if open_now:
+        pairs = [(row.location_id, row.timezone) for row in candidates]
+        today_hours = await hours_service.get_today_hours_for_candidates(db, pairs)
+        open_ids = hours_service.open_now_location_ids(pairs, today_hours)
+        candidates = [row for row in candidates if row.location_id in open_ids]
+        if not candidates:
+            return [], 0
 
     # Deals — bulk-fetched once for every candidate location (not just the
     # eventual "nearest per brand" subset), because the `has_deals_today`

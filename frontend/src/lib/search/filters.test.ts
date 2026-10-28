@@ -9,6 +9,7 @@ import {
   hasSearchCriteria,
   parseFilters,
   toggleDealsToday,
+  toggleOpenNow,
 } from "./filters.ts";
 
 test("parseFilters reads deals_today=true and ignores anything else", () => {
@@ -65,4 +66,26 @@ test("page and sort params alone are not criteria (via parseFilters on raw param
   );
   // The top bar's link is a criterion.
   assert.equal(hasSearchCriteria({ filters: parseFilters({ deals_today: "true" }) }), true);
+});
+
+test("open_now round-trips, counts as a filter and as a search criterion", () => {
+  assert.equal(parseFilters({ open_now: "true" }).openNow, true);
+  assert.equal(parseFilters({ open_now: ["true", "x"] }).openNow, true);
+  assert.equal(parseFilters({ open_now: "1" }).openNow, false);
+  assert.equal(parseFilters({}).openNow, false);
+
+  const on = toggleOpenNow(EMPTY_FILTERS);
+  assert.equal(on.openNow, true);
+  assert.equal(countFilters(on), 1);
+  assert.equal(countFilters({ ...on, dealsToday: true }), 2);
+  assert.equal(toggleOpenNow(on).openNow, false);
+  assert.equal(hasSearchCriteria({ filters: on }), true);
+
+  const href = buildSearchHref({ filters: { ...on, dealsToday: true }, location: "Plano", page: 2 });
+  assert.equal(href, "/search?location=Plano&deals_today=true&open_now=true&page=2");
+  assert.deepEqual(parseFilters(Object.fromEntries(new URL(href, "http://x").searchParams)), {
+    ...on,
+    dealsToday: true,
+  });
+  assert.equal(buildSearchHref({ filters: EMPTY_FILTERS }), "/search");
 });

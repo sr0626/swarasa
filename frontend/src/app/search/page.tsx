@@ -25,9 +25,12 @@ import SearchFilterBar from "@/components/search/SearchFilterBar";
 import SearchEmptyState from "@/components/search/SearchEmptyState";
 import SearchResults from "@/components/search/SearchResults";
 import SearchResultsSkeleton from "@/components/search/SearchResultsSkeleton";
+import SearchOriginNote from "@/components/search/SearchOriginNote";
 import { getCuisineTags } from "@/lib/api/cuisine";
 import { FALLBACK_FILTER_TAGS } from "@/lib/constants/cuisineFilters";
 import { DEFAULT_CITY_LABEL } from "@/lib/constants/city";
+import { loadSavedLocation } from "@/lib/search/loadSavedLocation";
+import { idleOriginNote, resolveSearchOrigin } from "@/lib/search/searchOrigin";
 import {
   buildFilterGroups,
   buildSearchHref,
@@ -118,6 +121,11 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const cityLabel = location || DEFAULT_CITY_LABEL;
   const hasCriteria = hasSearchCriteria({ location, query, filters });
   const groups = await loadFilterGroups();
+  // Empty-by-default is unchanged: the saved ZIP is NOT a criterion. With no
+  // criteria we only tell a signed-in diner where searches will start.
+  const idleNote = hasCriteria
+    ? null
+    : idleOriginNote(resolveSearchOrigin({ saved: await loadSavedLocation() }));
   const resultsKey = `${JSON.stringify(filters)}-${page}`;
 
   return (
@@ -153,7 +161,14 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
             </Suspense>
           ) : (
             // No criteria: no backend call, no skeleton — just the prompt.
-            <SearchEmptyState />
+            <>
+              {idleNote && (
+                <div className="mb-3 text-center">
+                  <SearchOriginNote text={idleNote} />
+                </div>
+              )}
+              <SearchEmptyState />
+            </>
           )}
         </div>
       </section>

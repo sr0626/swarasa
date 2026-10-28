@@ -20,6 +20,13 @@ export interface SearchParams {
    * carries its own `nearest_location.has_deal_today` badge signal
    * regardless of whether this filter was used. */
   has_deals_today?: boolean;
+  /** Only locations open right now, evaluated server-side in each location's
+   * own timezone; unknown hours are excluded. Omitted (not `false`) = off. */
+  open_now?: boolean;
+  /** A signed-in diner's saved ZIP / city: the search origin ONLY when
+   * lat/lng are absent (docs/API_CONTRACTS.md "GET /search" `near_zip`). */
+  near_zip?: string;
+  near_city?: string;
   /**
    * The location text the visitor typed (city/ZIP) — sent ONLY on a signed-in
    * registered_user's search, purely so their search history can show it
@@ -102,4 +109,6 @@ export interface SearchResponse {
   page: number;
   page_size: number;
   total: number;
+  /** Where distances were measured from. Optional: an older API omits it. */
+  origin_source?: "coordinates" | "saved_zip" | "saved_city" | "default";
 }

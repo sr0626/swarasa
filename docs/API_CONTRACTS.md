@@ -63,16 +63,28 @@ Query params:
 | page_size | int, optional, default 20, max 100 | |
 | loc | string, optional | **Added 2026-09-23** (activity tracking). The location text the user typed (city/ZIP), used ONLY for a signed-in `registered_user`'s search-history entry (clipped to 100 chars there); never affects results (`lat`/`lng` do). Deliberately no `max_length` — an over-long value is truncated when recorded rather than turning a public search into a 422. |
 | has_deals_today | bool, optional | **Added 2026-09-23** (deals engine). When `true`, only brands with **at least one candidate location** (within the current radius/cuisine/dietary/type/q filter set — not just the nearest one shown on the card) that has an active deal matching today are returned. See `docs/DECISIONS.md` "Deals: public boolean signal, gated content". |
+| open_now | bool, optional | **Added 2026-10-28** (pulled forward from Phase 3 by user request). When `true`, only locations that are **open right now** are candidates. Computed server-side per location in its **own timezone** from `restaurant_hours` (same `compute_is_open_now` logic as the card's open/closed pill, so filter and label cannot disagree). Locations with **unknown hours** (no row for today, `is_closed` NULL, or missing times) are **excluded**. Evaluated per candidate LOCATION like the tag filters: a closed sibling branch is never the card's `nearest_location` nor counted in `location_count_nearby`. A post-filter on the already geo/tag-limited candidate set (one bulk hours query for just those candidates) -- never a scan of all locations. Does not use the weekday/time of the caller. Overnight spill from the previous day's row is not considered (same as the pill). |
+| near_zip | string, optional | **Added 2026-10-28.** A signed-in diner's **saved ZIP** (`user_profile.postal_code`), used ONLY as the search origin when `lat`/`lng` are both absent: the origin becomes the mean lat/lng of our own **active, geocoded locations** whose postal code starts with that 5-digit ZIP (ZIP+4 accepted, trimmed). No third-party geocoder. A malformed value is ignored (never a 422). Explicit `lat`/`lng` always win. |
+| near_city | string, optional, clipped to 100 | **Added 2026-10-28.** Saved city; fallback origin (mean of active geocoded locations in that city, case-insensitive) when `near_zip` is absent/invalid or matches no location. If neither resolves, the DFW default is used. |
 
-Note: `open_now` is deliberately **not** a query param here — deferred
-to Phase 3 (DECISIONS.md "Restaurant hours").
+Response field **`origin_source`** (added 2026-10-28, additive):
+`"coordinates"` (caller's own `lat`/`lng`), `"saved_zip"`, `"saved_city"`
+(centroid from `near_zip` / `near_city`), or `"default"` (DFW fallback, also
+when `near_zip`/`near_city` could not be resolved). The frontend uses it to
+say honestly where results are measured from. Search-history events
+(activity tracking) gain `open_now: true` in the stored `search`
+payload when the filter was used. `near_zip`/`near_city` are NOT recorded.
+
+Frontend rule (not enforced by the API): explicit location > saved ZIP >
+default, and the saved ZIP never turns an empty `/search` into a search --
+`/search` stays empty-by-default (no criteria -> no call).
 
 **Auth / activity recording (added 2026-09-23):** the endpoint stays public
 and its response never depends on the caller. If a valid bearer token for a
 `registered_user` is presented, the search is additionally recorded in that
 user's activity history (see "Activity tracking (`/activity`)" below) —
 **page 1 only**, and only when the search carried at least one criterion
-(`q`, a tag filter, `loc` or `has_deals_today`). Anonymous, owner, manager
+(`q`, a tag filter, `loc`, `has_deals_today` or `open_now`). Anonymous, owner, manager
 and admin callers record nothing. An invalid/expired token is treated as
 anonymous (never a 401 here), and any failure while recording is swallowed:
 recording can never fail or change the search response.

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import time
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -76,3 +77,8 @@ class SearchResponse(BaseModel):
     page: int
     page_size: int
     total: int
+    # Additive: where the distances are measured from. "coordinates" = the
+    # caller's own lat/lng; "saved_zip"/"saved_city" = centroid of our own
+    # active locations in the caller's saved ZIP/city (`near_zip`/`near_city`);
+    # "default" = the DFW fallback point.
+    origin_source: Literal["coordinates", "saved_zip", "saved_city", "default"] = "default"
