@@ -639,4 +639,14 @@ aws sts get-caller-identity --profile swarasa-dev   # user  (expired token, then
 aws sso login --profile swarasa-dev   # user
 aws lambda invoke --function-name swarasa-api-dev --payload '{"_management_command": "alembic_upgrade"}' --profile swarasa-dev --region us-east-1 ...   # user  (after the #242 deploy, applying 0017_admin_message; re-run after #243 for 0018_user_profile_location)
 git push -u origin fix/footer-your-data-label   # claude
+git push -u origin docs/wave-236-244   # claude
+git push -u origin docs/decisions-wave-11   # claude
+aws sso login --profile swarasa-dev   # user
+aws lambda invoke --function-name swarasa-api-dev --payload '{"_management_command": "alembic_upgrade"}' --profile swarasa-dev --region us-east-1 ...   # user  (after the #243 deploy, applying 0018_user_profile_location)
+git push -u origin feature/deal-alerts-in-app   # claude
+git push -u origin feature/admin-assign-owner   # claude
+git push -u origin feature/admin-users-audit-log   # claude
+git push -u origin fix/deploy-backend-single-manifest   # claude
+aws sso login --profile swarasa-dev   # user  (expired session)
+aws lambda invoke --function-name swarasa-api-dev --payload '{"_management_command": "alembic_upgrade"}' --profile swarasa-dev --region us-east-1 ...   # user  (after the #250 deploy, applying 0019_user_notification)
 ```
