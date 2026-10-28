@@ -659,4 +659,9 @@ aws lambda invoke --function-name swarasa-api-dev --payload '{"_management_comma
 git push -u origin fix/signup-role-escalation   # claude
 terraform plan -var-file=envs/dev.tfvars -out=lambda-fix.tfplan   # user  (infra/, swarasa-dev)
 terraform apply lambda-fix.tfplan   # user  (infra/, swarasa-dev — post-confirmation Lambda code update, 1 changed)
+git push -u origin docs/wave-253-254   # claude
+git push -u origin docs/decisions-wave-13   # claude
+git push -u origin feature/city-landing-pages   # claude
+git push -u origin feature/search-saved-zip-open-now   # claude
+git push -u origin feature/admin-taxonomy   # claude
 ```
