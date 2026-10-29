@@ -3209,6 +3209,41 @@ neither is part of this endpoint.
 
 Errors: `403 forbidden` for any non-admin caller.
 
+### GET /admin/queue-counts
+
+Auth: admin only (`403 forbidden` otherwise). Read-only aggregate behind the
+action-item badges on the admin menu's **Work queue** group (Claims, Messages,
+Reports, Reopen requests). Computed per request; one statement of `COUNT(*)`
+subqueries on the existing `(status, ...)` indexes plus a tiny read for the
+overdue boundary band (see `app/services/admin_queue_counts_service.py`).
+Separate from `GET /admin/overview` (which paginates owners and runs more
+queries) because the menu calls it on every admin page render.
+
+Response: `200`
+```json
+{
+  "claims": { "pending": 3, "overdue": 1 },
+  "messages": { "open": 2 },
+  "reports": { "new": 4 },
+  "reopen_requests": { "pending": 1 },
+  "total": 10
+}
+```
+
+"Needs action" = waiting on an admin decision; resolved rows never count:
+- `claims.pending`: `claim_request.status = 'pending_review'`.
+- `claims.overdue`: the subset of `pending` past its `sla_due_at`
+  (`submitted_at` + 2 business days, the same value the claims queue shows).
+- `messages.open`: `admin_message.status = 'open'`.
+- `reports.new`: `listing_report.status = 'new'` (untriaged).
+- `reopen_requests.pending`: `location_reopen_request.status = 'pending_review'`.
+- `total` = `claims.pending + messages.open + reports.new + reopen_requests.pending`
+  (`overdue` is part of `claims.pending`, not added again).
+
+Frontend: fetched server-side once per admin page render (best-effort,
+1.5s bound; any failure renders the menu without badges) and re-fetched via a
+Server Action on client-side navigation.
+
 ### GET /admin/registered-user-count
 
 Auth: admin only. Total diner (`registered_user`) sign-ups — the data
