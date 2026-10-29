@@ -19,6 +19,10 @@ import { getCuisineTags } from "@/lib/api/cuisine";
 import { getLocationById, getLocationManagers } from "@/lib/api/locations";
 import { getLocationDeals } from "@/lib/api/deals";
 import { getLocationMenuForManagement } from "@/lib/api/menu";
+import { getLocationAnalytics } from "@/lib/api/analytics";
+import LocationInsights from "@/components/portal/LocationInsights";
+import { DEFAULT_RANGE } from "@/lib/portal/analyticsView";
+import type { LocationAnalytics } from "@/types/analytics";
 import LocationInfoForm from "@/components/portal/LocationInfoForm";
 import LocationAboutForm from "@/components/portal/LocationAboutForm";
 import LocationCuisineTagsForm from "@/components/portal/LocationCuisineTagsForm";
@@ -152,6 +156,16 @@ export default async function PortalLocationPage({ params, searchParams }: Locat
     menu = null;
   }
 
+  // Insights (anonymous counters), default range. Same access rule as the
+  // rest of the editor; a failure leaves the section to load/retry itself
+  // client-side rather than hiding it.
+  let insights: LocationAnalytics | null = null;
+  try {
+    insights = await getLocationAnalytics(locationId, DEFAULT_RANGE, session.accessToken);
+  } catch {
+    insights = null;
+  }
+
   // The tag taxonomy for this location's "Cuisine & dietary tags" panel. A load failure
   // shows the panel's own "try again" note rather than hiding the section.
   let allTags: CuisineTag[] = [];
@@ -256,6 +270,10 @@ export default async function PortalLocationPage({ params, searchParams }: Locat
       />
     ),
     info: anchored(sectionById("info"), <LocationInfoForm location={location} role={session.role} />),
+    insights: anchored(
+      sectionById("insights"),
+      <LocationInsights locationId={location.id} initial={insights} />
+    ),
     managers:
       isOwner || isAdmin
         ? anchored(

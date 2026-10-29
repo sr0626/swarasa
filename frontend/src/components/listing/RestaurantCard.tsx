@@ -112,6 +112,7 @@ export default function RestaurantCard({
             : brandHref(item.slug)
         }
         className="flex flex-col"
+        locationId={nearest_location?.location_id ?? null}
         track={
           isRegisteredUser && clickSource
             ? {

@@ -11,7 +11,8 @@ Scope: `/search`, `/restaurants` (CRUD), `/locations` (CRUD), `/claim`,
 `GET /health`, `GET /search`, `GET /restaurants/{id}`,
 `GET /restaurants/{id}/locations`, and `GET /locations/{id}` are
 public (plus `POST /reports`, the anonymous report-a-problem
-submission — see "Listing reports" below). Every other route below requires a valid Cognito JWT
+submission — see "Listing reports" below; and `POST /track/location/{id}`, the
+anonymous engagement counter — see "Owner analytics" below). Every other route below requires a valid Cognito JWT
 (`owner` / `manager` / `admin` / `registered_user` pool group), and
 every write additionally re-validates ownership/assignment server-side
 per root CLAUDE.md "Permission model" — never trust the JWT claims
@@ -4446,3 +4447,83 @@ accepted_at, revoked_at`); `data_scope.manager_invites` counts them. An approved
 deletion request redacts the invitee email on those rows and revokes any live
 link (rows are kept for rate-limit bookkeeping). Invitee emails are also
 redacted as soon as an invite is accepted or revoked.
+
+---
+
+## Owner analytics (`/track`, `/locations/{id}/analytics`, `/restaurants/{id}/analytics`)
+
+Basic, privacy-respecting engagement counters for owners, assigned managers and
+admins. Backed by `location_daily_stat` (docs/DATA_MODEL.md): anonymous daily
+integers per location — no IP, user id, cookie or per-visit row. Days are
+**UTC** calendar days. Visible to every owner/manager regardless of tier
+(tier-gating of analytics is deferred with the payment features). Event
+vocabulary (closed set): `page_view`, `tile_click`, `deal_view`,
+`website_click`, `directions_click`, `phone_click`. Search impressions are not
+counted (would need N writes per search).
+
+### POST /track/location/{location_id}
+
+Auth: **public** (a bearer token is optional and only used to drop the caller's
+own views; a stale/invalid token is ignored, never a `401`).
+
+Body: `{ "event": "page_view" }`. `event` is a plain string: an unknown value is
+ignored.
+
+Response: **always `204`**, no body — including for an unknown event, an
+unknown / hidden (`status != active`) location or soft-deleted brand, a view by
+the location's own owner (owns the brand), an actively assigned manager, or any
+admin (not counted), and a failed write (best-effort; logged server-side). So
+the route is not an existence oracle and can never fail or slow a visitor's
+page. One atomic upsert per call. Only a missing/over-long `event` (`422`) or a
+non-integer path id (`422`) is rejected.
+
+The frontend calls it from a same-origin relay (`POST /api/track`, which
+forwards the session token if any) via `navigator.sendBeacon`: page view once
+per browser session per location after load (client-side, so SSR/ISR caching is
+untouched and non-JS bots are not counted), deal view when the `#deals` section
+is scrolled into view, tile click, and clicks on website / address+directions /
+phone links.
+
+### GET /locations/{location_id}/analytics?days=7|30|90
+
+Auth: owner of the location's brand, **actively assigned manager** (checked in
+`location_manager`, never the JWT alone), or admin (`require_location_read_access`):
+`401` unauthenticated, `403` anyone else, `404` unknown location / deleted brand.
+`days` defaults to 30; any other value is `422`.
+
+Response `200`:
+```json
+{
+  "location_id": 1, "days": 30,
+  "start_date": "2026-09-29", "end_date": "2026-10-28", "timezone": "UTC",
+  "series": [{"date": "2026-09-29", "page_views": 0, "tile_clicks": 0,
+              "deal_views": 0, "website_clicks": 0, "directions_clicks": 0,
+              "phone_clicks": 0}],
+  "totals": {"page_views": 0, "tile_clicks": 0, "deal_views": 0,
+             "website_clicks": 0, "directions_clicks": 0, "phone_clicks": 0},
+  "previous_totals": {"...": 0},
+  "change_pct": {"page_views": 12.5, "phone_clicks": null, "...": null},
+  "data_since": "2026-10-20",
+  "follower_count": 14,
+  "active_deal_count": 2
+}
+```
+- `series`: exactly `days` entries, oldest first, **zero-filled**; the last entry
+  is today (a partial day).
+- `previous_totals`: the `days` days immediately before the window (equal length,
+  adjacent). `change_pct`: `(current - previous) / previous * 100`, 1 decimal;
+  `null` when the previous total is 0.
+- `data_since`: first day with any recorded data for this scope, `null` = none yet.
+- `follower_count`: CURRENT `user_follow` count for the location's **brand**
+  (follows are brand-level, so every location of a brand reports the same
+  number; it is not additive across locations).
+- `active_deal_count`: deals with `is_active` and no end date or an end date in
+  the future. Deal views are in `totals.deal_views`.
+
+### GET /restaurants/{brand_id}/analytics?days=7|30|90
+
+Auth: owner of the brand or admin (`require_brand_write_access`: `403` a manager
+or another owner, `404` unknown/deleted). Same shape as above with
+`brand_id`, `location_count`, and series/totals **summed over all the brand's
+locations**; `follower_count` is the brand's count (once); plus
+`by_location: [{location_id, label, totals}]`.

@@ -9,6 +9,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { trackTileClick } from "@/lib/activity/tileClick";
+import { trackLocationEvent } from "@/lib/analytics/track";
 import type { TileClickInput } from "@/types/userActivity";
 
 interface TrackedTileLinkProps {
@@ -18,6 +19,11 @@ interface TrackedTileLinkProps {
   "aria-label"?: string;
   /** Omit for anyone who is not a signed-in registered_user. */
   track?: TileClickInput;
+  /** The location this tile opens. When set, the click also bumps that
+   * location's anonymous "tile clicks" counter for the owner Insights view
+   * (lib/analytics/track.ts) — for EVERY viewer, signed in or not; no
+   * identity is sent or stored. Independent of `track` (per-user history). */
+  locationId?: number | null;
   children: ReactNode;
 }
 
@@ -26,6 +32,7 @@ export default function TrackedTileLink({
   className,
   "aria-label": ariaLabel,
   track,
+  locationId,
   children,
 }: TrackedTileLinkProps) {
   return (
@@ -33,7 +40,14 @@ export default function TrackedTileLink({
       href={href}
       className={className}
       aria-label={ariaLabel}
-      onClick={track ? () => trackTileClick(track) : undefined}
+      onClick={
+        track || locationId
+          ? () => {
+              if (track) trackTileClick(track);
+              if (locationId) trackLocationEvent(locationId, "tile_click");
+            }
+          : undefined
+      }
     >
       {children}
     </Link>

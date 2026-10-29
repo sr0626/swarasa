@@ -15,6 +15,7 @@
 import Link from "next/link";
 import ClaimCTA from "@/components/restaurant/ClaimCTA";
 import EditListingBar from "@/components/restaurant/EditListingBar";
+import LocationTracker from "@/components/restaurant/LocationTracker";
 import RestaurantAbout from "@/components/restaurant/RestaurantAbout";
 import RestaurantBackLink from "@/components/restaurant/RestaurantBackLink";
 import RestaurantDeals from "@/components/restaurant/RestaurantDeals";
@@ -80,6 +81,10 @@ export default function LocationProfile({
         </div>
 
         {canEdit && location && <EditListingBar locationId={location.id} />}
+
+        {/* Owner Insights counters (client-side, best-effort, no personal
+            data). The location's own owner/manager and admins aren't counted. */}
+        {location && <LocationTracker locationId={location.id} suppress={canEdit || isAdmin} />}
 
         {/* Two columns from lg up; a single column below that. DOM order is
             the mobile order: hero -> sidebar (claim + info card) -> main

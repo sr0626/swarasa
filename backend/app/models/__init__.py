@@ -39,6 +39,7 @@ from app.models.user_activity_event import UserActivityEvent
 from app.models.admin_message import AdminMessage
 from app.models.user_notification import UserNotification
 from app.models.manager_invite import ManagerInvite
+from app.models.location_daily_stat import LocationDailyStat
 
 __all__ = [
     "OwnerAccount",
@@ -67,4 +68,5 @@ __all__ = [
     "AdminMessage",
     "UserNotification",
     "ManagerInvite",
+    "LocationDailyStat",
 ]
