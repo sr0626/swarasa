@@ -101,6 +101,33 @@ export function listingsSummaryChips(summary: AdminListingsSummary): SummaryChip
   ];
 }
 
+/** "Inactive (disabled)" -> "inactive": drop the parenthetical, lowercase. */
+function hintLabel(label: string): string {
+  return label
+    .replace(/\s*\([^)]*\)/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+const HINT_LEADING_CHIPS = 3;
+const HINT_MAX_CHIPS = 4;
+
+/**
+ * One-line headline for the collapsed Summary header, built from the same
+ * chips as the full strip: the first few figures (total / active / inactive,
+ * or restaurants / unclaimed / locations), plus a warning figure that is
+ * non-zero (e.g. "5 unconfirmed") so collapsing never hides a work item.
+ * Returns "" for an empty chip list.
+ */
+export function summaryHint(chips: SummaryChip[]): string {
+  const picked = chips.slice(0, HINT_LEADING_CHIPS);
+  for (const extra of chips.slice(HINT_LEADING_CHIPS)) {
+    if (picked.length >= HINT_MAX_CHIPS) break;
+    if (extra.tone === "warning") picked.push(extra);
+  }
+  return picked.map((c) => `${c.value} ${hintLabel(c.label)}`).join(" · ");
+}
+
 /** Note shown under the strip when a Cognito group hit the cap, else null. */
 export function truncatedNote(truncated: boolean): string | null {
   return truncated

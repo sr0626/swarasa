@@ -8,6 +8,7 @@ import {
   managersSummaryChips,
   ownersSummaryChips,
   registeredUsersSummaryChips,
+  summaryHint,
   truncatedNote,
   usersSummaryChips,
 } from "./adminSummary.ts";
@@ -92,4 +93,34 @@ test("registered users, owners, managers and listings chips", () => {
   });
   assert.equal(listings[0].label, "Restaurants");
   assert.equal(listings[1].tone, "neutral");
+});
+
+test("summaryHint: headline figures for the collapsed Summary header", () => {
+  assert.equal(
+    summaryHint(usersSummaryChips(usersSummary)),
+    "1,204 total · 1,100 active · 104 inactive"
+  );
+  assert.equal(summaryHint([]), "");
+});
+
+test("summaryHint: a non-zero warning figure is surfaced, a zero one is not", () => {
+  const warned = summaryHint(usersSummaryChips({ ...usersSummary, unconfirmed: 5 }));
+  assert.equal(warned, "1,204 total · 1,100 active · 104 inactive · 5 unconfirmed");
+  const listings = summaryHint(
+    listingsSummaryChips({
+      brands: 12,
+      unclaimed_brands: 3,
+      locations: 20,
+      active: 18,
+      coming_soon: 1,
+      owner_deactivated: 1,
+      closed_pending_reopen: 0,
+    })
+  );
+  assert.equal(listings, "12 restaurants · 3 unclaimed · 20 locations");
+});
+
+test("summaryHint: truncated total keeps its plus sign", () => {
+  const hint = summaryHint(usersSummaryChips({ ...usersSummary, truncated: true }));
+  assert.match(hint, /^1,204\+ total/);
 });

@@ -131,7 +131,7 @@ export default async function AdminListingsPage({ searchParams }: AdminListingsP
         restaurant&rsquo;s locations matches.
       </p>
 
-      {summary && <AdminSummaryStrip chips={listingsSummaryChips(summary)} />}
+      {summary && <AdminSummaryStrip page="listings" chips={listingsSummaryChips(summary)} />}
 
       {loadError ? (
         <p className="mt-6 rounded-brand-control bg-brand-closed-bg px-3 py-2.5 text-sm text-brand-closed">

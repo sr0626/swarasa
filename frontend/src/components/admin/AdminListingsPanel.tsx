@@ -45,7 +45,9 @@ import {
 import AssignOwnerPanel from "@/components/admin/AssignOwnerPanel";
 import { applyAssignment, assignBlockedReason, assignSummary, canAssignOwner } from "@/lib/adminOwnerAssignment";
 import type { AssignOwnerResponse } from "@/types/adminOwnerAssignment";
+import CollapsiblePanel from "@/components/ui/CollapsiblePanel";
 import LocalDateTime from "@/components/ui/LocalDateTime";
+import { filtersHint } from "@/lib/collapsiblePanel";
 import { PencilIcon, PlusIcon, TrashIcon } from "@/components/ui/icons";
 import type {
   AdminListing,
@@ -159,6 +161,7 @@ export default function AdminListingsPanel({
       )
   );
   const chips = activeFilterChips(filters);
+  const appliedCount = chips.length;
   const locationFilterActive = hasLocationFilter(filters);
 
   function toggleExpanded(brandId: number) {
@@ -206,132 +209,138 @@ export default function AdminListingsPanel({
 
   return (
     <div>
-      <form
-        method="get"
-        className="grid grid-cols-1 gap-3 rounded-brand-card border border-brand-border bg-white p-4 sm:flex sm:flex-wrap sm:items-end"
+      <CollapsiblePanel
+        page="listings"
+        panel="search"
+        title="Search & filters"
+        hint={filtersHint(appliedCount, filters.name)}
+        forceOpen={appliedCount > 0}
+        className="mt-3"
       >
-        {/* Carried through the form so Apply doesn't drop a link-supplied scope. */}
-        {filters.ownerId ? <input type="hidden" name="owner_id" value={filters.ownerId} /> : null}
-        {filters.brandId ? <input type="hidden" name="brand_id" value={filters.brandId} /> : null}
-        <div>
-          <label htmlFor="owner_email" className="text-sm font-semibold text-brand-ink">
-            Owner email
-          </label>
-          <input
-            id="owner_email"
-            name="owner_email"
-            type="text"
-            defaultValue={filters.ownerEmail ?? ""}
-            placeholder="owner@example.com"
-            className={`${INPUT_CLASS} sm:w-48`}
-          />
-        </div>
-        <div>
-          <label htmlFor="name" className="text-sm font-semibold text-brand-ink">
-            Restaurant name
-          </label>
-          <input
-            id="name"
-            name="name"
-            type="text"
-            defaultValue={filters.name ?? ""}
-            placeholder="e.g. Spice Route"
-            className={`${INPUT_CLASS} sm:w-48`}
-          />
-        </div>
-        <div>
-          <label htmlFor="city" className="text-sm font-semibold text-brand-ink">
-            City
-          </label>
-          <input
-            id="city"
-            name="city"
-            type="text"
-            defaultValue={filters.city ?? ""}
-            placeholder="e.g. Plano"
-            className={`${INPUT_CLASS} sm:w-36`}
-          />
-        </div>
-        <div>
-          <label htmlFor="status" className="text-sm font-semibold text-brand-ink">
-            Status
-          </label>
-          <select
-            id="status"
-            name="status"
-            defaultValue={filters.status ?? ""}
-            className={`${INPUT_CLASS} sm:w-auto`}
-          >
-            <option value="">Any</option>
-            {STATUS_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label htmlFor="is_paid" className="text-sm font-semibold text-brand-ink">
-            Tier
-          </label>
-          <select
-            id="is_paid"
-            name="is_paid"
-            defaultValue={filters.isPaid === undefined ? "" : String(filters.isPaid)}
-            className={`${INPUT_CLASS} sm:w-auto`}
-          >
-            <option value="">Any</option>
-            <option value="true">Paid</option>
-            <option value="false">Free</option>
-          </select>
-        </div>
-        <div>
-          <label htmlFor="is_claimed" className="text-sm font-semibold text-brand-ink">
-            Claimed
-          </label>
-          <select
-            id="is_claimed"
-            name="is_claimed"
-            defaultValue={filters.isClaimed === undefined ? "" : String(filters.isClaimed)}
-            className={`${INPUT_CLASS} sm:w-auto`}
-          >
-            <option value="">Any</option>
-            <option value="true">Claimed</option>
-            <option value="false">Unclaimed</option>
-          </select>
-        </div>
-        <div>
-          <label htmlFor="sort" className="text-sm font-semibold text-brand-ink">
-            Sort
-          </label>
-          <select
-            id="sort"
-            name="sort"
-            defaultValue={filters.sort ?? "newest"}
-            className={`${INPUT_CLASS} sm:w-auto`}
-          >
-            <option value="newest">Newest</option>
-            <option value="oldest">Oldest</option>
-            <option value="followers">Most followed</option>
-          </select>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            type="submit"
-            className="flex min-h-[44px] flex-1 items-center justify-center rounded-brand-control bg-brand-ink px-5 text-sm font-semibold text-brand-bg transition hover:bg-brand-ink/90 sm:flex-none"
-          >
-            Apply
-          </button>
-          {chips.length > 0 && (
-            <Link
-              href="/admin/listings"
-              className="flex min-h-[44px] items-center justify-center rounded-brand-control border border-brand-border px-4 text-sm font-semibold text-brand-ink-muted transition hover:bg-brand-chip"
+        <form method="get" className="grid grid-cols-1 gap-3 sm:flex sm:flex-wrap sm:items-end">
+          {/* Carried through the form so Apply doesn't drop a link-supplied scope. */}
+          {filters.ownerId ? <input type="hidden" name="owner_id" value={filters.ownerId} /> : null}
+          {filters.brandId ? <input type="hidden" name="brand_id" value={filters.brandId} /> : null}
+          <div>
+            <label htmlFor="owner_email" className="text-sm font-semibold text-brand-ink">
+              Owner email
+            </label>
+            <input
+              id="owner_email"
+              name="owner_email"
+              type="text"
+              defaultValue={filters.ownerEmail ?? ""}
+              placeholder="owner@example.com"
+              className={`${INPUT_CLASS} sm:w-48`}
+            />
+          </div>
+          <div>
+            <label htmlFor="name" className="text-sm font-semibold text-brand-ink">
+              Restaurant name
+            </label>
+            <input
+              id="name"
+              name="name"
+              type="text"
+              defaultValue={filters.name ?? ""}
+              placeholder="e.g. Spice Route"
+              className={`${INPUT_CLASS} sm:w-48`}
+            />
+          </div>
+          <div>
+            <label htmlFor="city" className="text-sm font-semibold text-brand-ink">
+              City
+            </label>
+            <input
+              id="city"
+              name="city"
+              type="text"
+              defaultValue={filters.city ?? ""}
+              placeholder="e.g. Plano"
+              className={`${INPUT_CLASS} sm:w-36`}
+            />
+          </div>
+          <div>
+            <label htmlFor="status" className="text-sm font-semibold text-brand-ink">
+              Status
+            </label>
+            <select
+              id="status"
+              name="status"
+              defaultValue={filters.status ?? ""}
+              className={`${INPUT_CLASS} sm:w-auto`}
             >
-              Clear all
-            </Link>
-          )}
-        </div>
-      </form>
+              <option value="">Any</option>
+              {STATUS_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="is_paid" className="text-sm font-semibold text-brand-ink">
+              Tier
+            </label>
+            <select
+              id="is_paid"
+              name="is_paid"
+              defaultValue={filters.isPaid === undefined ? "" : String(filters.isPaid)}
+              className={`${INPUT_CLASS} sm:w-auto`}
+            >
+              <option value="">Any</option>
+              <option value="true">Paid</option>
+              <option value="false">Free</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="is_claimed" className="text-sm font-semibold text-brand-ink">
+              Claimed
+            </label>
+            <select
+              id="is_claimed"
+              name="is_claimed"
+              defaultValue={filters.isClaimed === undefined ? "" : String(filters.isClaimed)}
+              className={`${INPUT_CLASS} sm:w-auto`}
+            >
+              <option value="">Any</option>
+              <option value="true">Claimed</option>
+              <option value="false">Unclaimed</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="sort" className="text-sm font-semibold text-brand-ink">
+              Sort
+            </label>
+            <select
+              id="sort"
+              name="sort"
+              defaultValue={filters.sort ?? "newest"}
+              className={`${INPUT_CLASS} sm:w-auto`}
+            >
+              <option value="newest">Newest</option>
+              <option value="oldest">Oldest</option>
+              <option value="followers">Most followed</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              type="submit"
+              className="flex min-h-[44px] flex-1 items-center justify-center rounded-brand-control bg-brand-ink px-5 text-sm font-semibold text-brand-bg transition hover:bg-brand-ink/90 sm:flex-none"
+            >
+              Apply
+            </button>
+            {chips.length > 0 && (
+              <Link
+                href="/admin/listings"
+                className="flex min-h-[44px] items-center justify-center rounded-brand-control border border-brand-border px-4 text-sm font-semibold text-brand-ink-muted transition hover:bg-brand-chip"
+              >
+                Clear all
+              </Link>
+            )}
+          </div>
+        </form>
+      </CollapsiblePanel>
 
       {chips.length > 0 && (
         <div

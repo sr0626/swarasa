@@ -30,6 +30,8 @@ import {
 } from "@/lib/adminOwnersView";
 import AddOwnerForm from "@/components/admin/AddOwnerForm";
 import AdminSummaryStrip from "@/components/admin/AdminSummaryStrip";
+import CollapsiblePanel from "@/components/ui/CollapsiblePanel";
+import { countAppliedFilters, filtersHint } from "@/lib/collapsiblePanel";
 import { ownersSummaryChips } from "@/lib/adminSummary";
 import LocalDateTime from "@/components/ui/LocalDateTime";
 import type { AdminOwnerRow } from "@/types/adminOwners";
@@ -62,6 +64,7 @@ export default async function AdminOwnersPage({ searchParams }: OwnersPageProps)
   }
 
   const totalPages = data ? Math.max(1, Math.ceil(data.total / PAGE_SIZE)) : 1;
+  const appliedCount = countAppliedFilters({ q, sort }, { sort: "newest" });
 
   return (
     <section>
@@ -85,63 +88,72 @@ export default async function AdminOwnersPage({ searchParams }: OwnersPageProps)
         .
       </p>
 
-      {data?.summary && <AdminSummaryStrip chips={ownersSummaryChips(data.summary)} />}
+      {data?.summary && <AdminSummaryStrip page="owners" chips={ownersSummaryChips(data.summary)} />}
 
       <AddOwnerForm />
 
-      <form method="get" action="/admin/owners" className="mt-6 flex flex-wrap items-end gap-3">
-        <div className="min-w-[200px] flex-1">
-          <label
-            htmlFor="owners-q"
-            className="block text-xs font-semibold uppercase tracking-wide text-brand-ink-subtle"
+      <CollapsiblePanel
+        page="owners"
+        panel="search"
+        title="Search & filters"
+        hint={filtersHint(appliedCount, q)}
+        forceOpen={appliedCount > 0}
+        className="mt-3"
+      >
+        <form method="get" action="/admin/owners" className="flex flex-wrap items-end gap-3">
+          <div className="min-w-[200px] flex-1">
+            <label
+              htmlFor="owners-q"
+              className="block text-xs font-semibold uppercase tracking-wide text-brand-ink-subtle"
+            >
+              Search
+            </label>
+            <input
+              id="owners-q"
+              name="q"
+              type="search"
+              defaultValue={q ?? ""}
+              maxLength={100}
+              placeholder="Email or name"
+              className="mt-1 w-full rounded-brand-control border border-brand-border bg-white px-3 py-2 text-sm text-brand-ink"
+            />
+          </div>
+          <div>
+            <label
+              htmlFor="owners-sort"
+              className="block text-xs font-semibold uppercase tracking-wide text-brand-ink-subtle"
+            >
+              Sort by
+            </label>
+            <select
+              id="owners-sort"
+              name="sort"
+              defaultValue={sort}
+              className="mt-1 rounded-brand-control border border-brand-border bg-white px-3 py-2 text-sm text-brand-ink"
+            >
+              {OWNER_SORTS.map((option) => (
+                <option key={option} value={option}>
+                  {OWNER_SORT_LABELS[option]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="submit"
+            className="rounded-brand-control bg-brand-accent px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
           >
-            Search
-          </label>
-          <input
-            id="owners-q"
-            name="q"
-            type="search"
-            defaultValue={q ?? ""}
-            maxLength={100}
-            placeholder="Email or name"
-            className="mt-1 w-full rounded-brand-control border border-brand-border bg-white px-3 py-2 text-sm text-brand-ink"
-          />
-        </div>
-        <div>
-          <label
-            htmlFor="owners-sort"
-            className="block text-xs font-semibold uppercase tracking-wide text-brand-ink-subtle"
-          >
-            Sort by
-          </label>
-          <select
-            id="owners-sort"
-            name="sort"
-            defaultValue={sort}
-            className="mt-1 rounded-brand-control border border-brand-border bg-white px-3 py-2 text-sm text-brand-ink"
-          >
-            {OWNER_SORTS.map((option) => (
-              <option key={option} value={option}>
-                {OWNER_SORT_LABELS[option]}
-              </option>
-            ))}
-          </select>
-        </div>
-        <button
-          type="submit"
-          className="rounded-brand-control bg-brand-accent px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
-        >
-          Apply
-        </button>
-        {(q || sort !== "newest") && (
-          <Link
-            href="/admin/owners"
-            className="py-2 text-sm text-brand-ink-muted underline-offset-2 hover:underline"
-          >
-            Reset
-          </Link>
-        )}
-      </form>
+            Apply
+          </button>
+          {(q || sort !== "newest") && (
+            <Link
+              href="/admin/owners"
+              className="py-2 text-sm text-brand-ink-muted underline-offset-2 hover:underline"
+            >
+              Reset
+            </Link>
+          )}
+        </form>
+      </CollapsiblePanel>
 
       {loadError || !data ? (
         <p
