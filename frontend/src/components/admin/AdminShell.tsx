@@ -7,7 +7,7 @@
 // <main>/TopBar.
 import type { ReactNode } from "react";
 import ConsoleShell from "@/components/console/ConsoleShell";
-import { ADMIN_NAV_ITEMS } from "@/components/console/navItems";
+import { ADMIN_NAV_ITEMS, ADMIN_NAV_MENU } from "@/components/console/navItems";
 import type { AuthMe } from "@/types/auth";
 
 export default function AdminShell({
@@ -26,6 +26,7 @@ export default function AdminShell({
       bannerLabel="Admin console"
       navLabel="Admin"
       navItems={ADMIN_NAV_ITEMS}
+      navMenu={ADMIN_NAV_MENU}
       profile={profile}
     >
       {children}

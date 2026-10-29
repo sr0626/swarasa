@@ -20,35 +20,91 @@ export interface ConsoleNavItem {
 /** The owner/manager "Contact admin" form page. */
 export const CONTACT_ADMIN_HREF = "/portal/contact-admin";
 
+/** A titled, collapsible section of a console menu. */
+export interface ConsoleNavGroup {
+  /** Stable key (also part of the localStorage state), never shown. */
+  id: string;
+  title: string;
+  items: ReadonlyArray<ConsoleNavItem>;
+  /** Open on a first visit (the group holding the active page is always open). */
+  defaultOpen?: boolean;
+}
+
+/**
+ * A grouped console menu: standalone `top` items (always visible), then
+ * collapsible `groups`. Opt-in -- a console passes this to ConsoleShell as
+ * `navMenu`; consoles that don't keep rendering their flat item list.
+ */
+export interface ConsoleNavMenu {
+  top: ReadonlyArray<ConsoleNavItem>;
+  groups: ReadonlyArray<ConsoleNavGroup>;
+}
+
+/** The menu's items as one flat list: top items, then each group's items in order. */
+export function flattenNavMenu(menu: ConsoleNavMenu): ReadonlyArray<ConsoleNavItem> {
+  return [...menu.top, ...menu.groups.flatMap((g) => g.items)];
+}
+
 // Ordered most -> least important for a platform admin: the dashboard, then
 // the time-sensitive queues (claims have a 72h SLA, messages and problem
 // reports need a reply), then listing management, then account directories,
-// then reference data and history, then the admin's own profile.
-export const ADMIN_NAV_ITEMS: ReadonlyArray<ConsoleNavItem> = [
-  { href: "/admin/overview", label: "Overview", icon: "chart" },
-  { href: "/admin/claims", label: "Claims", icon: "claims" },
-  // "Contact admin" messages from owners/managers (GET /admin/messages).
-  { href: "/admin/messages", label: "Messages", icon: "mail" },
-  // Not named "Reports" -- that label is already taken by the
-  // report-a-problem triage queue directly below. This page is called
-  // "Platform Overview" / "Overview" everywhere (page title, nav label)
-  // specifically to avoid that collision.
-  { href: "/admin/reports", label: "Reports", icon: "reports" },
-  { href: "/admin/reopen-requests", label: "Reopen requests", icon: "clock" },
-  { href: "/admin/listings", label: "Listings", icon: "store" },
-  // Bulk CSV import of unclaimed listings (POST /admin/import/validate + /commit).
-  { href: "/admin/import", label: "Import", icon: "plus" },
-  // Every account across all roles, with disable/confirm/reset actions.
-  { href: "/admin/users", label: "Users", icon: "user" },
-  { href: "/admin/owners", label: "Owners", icon: "user" },
-  { href: "/admin/managers", label: "Managers", icon: "user" },
-  { href: "/admin/registered-users", label: "Registered users", icon: "user" },
-  // Cuisine / dietary / restaurant-type tags (GET/POST/PATCH /admin/taxonomy).
-  { href: "/admin/taxonomy", label: "Taxonomy", icon: "tag" },
-  // Read-only history of audit_log (GET /admin/audit-log).
-  { href: "/admin/audit-log", label: "Audit log", icon: "clock" },
-  { href: "/account", label: "Profile", icon: "user" },
-];
+// then the admin's own profile and the audit history. Single source of truth
+// for the admin menu: ADMIN_NAV_ITEMS below is derived from it.
+export const ADMIN_NAV_MENU: ConsoleNavMenu = {
+  top: [{ href: "/admin/overview", label: "Overview", icon: "chart" }],
+  groups: [
+    {
+      id: "work-queue",
+      title: "Work queue",
+      defaultOpen: true,
+      items: [
+        { href: "/admin/claims", label: "Claims", icon: "claims" },
+        // "Contact admin" messages from owners/managers (GET /admin/messages).
+        { href: "/admin/messages", label: "Messages", icon: "mail" },
+        // The report-a-problem triage queue. The dashboard is called
+        // "Overview" (not "Reports") to avoid colliding with this label.
+        { href: "/admin/reports", label: "Reports", icon: "reports" },
+        { href: "/admin/reopen-requests", label: "Reopen requests", icon: "clock" },
+      ],
+    },
+    {
+      id: "listings",
+      title: "Listings",
+      items: [
+        { href: "/admin/listings", label: "Listings", icon: "store" },
+        // Bulk CSV import of unclaimed listings (POST /admin/import/validate + /commit).
+        { href: "/admin/import", label: "Import", icon: "plus" },
+        // Cuisine / dietary / restaurant-type tags (GET/POST/PATCH /admin/taxonomy).
+        { href: "/admin/taxonomy", label: "Taxonomy", icon: "tag" },
+      ],
+    },
+    {
+      id: "people",
+      title: "People",
+      items: [
+        // Every account across all roles, with disable/confirm/reset actions.
+        { href: "/admin/users", label: "Users", icon: "user" },
+        { href: "/admin/owners", label: "Owners", icon: "user" },
+        { href: "/admin/managers", label: "Managers", icon: "user" },
+        { href: "/admin/registered-users", label: "Registered users", icon: "user" },
+      ],
+    },
+    {
+      id: "system",
+      title: "System",
+      items: [
+        // Read-only history of audit_log (GET /admin/audit-log).
+        { href: "/admin/audit-log", label: "Audit log", icon: "clock" },
+        { href: "/account", label: "Profile", icon: "user" },
+      ],
+    },
+  ],
+};
+
+export const ADMIN_NAV_GROUPS: ReadonlyArray<ConsoleNavGroup> = ADMIN_NAV_MENU.groups;
+
+/** The admin menu as a flat list (same order as the grouped menu). */
+export const ADMIN_NAV_ITEMS: ReadonlyArray<ConsoleNavItem> = flattenNavMenu(ADMIN_NAV_MENU);
 
 export const OWNER_NAV_ITEMS: ReadonlyArray<ConsoleNavItem> = [
   {
@@ -99,4 +155,17 @@ export function activeNavHref(pathname: string, items: ReadonlyArray<{ href: str
     if (isActive(pathname, href) && (best === null || href.length > best.length)) best = href;
   }
   return best;
+}
+
+/** The group whose item is the active page for `pathname`, or null (a top item, or no match). */
+export function groupForPath(
+  pathname: string,
+  groups: ReadonlyArray<ConsoleNavGroup> = ADMIN_NAV_GROUPS
+): ConsoleNavGroup | null {
+  const current = activeNavHref(
+    pathname,
+    groups.flatMap((g) => g.items)
+  );
+  if (current === null) return null;
+  return groups.find((g) => g.items.some((i) => i.href === current)) ?? null;
 }
