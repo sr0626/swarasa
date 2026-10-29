@@ -2461,6 +2461,45 @@ Body: `{ "reviewer_notes": "Document did not match listing address." }`
 
 Response: `200`, updated claim shape (`status: "rejected"`).
 
+**`reviewer_notes` rules (approve, reject, and the edit endpoint below):**
+trimmed, max **2000** characters (longer -> generic `422`
+`"Invalid request parameters"`). On approve a blank note is stored as
+`null`; reject still requires a non-blank note.
+
+### PATCH /claim/{id}/notes
+
+Auth: admin only (`require_admin`). Body: `{ "reviewer_notes": "Verified
+over the phone with John" }`. Adds/replaces the note on an
+**already-reviewed** claim (approved or rejected) so an admin can record
+e.g. a follow-up call. Changes ONLY `reviewer_notes` -- `status`,
+`reviewed_by` and `reviewed_at` are untouched. A blank note clears it on an
+approved claim; on a rejected claim a blank note is `400`
+(`notes_required`). `404` unknown claim; `409` (`claim_not_reviewed`,
+"Claim has not been reviewed yet") on a `pending_review` claim; `403`
+non-admin.
+
+Audit: one `audit_log` row per edit (`table_name="claim_request"`,
+`action="update"`, `old_val={"reviewer_notes": <old>}`,
+`new_val={"reviewer_notes": <new>}`, actor = the editing admin) -- the
+history of who changed the note and when.
+
+Response: `200`, the refreshed admin queue row (same shape as a
+`GET /claim` result, below).
+
+### Reviewer fields on `GET /claim` rows (additive)
+
+Each `GET /claim` row (and the `PATCH .../notes` response) also carries:
+
+| Field | Meaning |
+|---|---|
+| `reviewed_by` | Cognito `sub` of the admin who approved/rejected (`null` while pending) |
+| `reviewed_by_email` | That admin's email, best-effort and batched per page via `admin_actor_service.resolve_emails` (`owner_account` first, then one `ListUsersInGroup` sweep of the `admin` group). `null` when the lookup fails or finds nothing -- the request never fails; the UI then shows `admin <first 8 chars of sub>` |
+| `notes_edited_at` / `notes_edited_by` / `notes_edited_by_email` | Latest post-review note edit, derived from the `claim_request` `audit_log` rows (one query per page); all `null` if the note was never edited after the review |
+
+These admin-only fields are NOT added to `ClaimOut` (the claimant-visible
+`POST /claim` / `GET /claim/{id}` / approve / reject responses), so an
+admin's email is never shown to a claimant.
+
 ---
 
 ## Listing reports (`/reports`)

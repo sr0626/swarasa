@@ -66,6 +66,19 @@ export interface ClaimQueueItem {
   sla_due_at: string;
   reviewed_at: string | null;
   reviewer_notes: string | null;
+  /** Cognito sub of the admin who approved/rejected the claim. */
+  reviewed_by?: string | null;
+  /** Best-effort email for `reviewed_by`; null when the lookup failed. */
+  reviewed_by_email?: string | null;
+  /** Latest post-review edit of the note (from audit_log); null if never edited. */
+  notes_edited_at?: string | null;
+  notes_edited_by?: string | null;
+  notes_edited_by_email?: string | null;
+}
+
+/** Body for PATCH /claim/{id}/notes (reviewed claims only). */
+export interface UpdateClaimNotesInput {
+  reviewer_notes: string;
 }
 
 /** Body for POST /claim/{id}/approve. Every field optional. */

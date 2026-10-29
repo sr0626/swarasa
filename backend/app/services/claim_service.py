@@ -29,6 +29,7 @@ group by hand (docs/API_CONTRACTS.md).
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from botocore.exceptions import BotoCoreError, ClientError
@@ -39,12 +40,13 @@ from sqlalchemy.orm import selectinload
 
 from app.core.errors import AppError
 from app.dependencies.pagination import Pagination
+from app.models.audit_log import AuditLog
 from app.models.claim_request import ClaimRequest
 from app.models.owner_account import OwnerAccount
 from app.models.restaurant_brand import RestaurantBrand
 from app.models.restaurant_location import RestaurantLocation
 from app.schemas.claim import ClaimCreate, ClaimListResponse, ClaimOut, ClaimQueueItem
-from app.services import audit_service, auth_service, cognito_service
+from app.services import admin_actor_service, audit_service, auth_service, cognito_service
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +76,13 @@ def to_claim_out(claim: ClaimRequest) -> ClaimOut:
     )
 
 
-def to_claim_queue_item(claim: ClaimRequest, claimant_email: str | None) -> ClaimQueueItem:
+def to_claim_queue_item(
+    claim: ClaimRequest,
+    claimant_email: str | None,
+    reviewed_by_email: str | None = None,
+    notes_edit: "_NotesEdit | None" = None,
+    notes_edited_by_email: str | None = None,
+) -> ClaimQueueItem:
     location = claim.location
     return ClaimQueueItem(
         claim_id=claim.id,
@@ -97,7 +105,83 @@ def to_claim_queue_item(claim: ClaimRequest, claimant_email: str | None) -> Clai
         sla_due_at=_add_business_days(claim.submitted_at, _SLA_BUSINESS_DAYS),
         reviewed_at=claim.reviewed_at,
         reviewer_notes=claim.reviewer_notes,
+        reviewed_by=claim.reviewed_by,
+        reviewed_by_email=reviewed_by_email,
+        notes_edited_at=notes_edit.created_at if notes_edit else None,
+        notes_edited_by=notes_edit.actor_id if notes_edit else None,
+        notes_edited_by_email=notes_edited_by_email,
     )
+
+
+@dataclass(frozen=True)
+class _NotesEdit:
+    actor_id: str
+    created_at: datetime
+
+
+async def _latest_notes_edits(db: AsyncSession, claim_ids: list[int]) -> dict[int, _NotesEdit]:
+    """claim_id -> its most recent post-review note edit, from audit_log
+    (one query for the whole page). Note-edit rows are the `claim_request`
+    `update` rows whose `new_val` carries `reviewer_notes` -- the only kind
+    this module writes for that table."""
+    if not claim_ids:
+        return {}
+    rows = (
+        await db.execute(
+            select(AuditLog.record_id, AuditLog.actor_id, AuditLog.created_at, AuditLog.new_val)
+            .where(
+                AuditLog.table_name == "claim_request",
+                AuditLog.action == "update",
+                AuditLog.record_id.in_(claim_ids),
+            )
+            .order_by(AuditLog.id)
+        )
+    ).all()
+    latest: dict[int, _NotesEdit] = {}
+    for record_id, actor_id, created_at, new_val in rows:
+        if isinstance(new_val, dict) and "reviewer_notes" in new_val:
+            latest[record_id] = _NotesEdit(actor_id=actor_id, created_at=created_at)
+    return latest
+
+
+async def _to_queue_items(
+    db: AsyncSession, rows: list[tuple[ClaimRequest, str | None]]
+) -> list[ClaimQueueItem]:
+    """Builds admin queue rows for a page of `(claim, claimant_email)`.
+    Reviewer / note-editor emails are resolved best-effort in ONE batched
+    pass (`admin_actor_service.resolve_emails`); any failure degrades to a
+    null email, never a failed request."""
+    edits = await _latest_notes_edits(db, [claim.id for claim, _ in rows])
+    actors: dict[str, str] = {}
+    for claim, _email in rows:
+        if claim.reviewed_by:
+            actors[claim.reviewed_by] = "admin"
+    for edit in edits.values():
+        actors.setdefault(edit.actor_id, "admin")
+    resolved: dict[str, admin_actor_service.ResolvedActor] = {}
+    if actors:
+        try:
+            resolved, _degraded = await admin_actor_service.resolve_emails(db, actors)
+        except Exception as exc:  # noqa: BLE001 - display-only enrichment
+            logger.warning("claim reviewer email lookup failed: %s", type(exc).__name__)
+
+    def email_for(sub: str | None) -> str | None:
+        actor = resolved.get(sub) if sub else None
+        return actor.email if actor is not None else None
+
+    items: list[ClaimQueueItem] = []
+    for claim, claimant_email in rows:
+        edit = edits.get(claim.id)
+        items.append(
+            to_claim_queue_item(
+                claim,
+                claimant_email,
+                reviewed_by_email=email_for(claim.reviewed_by),
+                notes_edit=edit,
+                notes_edited_by_email=email_for(edit.actor_id) if edit else None,
+            )
+        )
+    return items
 
 
 async def list_claims(
@@ -123,11 +207,52 @@ async def list_claims(
         )
     ).all()
     return ClaimListResponse(
-        results=[to_claim_queue_item(claim, email) for claim, email in rows],
+        results=await _to_queue_items(db, [(claim, email) for claim, email in rows]),
         page=pagination.page,
         page_size=pagination.page_size,
         total=total,
     )
+
+
+async def update_claim_notes(
+    db: AsyncSession, claim_id: int, admin_sub: str, reviewer_notes: str
+) -> ClaimQueueItem:
+    """Add/replace the reviewer note on an ALREADY-REVIEWED claim. Touches
+    only `reviewer_notes` (status / reviewed_by / reviewed_at are left
+    alone) and writes a `claim_request` audit row with old/new notes."""
+    claim = await db.get(ClaimRequest, claim_id)
+    if claim is None:
+        raise AppError(404, "Claim not found", "not_found")
+    if claim.status == "pending_review":
+        raise AppError(409, "Claim has not been reviewed yet", "claim_not_reviewed")
+    new_notes: str | None = reviewer_notes or None
+    if new_notes is None and claim.status == "rejected":
+        raise AppError(400, "A rejected claim must keep its reviewer notes", "notes_required")
+
+    old_notes = claim.reviewer_notes
+    claim.reviewer_notes = new_notes
+    await audit_service.log(
+        db,
+        table_name="claim_request",
+        record_id=claim.id,
+        action="update",
+        actor_id=admin_sub,
+        actor_role="admin",
+        old_val={"reviewer_notes": old_notes},
+        new_val={"reviewer_notes": new_notes},
+    )
+    await db.commit()
+
+    row = (
+        await db.execute(
+            select(ClaimRequest, OwnerAccount.email)
+            .outerjoin(OwnerAccount, OwnerAccount.cognito_sub == ClaimRequest.claimant_user_id)
+            .options(selectinload(ClaimRequest.brand), selectinload(ClaimRequest.location))
+            .where(ClaimRequest.id == claim_id)
+            .execution_options(populate_existing=True)
+        )
+    ).one()
+    return (await _to_queue_items(db, [(row[0], row[1])]))[0]
 
 
 async def create_claim(db: AsyncSession, current_user, body: ClaimCreate) -> ClaimRequest:
@@ -267,7 +392,7 @@ async def approve_claim(
     claim.status = "approved"
     claim.reviewed_by = admin_sub
     claim.reviewed_at = datetime.now(timezone.utc)
-    claim.reviewer_notes = reviewer_notes
+    claim.reviewer_notes = reviewer_notes or None
 
     await audit_service.log(
         db,

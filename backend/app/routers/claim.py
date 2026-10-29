@@ -11,7 +11,9 @@ from app.schemas.claim import (
     ClaimApproveRequest,
     ClaimCreate,
     ClaimListResponse,
+    ClaimNotesUpdateRequest,
     ClaimOut,
+    ClaimQueueItem,
     ClaimRejectRequest,
     ClaimStatus,
 )
@@ -75,3 +77,17 @@ async def reject_claim(
 ) -> ClaimOut:
     claim = await claim_service.reject_claim(db, claim_id, current_user.cognito_sub, body.reviewer_notes)
     return claim_service.to_claim_out(claim)
+
+
+@router.patch("/{claim_id}/notes", response_model=ClaimQueueItem)
+async def update_claim_notes(
+    claim_id: int,
+    body: ClaimNotesUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_admin),
+) -> ClaimQueueItem:
+    """Auth: admin only. Add/replace the reviewer note on an already
+    approved/rejected claim; `409` on a pending claim."""
+    return await claim_service.update_claim_notes(
+        db, claim_id, current_user.cognito_sub, body.reviewer_notes
+    )
