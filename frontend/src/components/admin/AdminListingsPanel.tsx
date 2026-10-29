@@ -26,7 +26,7 @@
 // owner ("Owner: <email>" / "Unclaimed") and each brand AND location shows
 // "Created <date> by <who> (<role>)".
 import Link from "next/link";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
   deactivateLocationAction,
   deleteRestaurantAction,
@@ -45,6 +45,7 @@ import {
 import AssignOwnerPanel from "@/components/admin/AssignOwnerPanel";
 import { applyAssignment, assignBlockedReason, assignSummary, canAssignOwner } from "@/lib/adminOwnerAssignment";
 import type { AssignOwnerResponse } from "@/types/adminOwnerAssignment";
+import AdminPanelRow, { PANEL_IN_ROW } from "@/components/admin/AdminPanelRow";
 import CollapsiblePanel from "@/components/ui/CollapsiblePanel";
 import LocalDateTime from "@/components/ui/LocalDateTime";
 import { filtersHint } from "@/lib/collapsiblePanel";
@@ -144,12 +145,15 @@ export default function AdminListingsPanel({
   total,
   page,
   totalPages,
+  summary = null,
 }: {
   initialBrands: AdminListing[];
   filters: AdminListingsFilters;
   total: number;
   page: number;
   totalPages: number;
+  /** The page's Summary panel, rendered beside Search & filters in one row (md+). */
+  summary?: ReactNode;
 }) {
   const [brands, setBrands] = useState<AdminListing[]>(initialBrands);
   // With a location-level filter (or a single-restaurant link) every brand
@@ -209,13 +213,15 @@ export default function AdminListingsPanel({
 
   return (
     <div>
+      <AdminPanelRow>
+      {summary}
       <CollapsiblePanel
         page="listings"
         panel="search"
         title="Search & filters"
         hint={filtersHint(appliedCount, filters.name)}
         forceOpen={appliedCount > 0}
-        className="mt-3"
+        className={PANEL_IN_ROW}
       >
         <form method="get" className="grid grid-cols-1 gap-3 sm:flex sm:flex-wrap sm:items-end">
           {/* Carried through the form so Apply doesn't drop a link-supplied scope. */}
@@ -341,6 +347,7 @@ export default function AdminListingsPanel({
           </div>
         </form>
       </CollapsiblePanel>
+      </AdminPanelRow>
 
       {chips.length > 0 && (
         <div

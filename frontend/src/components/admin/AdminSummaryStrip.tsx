@@ -20,6 +20,7 @@ export default function AdminSummaryStrip({
   heading = "Summary",
   chips,
   note,
+  className,
 }: {
   /** Page id used to remember the open/closed choice, e.g. "users". */
   page: string;
@@ -27,9 +28,17 @@ export default function AdminSummaryStrip({
   chips: SummaryChip[];
   /** Optional caption below the chips (e.g. the cap warning). */
   note?: string | null;
+  /** Override the panel's outer spacing (e.g. `mt-0` inside AdminPanelRow). */
+  className?: string;
 }) {
   return (
-    <CollapsiblePanel page={page} panel="summary" title={heading} hint={summaryHint(chips)}>
+    <CollapsiblePanel
+      page={page}
+      panel="summary"
+      title={heading}
+      hint={summaryHint(chips)}
+      className={className}
+    >
       <section aria-label={`${heading}: all records, unaffected by search and filters`}>
         <ul className="flex flex-wrap gap-2">
           {chips.map((chip) => (

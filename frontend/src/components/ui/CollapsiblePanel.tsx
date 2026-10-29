@@ -14,6 +14,8 @@
 //   unmounted), so a search form keeps its state and still submits as a plain
 //   GET. `forceOpen` (a filter is applied via the URL) opens the panel and
 //   wins over the stored choice, so a filtered view never hides its filter.
+// - The root carries `data-panel-open` so a layout wrapper (AdminPanelRow) can
+//   widen an expanded panel with pure CSS.
 // - No animation is required; the chevron's rotation transition is disabled
 //   under prefers-reduced-motion.
 // Only the open/closed flag is stored under a page+panel key (see
@@ -72,7 +74,8 @@ export default function CollapsiblePanel({
 
   return (
     <div
-      className={`rounded-brand-card border border-brand-border bg-white shadow-brand-control ${className}`}
+      data-panel-open={open}
+      className={`min-w-0 rounded-brand-card border border-brand-border bg-white shadow-brand-control ${className}`}
     >
       <button
         type="button"

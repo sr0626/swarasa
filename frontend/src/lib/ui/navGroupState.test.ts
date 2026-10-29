@@ -10,19 +10,21 @@ import {
   resolveSelectedGroupId,
 } from "./navGroupState.ts";
 
+// Same order as the admin menu: Listings (default open), People, Work queue, System.
 const groups = [
-  { id: "work-queue", defaultOpen: true },
-  { id: "listings" },
+  { id: "listings", defaultOpen: true },
   { id: "people" },
+  { id: "work-queue" },
   { id: "system" },
 ];
 
-test("defaults: only the defaultOpen group is open when the page is in no group", () => {
-  assert.deepEqual([...defaultOpenGroupIds(groups, null)], ["work-queue"]);
+test("defaults: only the defaultOpen group (Listings) is open when the page is in no group", () => {
+  assert.deepEqual([...defaultOpenGroupIds(groups, null)], ["listings"]);
 });
 
 test("defaults: the group holding the active page is open too", () => {
-  assert.deepEqual([...defaultOpenGroupIds(groups, "people")].sort(), ["people", "work-queue"]);
+  assert.deepEqual([...defaultOpenGroupIds(groups, "people")].sort(), ["listings", "people"]);
+  assert.deepEqual([...defaultOpenGroupIds(groups, "work-queue")].sort(), ["listings", "work-queue"]);
 });
 
 test("storage key is stable, per menu and lower-case", () => {
@@ -31,17 +33,23 @@ test("storage key is stable, per menu and lower-case", () => {
 });
 
 test("resolveOpenGroups with nothing stored matches the defaults (what SSR renders)", () => {
-  assert.deepEqual(resolveOpenGroups(groups, "listings"), {
-    "work-queue": true,
+  assert.deepEqual(resolveOpenGroups(groups, "work-queue"), {
     listings: true,
     people: false,
+    "work-queue": true,
+    system: false,
+  });
+  assert.deepEqual(resolveOpenGroups(groups, null), {
+    listings: true,
+    people: false,
+    "work-queue": false,
     system: false,
   });
 });
 
 test("stored choices override defaults but not the active group", () => {
-  const out = resolveOpenGroups(groups, "people", { "work-queue": false, listings: true, people: false });
-  assert.deepEqual(out, { "work-queue": false, listings: true, people: true, system: false });
+  const out = resolveOpenGroups(groups, "people", { listings: false, "work-queue": true, people: false });
+  assert.deepEqual(out, { listings: false, people: true, "work-queue": true, system: false });
 });
 
 test("parseStoredGroupState tolerates null, junk, wrong shapes and unknown ids", () => {
@@ -56,10 +64,10 @@ test("parseStoredGroupState tolerates null, junk, wrong shapes and unknown ids",
   );
 });
 
-test("selected group: pick wins, then the active page's group, then default/first", () => {
+test("selected group: pick wins, then the active page's group, then default (Listings)/first", () => {
   assert.equal(resolveSelectedGroupId(groups, "people", "system"), "system");
   assert.equal(resolveSelectedGroupId(groups, "people", null), "people");
-  assert.equal(resolveSelectedGroupId(groups, null, null), "work-queue");
+  assert.equal(resolveSelectedGroupId(groups, null, null), "listings");
   assert.equal(resolveSelectedGroupId([{ id: "a" }, { id: "b" }], null, null), "a");
   assert.equal(resolveSelectedGroupId(groups, "people", "unknown"), "people");
   assert.equal(resolveSelectedGroupId([], null, null), null);

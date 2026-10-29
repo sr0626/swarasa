@@ -27,6 +27,7 @@ import {
 } from "@/lib/adminUsersView";
 import { AdminReportPager } from "@/components/admin/AdminReportControls";
 import AdminUsersPanel from "@/components/admin/AdminUsersPanel";
+import AdminPanelRow, { PANEL_IN_ROW } from "@/components/admin/AdminPanelRow";
 import AdminSummaryStrip from "@/components/admin/AdminSummaryStrip";
 import CollapsiblePanel from "@/components/ui/CollapsiblePanel";
 import { countAppliedFilters, filtersHint } from "@/lib/collapsiblePanel";
@@ -103,11 +104,13 @@ export default async function AdminUsersPage({ searchParams }: UsersPageProps) {
         . Times are shown in your local timezone.
       </p>
 
+      <AdminPanelRow>
       {data?.summary && (
         <AdminSummaryStrip
           page="users"
           chips={usersSummaryChips(data.summary)}
           note={truncatedNote(data.summary.truncated)}
+          className={PANEL_IN_ROW}
         />
       )}
 
@@ -117,7 +120,7 @@ export default async function AdminUsersPage({ searchParams }: UsersPageProps) {
         title="Search & filters"
         hint={filtersHint(appliedCount, q)}
         forceOpen={appliedCount > 0}
-        className="mt-3"
+        className={PANEL_IN_ROW}
       >
         <form
           method="get"
@@ -195,6 +198,7 @@ export default async function AdminUsersPage({ searchParams }: UsersPageProps) {
           </div>
         </form>
       </CollapsiblePanel>
+      </AdminPanelRow>
 
       {loadError || !data ? (
         <p

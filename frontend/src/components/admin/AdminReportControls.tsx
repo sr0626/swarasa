@@ -25,6 +25,7 @@ export function AdminReportSearchForm({
   sortOptions,
   placeholder,
   panelPage,
+  className = "mt-3",
 }: {
   action: string;
   idPrefix: string;
@@ -35,6 +36,8 @@ export function AdminReportSearchForm({
   defaultSort: string;
   sortOptions: ReadonlyArray<SortOption>;
   placeholder: string;
+  /** Outer spacing; pass `mt-0` when rendered inside AdminPanelRow. */
+  className?: string;
 }) {
   const appliedCount = countAppliedFilters({ q, sort }, { sort: defaultSort });
   return (
@@ -44,7 +47,7 @@ export function AdminReportSearchForm({
       title="Search & filters"
       hint={filtersHint(appliedCount, q)}
       forceOpen={appliedCount > 0}
-      className="mt-3"
+      className={className}
     >
       <form
         method="get"

@@ -45,31 +45,18 @@ export function flattenNavMenu(menu: ConsoleNavMenu): ReadonlyArray<ConsoleNavIt
   return [...menu.top, ...menu.groups.flatMap((g) => g.items)];
 }
 
-// Ordered most -> least important for a platform admin: the dashboard, then
-// the time-sensitive queues (claims have a 72h SLA, messages and problem
-// reports need a reply), then listing management, then account directories,
-// then the admin's own profile and the audit history. Single source of truth
-// for the admin menu: ADMIN_NAV_ITEMS below is derived from it.
+// Admin menu order (user decision 2026-10-28): the dashboard on top, then
+// Listings (open by default), People (users), the Work queue (claims have a 72h
+// SLA, messages and problem reports need a reply), and System (audit history +
+// the admin's own profile). Single source of truth for the admin menu:
+// ADMIN_NAV_ITEMS below is derived from it.
 export const ADMIN_NAV_MENU: ConsoleNavMenu = {
   top: [{ href: "/admin/overview", label: "Overview", icon: "chart" }],
   groups: [
     {
-      id: "work-queue",
-      title: "Work queue",
-      defaultOpen: true,
-      items: [
-        { href: "/admin/claims", label: "Claims", icon: "claims" },
-        // "Contact admin" messages from owners/managers (GET /admin/messages).
-        { href: "/admin/messages", label: "Messages", icon: "mail" },
-        // The report-a-problem triage queue. The dashboard is called
-        // "Overview" (not "Reports") to avoid colliding with this label.
-        { href: "/admin/reports", label: "Reports", icon: "reports" },
-        { href: "/admin/reopen-requests", label: "Reopen requests", icon: "clock" },
-      ],
-    },
-    {
       id: "listings",
       title: "Listings",
+      defaultOpen: true,
       items: [
         { href: "/admin/listings", label: "Listings", icon: "store" },
         // Bulk CSV import of unclaimed listings (POST /admin/import/validate + /commit).
@@ -87,6 +74,19 @@ export const ADMIN_NAV_MENU: ConsoleNavMenu = {
         { href: "/admin/owners", label: "Owners", icon: "user" },
         { href: "/admin/managers", label: "Managers", icon: "user" },
         { href: "/admin/registered-users", label: "Registered users", icon: "user" },
+      ],
+    },
+    {
+      id: "work-queue",
+      title: "Work queue",
+      items: [
+        { href: "/admin/claims", label: "Claims", icon: "claims" },
+        // "Contact admin" messages from owners/managers (GET /admin/messages).
+        { href: "/admin/messages", label: "Messages", icon: "mail" },
+        // The report-a-problem triage queue. The dashboard is called
+        // "Overview" (not "Reports") to avoid colliding with this label.
+        { href: "/admin/reports", label: "Reports", icon: "reports" },
+        { href: "/admin/reopen-requests", label: "Reopen requests", icon: "clock" },
       ],
     },
     {

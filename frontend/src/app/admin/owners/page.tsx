@@ -29,6 +29,7 @@ import {
   parsePage,
 } from "@/lib/adminOwnersView";
 import AddOwnerForm from "@/components/admin/AddOwnerForm";
+import AdminPanelRow, { PANEL_IN_ROW } from "@/components/admin/AdminPanelRow";
 import AdminSummaryStrip from "@/components/admin/AdminSummaryStrip";
 import CollapsiblePanel from "@/components/ui/CollapsiblePanel";
 import { countAppliedFilters, filtersHint } from "@/lib/collapsiblePanel";
@@ -88,9 +89,14 @@ export default async function AdminOwnersPage({ searchParams }: OwnersPageProps)
         .
       </p>
 
-      {data?.summary && <AdminSummaryStrip page="owners" chips={ownersSummaryChips(data.summary)} />}
-
-      <AddOwnerForm />
+      <AdminPanelRow>
+      {data?.summary && (
+        <AdminSummaryStrip
+          page="owners"
+          chips={ownersSummaryChips(data.summary)}
+          className={PANEL_IN_ROW}
+        />
+      )}
 
       <CollapsiblePanel
         page="owners"
@@ -98,7 +104,7 @@ export default async function AdminOwnersPage({ searchParams }: OwnersPageProps)
         title="Search & filters"
         hint={filtersHint(appliedCount, q)}
         forceOpen={appliedCount > 0}
-        className="mt-3"
+        className={PANEL_IN_ROW}
       >
         <form method="get" action="/admin/owners" className="flex flex-wrap items-end gap-3">
           <div className="min-w-[200px] flex-1">
@@ -154,6 +160,9 @@ export default async function AdminOwnersPage({ searchParams }: OwnersPageProps)
           )}
         </form>
       </CollapsiblePanel>
+      </AdminPanelRow>
+
+      <AddOwnerForm />
 
       {loadError || !data ? (
         <p
