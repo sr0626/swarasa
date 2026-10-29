@@ -664,4 +664,11 @@ git push -u origin docs/decisions-wave-13   # claude
 git push -u origin feature/city-landing-pages   # claude
 git push -u origin feature/search-saved-zip-open-now   # claude
 git push -u origin feature/admin-taxonomy   # claude
+git push -u origin docs/wave-257-259   # claude
+git push -u origin docs/decisions-wave-14   # claude
+aws lambda invoke --function-name swarasa-api-dev --payload '{"_management_command": "alembic_upgrade"}' --profile swarasa-dev --region us-east-1 ...   # user  (after the #259 deploy, applying 0021_food_truck_type)
+git push -u origin feature/admin-bulk-import   # claude
+aws amplify list-jobs --app-id d104yxa4ivcmdu --branch-name main --max-results 3 --profile swarasa-dev --region us-east-1 ...   # user  (frontend build for #262 had failed)
+aws amplify get-job --app-id d104yxa4ivcmdu --branch-name main --job-id <latest> --profile swarasa-dev --region us-east-1 ...   # user
+aws amplify start-job --app-id d104yxa4ivcmdu --branch-name main --job-type RETRY --job-id <failed job> --profile swarasa-dev --region us-east-1   # user  (retry after transient Google Fonts fetch failure; job 197 succeeded)
 ```
