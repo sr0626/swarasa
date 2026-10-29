@@ -28,6 +28,8 @@ import {
 import { AdminReportPager } from "@/components/admin/AdminReportControls";
 import AdminUsersPanel from "@/components/admin/AdminUsersPanel";
 import AdminSummaryStrip from "@/components/admin/AdminSummaryStrip";
+import CollapsiblePanel from "@/components/ui/CollapsiblePanel";
+import { countAppliedFilters, filtersHint } from "@/lib/collapsiblePanel";
 import { truncatedNote, usersSummaryChips } from "@/lib/adminSummary";
 
 export const metadata: Metadata = {
@@ -68,6 +70,7 @@ export default async function AdminUsersPage({ searchParams }: UsersPageProps) {
 
   const totalPages = data ? Math.max(1, Math.ceil(data.total / PAGE_SIZE)) : 1;
   const filtered = Boolean(q || role || status || sort !== "newest");
+  const appliedCount = countAppliedFilters({ q, role, status, sort }, { sort: "newest" });
 
   return (
     <section>
@@ -102,86 +105,96 @@ export default async function AdminUsersPage({ searchParams }: UsersPageProps) {
 
       {data?.summary && (
         <AdminSummaryStrip
+          page="users"
           chips={usersSummaryChips(data.summary)}
           note={truncatedNote(data.summary.truncated)}
         />
       )}
 
-      <form
-        method="get"
-        action="/admin/users"
-        role="search"
-        className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
+      <CollapsiblePanel
+        page="users"
+        panel="search"
+        title="Search & filters"
+        hint={filtersHint(appliedCount, q)}
+        forceOpen={appliedCount > 0}
+        className="mt-3"
       >
-        <div className="sm:col-span-2 lg:col-span-4">
-          <label htmlFor="users-q" className={LABEL}>
-            Search
-          </label>
-          <input
-            id="users-q"
-            name="q"
-            type="search"
-            defaultValue={q ?? ""}
-            maxLength={100}
-            placeholder="Email or name"
-            className={CONTROL}
-          />
-        </div>
-        <div>
-          <label htmlFor="users-role" className={LABEL}>
-            Role
-          </label>
-          <select id="users-role" name="role" defaultValue={role ?? ""} className={CONTROL}>
-            <option value="">All roles</option>
-            {USER_ROLES.map((value) => (
-              <option key={value} value={value}>
-                {USER_ROLE_LABELS[value]}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label htmlFor="users-status" className={LABEL}>
-            Status
-          </label>
-          <select id="users-status" name="status" defaultValue={status ?? ""} className={CONTROL}>
-            <option value="">Any status</option>
-            {USER_STATUSES.map((value) => (
-              <option key={value} value={value}>
-                {USER_STATUS_LABELS[value]}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label htmlFor="users-sort" className={LABEL}>
-            Sort by
-          </label>
-          <select id="users-sort" name="sort" defaultValue={sort} className={CONTROL}>
-            {USER_SORTS.map((value) => (
-              <option key={value} value={value}>
-                {USER_SORT_LABELS[value]}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="flex items-end gap-3">
-          <button
-            type="submit"
-            className="min-h-[44px] flex-1 rounded-brand-control bg-brand-accent px-5 text-sm font-semibold text-white transition hover:opacity-90"
-          >
-            Apply
-          </button>
-          {filtered && (
-            <Link
-              href="/admin/users"
-              className="flex min-h-[44px] items-center px-2 text-sm text-brand-ink-muted underline-offset-2 hover:underline"
+        <form
+          method="get"
+          action="/admin/users"
+          role="search"
+          className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
+        >
+          <div className="sm:col-span-2 lg:col-span-4">
+            <label htmlFor="users-q" className={LABEL}>
+              Search
+            </label>
+            <input
+              id="users-q"
+              name="q"
+              type="search"
+              defaultValue={q ?? ""}
+              maxLength={100}
+              placeholder="Email or name"
+              className={CONTROL}
+            />
+          </div>
+          <div>
+            <label htmlFor="users-role" className={LABEL}>
+              Role
+            </label>
+            <select id="users-role" name="role" defaultValue={role ?? ""} className={CONTROL}>
+              <option value="">All roles</option>
+              {USER_ROLES.map((value) => (
+                <option key={value} value={value}>
+                  {USER_ROLE_LABELS[value]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="users-status" className={LABEL}>
+              Status
+            </label>
+            <select id="users-status" name="status" defaultValue={status ?? ""} className={CONTROL}>
+              <option value="">Any status</option>
+              {USER_STATUSES.map((value) => (
+                <option key={value} value={value}>
+                  {USER_STATUS_LABELS[value]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="users-sort" className={LABEL}>
+              Sort by
+            </label>
+            <select id="users-sort" name="sort" defaultValue={sort} className={CONTROL}>
+              {USER_SORTS.map((value) => (
+                <option key={value} value={value}>
+                  {USER_SORT_LABELS[value]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-end gap-3">
+            <button
+              type="submit"
+              className="min-h-[44px] flex-1 rounded-brand-control bg-brand-accent px-5 text-sm font-semibold text-white transition hover:opacity-90"
             >
-              Reset
-            </Link>
-          )}
-        </div>
-      </form>
+              Apply
+            </button>
+            {filtered && (
+              <Link
+                href="/admin/users"
+                className="flex min-h-[44px] items-center px-2 text-sm text-brand-ink-muted underline-offset-2 hover:underline"
+              >
+                Reset
+              </Link>
+            )}
+          </div>
+        </form>
+      </CollapsiblePanel>
 
       {loadError || !data ? (
         <p

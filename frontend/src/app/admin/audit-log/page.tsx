@@ -25,7 +25,9 @@ import {
   snapshotText,
 } from "@/lib/adminAuditLogView";
 import { AdminReportPager } from "@/components/admin/AdminReportControls";
+import CollapsiblePanel from "@/components/ui/CollapsiblePanel";
 import LocalDateTime from "@/components/ui/LocalDateTime";
+import { countAppliedFilters, filtersHint } from "@/lib/collapsiblePanel";
 import type { AuditLogEntry } from "@/types/adminAuditLog";
 
 export const metadata: Metadata = {
@@ -77,6 +79,7 @@ export default async function AdminAuditLogPage({ searchParams }: AuditLogPagePr
   const totalPages = data ? Math.max(1, Math.ceil(data.total / PAGE_SIZE)) : 1;
   const state = { entity, action, actor, date_from: dateFrom, date_to: dateTo };
   const filtered = Boolean(entity || action || actor || dateFrom || dateTo);
+  const appliedCount = countAppliedFilters({ entity, action, actor, dateFrom, dateTo });
   const entityOptions = new Set(data?.entity_types ?? []);
   if (entity) entityOptions.add(entity);
 
@@ -89,93 +92,101 @@ export default async function AdminAuditLogPage({ searchParams }: AuditLogPagePr
         days.
       </p>
 
-      <form
-        method="get"
-        action="/admin/audit-log"
-        role="search"
-        className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
+      <CollapsiblePanel
+        page="audit-log"
+        panel="search"
+        title="Search & filters"
+        hint={filtersHint(appliedCount, actor)}
+        forceOpen={appliedCount > 0}
       >
-        <div>
-          <label htmlFor="audit-entity" className={LABEL}>
-            Entity type
-          </label>
-          <select id="audit-entity" name="entity" defaultValue={entity ?? ""} className={CONTROL}>
-            <option value="">All entities</option>
-            {[...entityOptions].sort().map((value) => (
-              <option key={value} value={value}>
-                {entityLabel(value)}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label htmlFor="audit-action" className={LABEL}>
-            Action
-          </label>
-          <select id="audit-action" name="action" defaultValue={action ?? ""} className={CONTROL}>
-            <option value="">All actions</option>
-            {ACTION_OPTIONS.map((value) => (
-              <option key={value} value={value}>
-                {value.charAt(0).toUpperCase() + value.slice(1)}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="sm:col-span-2 lg:col-span-1">
-          <label htmlFor="audit-actor" className={LABEL}>
-            Actor (email or account ID)
-          </label>
-          <input
-            id="audit-actor"
-            name="actor"
-            type="search"
-            defaultValue={actor ?? ""}
-            maxLength={100}
-            placeholder="name@example.com"
-            className={CONTROL}
-          />
-        </div>
-        <div>
-          <label htmlFor="audit-from" className={LABEL}>
-            From (UTC date)
-          </label>
-          <input
-            id="audit-from"
-            name="date_from"
-            type="date"
-            defaultValue={dateFrom ?? ""}
-            className={CONTROL}
-          />
-        </div>
-        <div>
-          <label htmlFor="audit-to" className={LABEL}>
-            To (UTC date)
-          </label>
-          <input
-            id="audit-to"
-            name="date_to"
-            type="date"
-            defaultValue={dateTo ?? ""}
-            className={CONTROL}
-          />
-        </div>
-        <div className="flex items-end gap-3">
-          <button
-            type="submit"
-            className="min-h-[44px] flex-1 rounded-brand-control bg-brand-accent px-5 text-sm font-semibold text-white transition hover:opacity-90"
-          >
-            Apply
-          </button>
-          {filtered && (
-            <Link
-              href="/admin/audit-log"
-              className="flex min-h-[44px] items-center px-2 text-sm text-brand-ink-muted underline-offset-2 hover:underline"
+        <form
+          method="get"
+          action="/admin/audit-log"
+          role="search"
+          className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
+        >
+          <div>
+            <label htmlFor="audit-entity" className={LABEL}>
+              Entity type
+            </label>
+            <select id="audit-entity" name="entity" defaultValue={entity ?? ""} className={CONTROL}>
+              <option value="">All entities</option>
+              {[...entityOptions].sort().map((value) => (
+                <option key={value} value={value}>
+                  {entityLabel(value)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="audit-action" className={LABEL}>
+              Action
+            </label>
+            <select id="audit-action" name="action" defaultValue={action ?? ""} className={CONTROL}>
+              <option value="">All actions</option>
+              {ACTION_OPTIONS.map((value) => (
+                <option key={value} value={value}>
+                  {value.charAt(0).toUpperCase() + value.slice(1)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="sm:col-span-2 lg:col-span-1">
+            <label htmlFor="audit-actor" className={LABEL}>
+              Actor (email or account ID)
+            </label>
+            <input
+              id="audit-actor"
+              name="actor"
+              type="search"
+              defaultValue={actor ?? ""}
+              maxLength={100}
+              placeholder="name@example.com"
+              className={CONTROL}
+            />
+          </div>
+          <div>
+            <label htmlFor="audit-from" className={LABEL}>
+              From (UTC date)
+            </label>
+            <input
+              id="audit-from"
+              name="date_from"
+              type="date"
+              defaultValue={dateFrom ?? ""}
+              className={CONTROL}
+            />
+          </div>
+          <div>
+            <label htmlFor="audit-to" className={LABEL}>
+              To (UTC date)
+            </label>
+            <input
+              id="audit-to"
+              name="date_to"
+              type="date"
+              defaultValue={dateTo ?? ""}
+              className={CONTROL}
+            />
+          </div>
+          <div className="flex items-end gap-3">
+            <button
+              type="submit"
+              className="min-h-[44px] flex-1 rounded-brand-control bg-brand-accent px-5 text-sm font-semibold text-white transition hover:opacity-90"
             >
-              Reset
-            </Link>
-          )}
-        </div>
-      </form>
+              Apply
+            </button>
+            {filtered && (
+              <Link
+                href="/admin/audit-log"
+                className="flex min-h-[44px] items-center px-2 text-sm text-brand-ink-muted underline-offset-2 hover:underline"
+              >
+                Reset
+              </Link>
+            )}
+          </div>
+        </form>
+      </CollapsiblePanel>
 
       {loadError || !data ? (
         <p

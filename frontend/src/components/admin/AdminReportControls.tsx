@@ -5,6 +5,8 @@
 // page scroll.
 import type { ReactNode } from "react";
 import Link from "next/link";
+import CollapsiblePanel from "@/components/ui/CollapsiblePanel";
+import { countAppliedFilters, filtersHint } from "@/lib/collapsiblePanel";
 
 const CONTROL =
   "mt-1 min-h-[44px] w-full rounded-brand-control border border-brand-border bg-white px-3 text-sm text-brand-ink";
@@ -22,71 +24,84 @@ export function AdminReportSearchForm({
   defaultSort,
   sortOptions,
   placeholder,
+  panelPage,
 }: {
   action: string;
   idPrefix: string;
+  /** Page id for remembering the panel's open/closed choice, e.g. "managers". */
+  panelPage: string;
   q: string | undefined;
   sort: string;
   defaultSort: string;
   sortOptions: ReadonlyArray<SortOption>;
   placeholder: string;
 }) {
+  const appliedCount = countAppliedFilters({ q, sort }, { sort: defaultSort });
   return (
-    <form
-      method="get"
-      action={action}
-      role="search"
-      className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end"
+    <CollapsiblePanel
+      page={panelPage}
+      panel="search"
+      title="Search & filters"
+      hint={filtersHint(appliedCount, q)}
+      forceOpen={appliedCount > 0}
+      className="mt-3"
     >
-      <div className="sm:min-w-[220px] sm:flex-1">
-        <label
-          htmlFor={`${idPrefix}-q`}
-          className="block text-xs font-semibold uppercase tracking-wide text-brand-ink-subtle"
-        >
-          Search
-        </label>
-        <input
-          id={`${idPrefix}-q`}
-          name="q"
-          type="search"
-          defaultValue={q ?? ""}
-          maxLength={100}
-          placeholder={placeholder}
-          className={CONTROL}
-        />
-      </div>
-      <div className="sm:w-48">
-        <label
-          htmlFor={`${idPrefix}-sort`}
-          className="block text-xs font-semibold uppercase tracking-wide text-brand-ink-subtle"
-        >
-          Sort by
-        </label>
-        <select id={`${idPrefix}-sort`} name="sort" defaultValue={sort} className={CONTROL}>
-          {sortOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="flex items-center gap-3">
-        <button
-          type="submit"
-          className="min-h-[44px] flex-1 rounded-brand-control bg-brand-accent px-5 text-sm font-semibold text-white transition hover:opacity-90 sm:flex-none"
-        >
-          Apply
-        </button>
-        {(q || sort !== defaultSort) && (
-          <Link
-            href={action}
-            className="flex min-h-[44px] items-center px-2 text-sm text-brand-ink-muted underline-offset-2 hover:underline"
+      <form
+        method="get"
+        action={action}
+        role="search"
+        className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end"
+      >
+        <div className="sm:min-w-[220px] sm:flex-1">
+          <label
+            htmlFor={`${idPrefix}-q`}
+            className="block text-xs font-semibold uppercase tracking-wide text-brand-ink-subtle"
           >
-            Reset
-          </Link>
-        )}
-      </div>
-    </form>
+            Search
+          </label>
+          <input
+            id={`${idPrefix}-q`}
+            name="q"
+            type="search"
+            defaultValue={q ?? ""}
+            maxLength={100}
+            placeholder={placeholder}
+            className={CONTROL}
+          />
+        </div>
+        <div className="sm:w-48">
+          <label
+            htmlFor={`${idPrefix}-sort`}
+            className="block text-xs font-semibold uppercase tracking-wide text-brand-ink-subtle"
+          >
+            Sort by
+          </label>
+          <select id={`${idPrefix}-sort`} name="sort" defaultValue={sort} className={CONTROL}>
+            {sortOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            type="submit"
+            className="min-h-[44px] flex-1 rounded-brand-control bg-brand-accent px-5 text-sm font-semibold text-white transition hover:opacity-90 sm:flex-none"
+          >
+            Apply
+          </button>
+          {(q || sort !== defaultSort) && (
+            <Link
+              href={action}
+              className="flex min-h-[44px] items-center px-2 text-sm text-brand-ink-muted underline-offset-2 hover:underline"
+            >
+              Reset
+            </Link>
+          )}
+        </div>
+      </form>
+    </CollapsiblePanel>
   );
 }
 

@@ -127,12 +127,14 @@ export default async function RegisteredUsersPage({ searchParams }: RegisteredUs
 
       {data?.summary && (
         <AdminSummaryStrip
+          page="registered-users"
           chips={registeredUsersSummaryChips(data.summary)}
           note={truncatedNote(data.summary.truncated)}
         />
       )}
 
       <AdminReportSearchForm
+        panelPage="registered-users"
         action={BASE_PATH}
         idPrefix="users"
         q={q}

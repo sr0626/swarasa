@@ -7,6 +7,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { requireSession } from "@/lib/auth/guards";
 import InfoPanel from "@/components/ui/InfoPanel";
+import CollapsiblePanel from "@/components/ui/CollapsiblePanel";
+import { filtersHint } from "@/lib/collapsiblePanel";
 import AdminMessagesPanel from "@/components/admin/AdminMessagesPanel";
 import { ApiError } from "@/lib/api/client";
 import { listAdminMessages } from "@/lib/api/adminMessages";
@@ -93,42 +95,51 @@ export default async function AdminMessagesPage({ searchParams }: AdminMessagesP
         ))}
       </nav>
 
-      <form
-        action="/admin/messages"
-        method="get"
-        role="search"
-        className="mt-4 flex flex-col gap-2 sm:flex-row"
+      <CollapsiblePanel
+        page="messages"
+        panel="search"
+        title="Search"
+        hint={filtersHint(q ? 1 : 0, q)}
+        forceOpen={Boolean(q)}
+        className="mt-4"
       >
-        {tab !== "open" && <input type="hidden" name="status" value={tab} />}
-        <label htmlFor="message-search" className="sr-only">
-          Search messages
-        </label>
-        <input
-          id="message-search"
-          name="q"
-          type="search"
-          defaultValue={q}
-          maxLength={MESSAGE_SEARCH_MAX_LENGTH}
-          placeholder="Search subject, message, sender email or name"
-          className="min-h-[44px] w-full rounded-brand-control border border-brand-border bg-white px-3 text-sm text-brand-ink placeholder:text-brand-placeholder focus:border-brand-accent focus:outline-none sm:max-w-md"
-        />
-        <div className="flex gap-2">
-          <button
-            type="submit"
-            className="flex min-h-[44px] items-center justify-center rounded-brand-control bg-brand-accent px-5 text-sm font-semibold text-white transition hover:bg-brand-accent-hover"
-          >
-            Search
-          </button>
-          {q && (
-            <Link
-              href={messagesHref(tab, 1, "")}
-              className="flex min-h-[44px] items-center justify-center rounded-brand-control border border-brand-border px-5 text-sm font-semibold text-brand-ink-muted transition hover:bg-brand-chip"
+        <form
+          action="/admin/messages"
+          method="get"
+          role="search"
+          className="flex flex-col gap-2 sm:flex-row"
+        >
+          {tab !== "open" && <input type="hidden" name="status" value={tab} />}
+          <label htmlFor="message-search" className="sr-only">
+            Search messages
+          </label>
+          <input
+            id="message-search"
+            name="q"
+            type="search"
+            defaultValue={q}
+            maxLength={MESSAGE_SEARCH_MAX_LENGTH}
+            placeholder="Search subject, message, sender email or name"
+            className="min-h-[44px] w-full rounded-brand-control border border-brand-border bg-white px-3 text-sm text-brand-ink placeholder:text-brand-placeholder focus:border-brand-accent focus:outline-none sm:max-w-md"
+          />
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              className="flex min-h-[44px] items-center justify-center rounded-brand-control bg-brand-accent px-5 text-sm font-semibold text-white transition hover:bg-brand-accent-hover"
             >
-              Clear
-            </Link>
-          )}
-        </div>
-      </form>
+              Search
+            </button>
+            {q && (
+              <Link
+                href={messagesHref(tab, 1, "")}
+                className="flex min-h-[44px] items-center justify-center rounded-brand-control border border-brand-border px-5 text-sm font-semibold text-brand-ink-muted transition hover:bg-brand-chip"
+              >
+                Clear
+              </Link>
+            )}
+          </div>
+        </form>
+      </CollapsiblePanel>
 
       <div className="mt-6">
         {loadError ? (

@@ -88,9 +88,12 @@ export default async function AdminManagersPage({ searchParams }: ManagersPagePr
         shown in your local timezone.
       </p>
 
-      {data?.summary && <AdminSummaryStrip chips={managersSummaryChips(data.summary)} />}
+      {data?.summary && (
+        <AdminSummaryStrip page="managers" chips={managersSummaryChips(data.summary)} />
+      )}
 
       <AdminReportSearchForm
+        panelPage="managers"
         action={BASE_PATH}
         idPrefix="managers"
         q={q}
