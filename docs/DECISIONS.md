@@ -2913,6 +2913,35 @@ lists only page 1 of each city.
 *Rejected: city-first location URLs (user confirmed brand-first); a loading
 boundary on the per-city route (soft-404 risk)*
 
+**Admin bulk import: stateless validate/commit, duplicate detection both within the file and against the system**
+2026-10-28 | Built in PR #262, no migration. `/admin/import` validates the WHOLE
+file in one dry run (<=500 rows, 1 MB) and commits in chunks (server cap 50
+rows, UI sends 20, strictly sequential) so a request stays well under the API
+Gateway limit; every chunk is re-validated server-side with the same
+`evaluate_row`, one SAVEPOINT per row, so a failed chunk stops and can simply
+be resumed. No import-batch table: idempotency comes from duplicate
+detection. Keys: normalized name (lowercase, accents and non-alphanumerics
+stripped), normalized address (street punctuation/units dropped, Street->st
+etc., plus ZIP5) and E.164 phone. Definite duplicate (skipped) = same
+name+address or same name+phone; possible duplicate (warning, imported only
+on opt-in) = same address with a different name, or phone-only. Matches
+include existing listings in every status (active, owner_deactivated,
+coming_soon, closed_pending_reopen) and soft-deleted brands, so a hidden
+listing is never recreated. In-file: the second occurrence is flagged and
+names the earlier row; the verdict is carried across chunks and the DB check
+at commit also catches earlier chunks. Created listings are unclaimed
+(`owner_id` NULL), active, verified, free tier, with an `audit_log` entry per
+brand and location (provenance `bulk_import`). Geocoding runs in the Next
+server action because the Lambda has no internet; a miss still imports,
+flagged `needs_geocoding`. Downloaded report cells are formula-neutralised
+(leading `'` for `= + - @`, TAB, CR). A same-name brand that is owned or
+deleted is an error (no silent attach); the same name as an unclaimed brand
+adds a location to it. Known gap: no failed-rows-only re-upload file; re-upload
+the whole file instead (imported rows skip as duplicates).
+*Rejected: an import-batch table (more state for no gain); skipping inactive or
+soft-deleted listings when matching (would recreate hidden listings);
+server-side geocoding in the Lambda (no network egress)*
+
 **Online ordering = redirect link model in Phase 4 (not on-platform checkout)**
 May 2026 | Platform links to restaurant's own ordering system (DoorDash, their own URL).
 Avoids food delivery logistics, payment processing liability, and fulfilment complexity.
