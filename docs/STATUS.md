@@ -28,8 +28,8 @@ fully satisfied and asked to stop iterating for now, with an explicit intent
 to revisit later, not a final sign-off.
 
 ## Open PRs
-- Only in-flight docs PRs as of 2026-10-28: this wave-16 tracker/status/
-  cmd-log batch and the DECISIONS.md wave-16 entries. No code PRs open.
+- Only in-flight docs PRs as of 2026-10-28: this wave-17 tracker/status/
+  cmd-log batch. No code PRs open.
 
 ## Live state (2026-10-28)
 - Migrations on main through `0022_location_daily_stat`. 0001-0021 applied to
@@ -57,6 +57,13 @@ to revisit later, not a final sign-off.
   the `set_platform_flag` management command when paid tiers exist.
 - Repo now has "Automatically delete head branches" enabled; the 200+
   merged branches were cleaned up by the user on 2026-09-23.
+
+## Landed 2026-10-28, wave 17 (#272-#273)
+- **Admin layout** (#272): Summary and Search & filters side by side on web;
+  menu groups ordered Listings, People, Work queue, System; Listings
+  open by default.
+- **Work queue badges** (#273): `GET /admin/queue-counts`; per-item and total
+  badges (incl. overdue claims) on the admin menu. No migration.
 
 ## Landed 2026-10-28, wave 16 (#265-#269)
 - **Admin summary counts** (#265): summary strip on Users, Registered

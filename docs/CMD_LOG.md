@@ -678,4 +678,9 @@ git push -u origin feat/admin-menu-order   # claude
 git push -u origin feature/collapsible-admin-panels   # claude
 git push -u origin feature/admin-menu-groups   # claude
 git push -u origin feature/owner-analytics   # claude
+git push -u origin docs/wave-265-269   # claude
+git push -u origin docs/decisions-wave-16   # claude
+aws lambda invoke --function-name swarasa-api-dev --payload '{"_management_command": "alembic_upgrade"}' --profile swarasa-dev --region us-east-1 ...   # user  (after the #269 deploy, applying 0022_location_daily_stat)
+git push -u origin feature/admin-panels-row-menu-order   # claude
+git push -u origin feature/admin-menu-action-badges   # claude
 ```
