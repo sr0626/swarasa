@@ -1,6 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { activeNavHref, ADMIN_NAV_ITEMS, MANAGER_NAV_ITEMS, OWNER_NAV_ITEMS } from "./navItems.ts";
+import {
+  activeNavHref,
+  ADMIN_NAV_GROUPS,
+  ADMIN_NAV_ITEMS,
+  ADMIN_NAV_MENU,
+  flattenNavMenu,
+  groupForPath,
+  MANAGER_NAV_ITEMS,
+  OWNER_NAV_ITEMS,
+} from "./navItems.ts";
 
 test("owner: /account highlights Business account, /account/activity only Activity", () => {
   assert.equal(activeNavHref("/account", OWNER_NAV_ITEMS), "/account");
@@ -63,3 +72,52 @@ test("admin menu is ordered by importance: Overview first, queues before directo
   assert.equal(new Set(labels).size, labels.length);
 });
 
+
+const ADMIN_GROUP_ITEMS: Record<string, string[]> = {
+  "Work queue": ["Claims", "Messages", "Reports", "Reopen requests"],
+  Listings: ["Listings", "Import", "Taxonomy"],
+  People: ["Users", "Owners", "Managers", "Registered users"],
+  System: ["Audit log", "Profile"],
+};
+
+test("admin menu groups: Overview on top, then the four groups with the agreed members", () => {
+  assert.deepEqual(ADMIN_NAV_MENU.top.map((i) => i.label), ["Overview"]);
+  assert.deepEqual(ADMIN_NAV_GROUPS.map((g) => g.title), Object.keys(ADMIN_GROUP_ITEMS));
+  for (const g of ADMIN_NAV_GROUPS) assert.deepEqual(g.items.map((i) => i.label), ADMIN_GROUP_ITEMS[g.title]);
+});
+
+test("admin menu: every item appears exactly once and ADMIN_NAV_ITEMS is the flat grouped order", () => {
+  const hrefs = ADMIN_NAV_ITEMS.map((i) => i.href);
+  assert.equal(new Set(hrefs).size, hrefs.length);
+  assert.equal(ADMIN_NAV_ITEMS.length, 14);
+  assert.deepEqual(hrefs, flattenNavMenu(ADMIN_NAV_MENU).map((i) => i.href));
+  assert.deepEqual(
+    ADMIN_NAV_ITEMS.map((i) => i.label),
+    ["Overview", ...Object.values(ADMIN_GROUP_ITEMS).flat()]
+  );
+});
+
+test("admin menu groups: only Work queue is open by default; ids are unique", () => {
+  assert.deepEqual(ADMIN_NAV_GROUPS.filter((g) => g.defaultOpen).map((g) => g.title), ["Work queue"]);
+  assert.equal(new Set(ADMIN_NAV_GROUPS.map((g) => g.id)).size, ADMIN_NAV_GROUPS.length);
+});
+
+test("activeNavHref resolves every admin path, including nested ones", () => {
+  for (const { href } of ADMIN_NAV_ITEMS) {
+    assert.equal(activeNavHref(href, ADMIN_NAV_ITEMS), href);
+    assert.equal(activeNavHref(`${href}/some-id`, ADMIN_NAV_ITEMS), href);
+  }
+});
+
+test("groupForPath returns the group holding the active page (nested paths too), null for Overview", () => {
+  assert.equal(groupForPath("/admin/claims")?.title, "Work queue");
+  assert.equal(groupForPath("/admin/claims/abc-123")?.title, "Work queue");
+  assert.equal(groupForPath("/admin/taxonomy")?.title, "Listings");
+  assert.equal(groupForPath("/admin/registered-users")?.title, "People");
+  assert.equal(groupForPath("/admin/users")?.title, "People");
+  assert.equal(groupForPath("/admin/audit-log")?.title, "System");
+  assert.equal(groupForPath("/account")?.title, "System");
+  assert.equal(groupForPath("/admin/overview"), null);
+  assert.equal(groupForPath("/somewhere/else"), null);
+  for (const g of ADMIN_NAV_GROUPS) for (const i of g.items) assert.equal(groupForPath(i.href)?.id, g.id);
+});
