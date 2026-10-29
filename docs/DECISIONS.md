@@ -2942,6 +2942,51 @@ the whole file instead (imported rows skip as duplicates).
 soft-deleted listings when matching (would recreate hidden listings);
 server-side geocoding in the Lambda (no network egress)*
 
+**Owner analytics: anonymous daily counters, UTC days, free-tier until payments are un-deferred**
+2026-10-28 | Built in PR #269 (migration `0022_location_daily_stat`). One row per
+(location, UTC day) in `location_daily_stat`, incremented by an atomic upsert;
+events: page_view, tile_click, deal_view, website_click, directions_click,
+phone_click. No personal data is stored (no IP, user id, cookie or per-visit
+row), so there is no CCPA export entry; rows cascade with the location.
+Counting is client-side after load (sendBeacon through the frontend `/api/track`
+relay), so non-JS bots are not counted and SSR/ISR caching is untouched; page
+views are deduped once per session per location in sessionStorage. The public
+`POST /track/location/{id}` always returns 204, ignores unknown events and
+non-public locations, and drops views by the location's own owner, an actively
+assigned manager or any admin. Read endpoints: `GET /locations/{id}/analytics`
+(owner, assigned manager, admin) and `GET /restaurants/{id}/analytics` (brand
+owner, admin), 7/30/90 days with change vs the previous equal-length period
+(null when the previous total is 0); followers are the BRAND-level count, the
+same for each location of a brand and counted once in the rollup. Visible to
+all owners/managers because tier gating is deferred with payments; the deal
+ROI calculator is deferred. Search impressions are not counted (would need N
+writes per search). Accepted risk: the public track endpoint relies on API
+Gateway throttling only, so counts can be inflated by a determined caller;
+add rate limiting if abuse appears.
+*Rejected: per-visit event rows (personal-data and volume risk); server-side
+counting in the page request (breaks caching, counts bots); a third-party
+analytics vendor (all-AWS rule)*
+
+**Admin console: whole-dataset summaries, collapsible panels, grouped menu**
+2026-10-28 | Built in PRs #265-#268, user requests. Each admin list response
+carries an additive `summary` object shown in an `AdminSummaryStrip`: always
+unfiltered whole-dataset totals (ignoring search, filters and paging); active =
+Cognito Enabled for Users and Registered users, Owners active = at least one
+active location on a live brand, Managers active = at least one active
+assignment. Summary and search/filter panels are collapsed by default with a
+one-line hint (headline numbers; search text or "N applied") and the search
+panel auto-opens when a filter is in the URL; the open/closed choice is kept in
+localStorage. The admin menu is ordered by importance (Overview; time-sensitive
+queues Claims, Messages, Reports, Reopen requests; Listings, Import; account
+directories; Taxonomy, Audit log; Profile last) and grouped as Work queue /
+Listings / People / System: collapsible groups on desktop (active page's group
+open, Work queue open by default) and a two-level pill row on phones (group
+pills, then the selected group's items). Owner and manager menus stay ungrouped
+(grouping is opt-in).
+*Rejected: a tall accordion on phones (the phone menu is a horizontal pill row);
+filtering the summary by the current search (a header that changes with every
+query is confusing)*
+
 **Online ordering = redirect link model in Phase 4 (not on-platform checkout)**
 May 2026 | Platform links to restaurant's own ordering system (DoorDash, their own URL).
 Avoids food delivery logistics, payment processing liability, and fulfilment complexity.
