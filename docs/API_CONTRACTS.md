@@ -3236,6 +3236,32 @@ Errors:
 | 403 | `forbidden` | caller is not admin |
 | 502 | `upstream_error` | Cognito `ListUsersInGroup` call failed |
 
+### Admin list summaries (`summary` on the five admin list responses)
+
+`GET /admin/users`, `/admin/owners`, `/admin/managers`,
+`/admin/registered-users` and `/admin/listings` each return an additive
+`summary` object (added 2026-10-28; existing fields unchanged) that backs the
+stat chips above each admin table. Rules common to all five:
+
+- Counts cover the WHOLE dataset: computed before `q`, `role`, `status`,
+  filter parameters and paging are applied, so the header is stable while an
+  admin searches. `summary.total` (or `brands` on listings) equals the `total`
+  of the same request with no search/filter.
+- No extra Cognito calls: the Cognito-backed summaries reuse the sweep the
+  endpoint already performs (per-group cap `MAX_USERS_PER_GROUP` = 3000).
+  Owners/listings use one or two aggregate SQL queries.
+- "Seen in last 30 days" = `user_profile.last_seen_at` within 30 days.
+
+| Endpoint | `summary` fields and meaning |
+|---|---|
+| `/admin/users` | `total`; `active` = Cognito `Enabled`; `inactive` = disabled (`active + inactive = total`); `unconfirmed` = status `UNCONFIRMED` (overlaps the other two); `seen_last_30_days`; `by_role` {admin, owner, manager, registered_user} bucketed by highest-privilege role (sums to `total`); `truncated` = a role group hit the cap, so counts are a lower bound |
+| `/admin/registered-users` | `total`; `active` / `inactive` as for users (Cognito `Enabled`); `unconfirmed`; `seen_last_30_days`; `truncated` (always false today) |
+| `/admin/owners` | `total` = every `owner_account` row; `active` = owners with >= 1 `active` location under a live brand; `inactive = total - active`; `without_locations` (subset of `inactive`) = no live location at all. Unclaimed brands have no owner and never count |
+| `/admin/managers` | `total` = everyone listed; `active` = >= 1 active assignment on a live brand's location; `inactive` = all assignments revoked; `seen_last_30_days` |
+| `/admin/listings` | `brands` (live, not soft-deleted), `unclaimed_brands`, `locations`, and `active` / `coming_soon` / `owner_deactivated` / `closed_pending_reopen` (location grain; the four sum to `locations`). Independent of every filter, including `status=deleted` |
+
+Tests: `tests/integration/test_admin_summary_counts.py`.
+
 ### GET /admin/registered-users
 
 Auth: admin only. Diner (`registered_user`) directory for the admin

@@ -1,6 +1,8 @@
 // Types for GET /admin/managers, matching docs/API_CONTRACTS.md
 // "GET /admin/managers" -- the admin "Managers" report.
 
+import type { AdminManagersSummary } from "./adminSummary";
+
 export type ManagerSort = "newest" | "oldest" | "most_locations" | "email" | "last_seen";
 
 /** One ACTIVE assignment -- `brand_id`/`location_id` link to the admin listing. */
@@ -40,6 +42,8 @@ export interface AdminManagersResponse {
   total: number;
   /** True when the Cognito email lookup failed (emails are null; search matches names only). */
   email_lookup_degraded: boolean;
+  /** Whole-dataset counts, unaffected by search/page. */
+  summary?: AdminManagersSummary;
 }
 
 export interface AdminManagersParams {

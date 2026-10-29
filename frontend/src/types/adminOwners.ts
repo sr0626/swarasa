@@ -1,6 +1,7 @@
 // Types for GET /admin/owners, matching docs/API_CONTRACTS.md
 // "GET /admin/owners" -- the admin "Owners" report. No billing fields by
 // design (payments are deferred).
+import type { AdminOwnersSummary } from "@/types/adminSummary";
 import type { PaginatedResponse } from "@/types/common";
 
 export type OwnerSort = "newest" | "oldest" | "most_locations" | "email";
@@ -32,7 +33,10 @@ export interface AdminOwnerRow {
   pending_reopen_request_count: number;
 }
 
-export type AdminOwnersResponse = PaginatedResponse<AdminOwnerRow>;
+export type AdminOwnersResponse = PaginatedResponse<AdminOwnerRow> & {
+  /** Whole-dataset counts, unaffected by search/page. */
+  summary?: AdminOwnersSummary;
+};
 
 export interface AdminOwnersParams {
   page?: number;

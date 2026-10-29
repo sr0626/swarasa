@@ -37,7 +37,9 @@ from app.schemas.admin_registered_users import (
     RegisteredUserSort,
     RegisteredUsersResponse,
 )
+from app.schemas.admin_summary import AdminRegisteredUsersSummary
 from app.services import cognito_service
+from app.services.admin_summary import seen_cutoff, seen_recently
 
 _CHUNK = 500
 
@@ -117,6 +119,18 @@ async def get_registered_users(
         for user in cognito_users
     ]
 
+    # Summary over the whole group BEFORE search is applied.
+    cutoff = seen_cutoff()
+    enabled_by_sub = {user.cognito_sub: user.enabled for user in cognito_users}
+    active = sum(1 for u in users if enabled_by_sub.get(u.cognito_sub, True))
+    summary = AdminRegisteredUsersSummary(
+        total=len(users),
+        active=active,
+        inactive=len(users) - active,
+        unconfirmed=sum(1 for u in users if u.status == "UNCONFIRMED"),
+        seen_last_30_days=sum(1 for u in users if seen_recently(u.last_seen_at, cutoff)),
+    )
+
     term = (search or "").strip().lower()
     if term:
         users = [
@@ -134,4 +148,5 @@ async def get_registered_users(
         page=pagination.page,
         page_size=pagination.page_size,
         total=total,
+        summary=summary,
     )

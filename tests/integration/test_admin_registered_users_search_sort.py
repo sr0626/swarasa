@@ -90,7 +90,9 @@ async def test_search_matches_email_or_display_name(client, db_session, as_user,
     assert await emails("%") == []  # literal, not a wildcard
 
     body = (await client.get("/admin/registered-users?q=nobody")).json()
+    summary = body.pop("summary")
     assert body == {"results": [], "page": 1, "page_size": 20, "total": 0}
+    assert summary["total"] == 3  # summary ignores the search text
 
 
 @pytest.mark.asyncio

@@ -48,7 +48,9 @@ from app.schemas.admin_users import (
     UserSort,
     UserStatusFilter,
 )
+from app.schemas.admin_summary import AdminUsersSummary, UserRoleCounts
 from app.services import audit_service, cognito_service
+from app.services.admin_summary import seen_cutoff, seen_recently
 
 logger = logging.getLogger("app.services.admin_users_service")
 
@@ -93,6 +95,25 @@ def _status_matches(user: AdminUserOut, status: UserStatusFilter) -> bool:
     if status == "unconfirmed":
         return not user.confirmed
     return user.enabled
+
+
+def build_users_summary(users: list[AdminUserOut], *, truncated: bool) -> AdminUsersSummary:
+    """Counts over the merged, UNFILTERED directory (same rows the list
+    would show with no search/role/status). `active` = Cognito Enabled."""
+    cutoff = seen_cutoff()
+    by_role = {role: 0 for role in ROLE_PRECEDENCE}
+    for user in users:
+        by_role[user.role] += 1
+    active = sum(1 for u in users if u.enabled)
+    return AdminUsersSummary(
+        total=len(users),
+        active=active,
+        inactive=len(users) - active,
+        unconfirmed=sum(1 for u in users if not u.confirmed),
+        seen_last_30_days=sum(1 for u in users if seen_recently(u.last_seen_at, cutoff)),
+        by_role=UserRoleCounts(**by_role),
+        truncated=truncated,
+    )
 
 
 async def get_admin_users(
@@ -164,6 +185,8 @@ async def get_admin_users(
             )
         )
 
+    summary = build_users_summary(users, truncated=truncated)
+
     if role is not None:
         users = [u for u in users if role in u.roles]
     if status is not None:
@@ -183,6 +206,7 @@ async def get_admin_users(
         page_size=pagination.page_size,
         total=len(users),
         truncated=truncated,
+        summary=summary,
     )
 
 

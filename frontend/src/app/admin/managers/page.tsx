@@ -31,6 +31,8 @@ import {
 } from "@/lib/adminReportView";
 import { AdminReportPager, AdminReportSearchForm } from "@/components/admin/AdminReportControls";
 import LocalDateTime from "@/components/ui/LocalDateTime";
+import AdminSummaryStrip from "@/components/admin/AdminSummaryStrip";
+import { managersSummaryChips } from "@/lib/adminSummary";
 import type { AdminManagerRow } from "@/types/adminManagers";
 
 export const metadata: Metadata = {
@@ -85,6 +87,8 @@ export default async function AdminManagersPage({ searchParams }: ManagersPagePr
         . People whose assignments were all removed still appear, with 0 active locations. Times are
         shown in your local timezone.
       </p>
+
+      {data?.summary && <AdminSummaryStrip chips={managersSummaryChips(data.summary)} />}
 
       <AdminReportSearchForm
         action={BASE_PATH}

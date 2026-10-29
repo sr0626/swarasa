@@ -8,6 +8,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from app.schemas.admin_summary import AdminUsersSummary
 from app.schemas.utc import UtcDatetime
 
 UserRole = Literal["admin", "owner", "manager", "registered_user"]
@@ -48,6 +49,8 @@ class AdminUsersResponse(BaseModel):
     # True when at least one group had more members than the per-group cap
     # (`cognito_service.MAX_USERS_PER_GROUP`); the list is then incomplete.
     truncated: bool = False
+    # Whole-pool counts, independent of search/role/status/page (additive).
+    summary: AdminUsersSummary = AdminUsersSummary()
 
 
 class AdminUserActionResponse(BaseModel):

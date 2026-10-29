@@ -10,6 +10,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from app.schemas.admin_summary import AdminRegisteredUsersSummary
 from app.schemas.utc import UtcDatetime
 
 # `newest` (default) / `oldest` by Cognito signup date, `email` A-Z,
@@ -45,3 +46,5 @@ class RegisteredUsersResponse(BaseModel):
     page: int
     page_size: int
     total: int
+    # Whole-pool counts, independent of search/page (additive).
+    summary: AdminRegisteredUsersSummary = AdminRegisteredUsersSummary()

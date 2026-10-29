@@ -141,6 +141,7 @@ async def test_empty_group_returns_empty_list(client, db_session, as_user, cogni
     resp = await client.get("/admin/registered-users")
     assert resp.status_code == 200
     body = resp.json()
+    body.pop("summary")  # covered by test_admin_summary_counts.py
     assert body == {"results": [], "page": 1, "page_size": 20, "total": 0}
 
 

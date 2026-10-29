@@ -32,6 +32,7 @@ from app.models.restaurant_brand import RestaurantBrand
 from app.models.restaurant_location import RestaurantLocation
 from app.models.user_follow import UserFollow
 from app.schemas.admin_overview import StatusBreakdown
+from app.schemas.admin_summary import AdminOwnersSummary
 from app.schemas.admin_owners import AdminOwnerOut, AdminOwnersResponse, OwnerSort
 
 PENDING_REVIEW = "pending_review"
@@ -49,6 +50,43 @@ def _search_filter(search: str | None):
     return or_(
         OwnerAccount.email.ilike(pattern, escape="\\"),
         OwnerAccount.full_name.ilike(pattern, escape="\\"),
+    )
+
+
+async def _owners_summary(db: AsyncSession) -> AdminOwnersSummary:
+    """One aggregate over ALL owner accounts (no search): an owner is
+    `active` with >= 1 ACTIVE location under a live brand; `without_locations`
+    owners have no live location at all. Unclaimed brands have no owner."""
+
+    def _owns(*extra):
+        return (
+            select(RestaurantLocation.id)
+            .join(RestaurantBrand, RestaurantBrand.id == RestaurantLocation.brand_id)
+            .where(
+                RestaurantBrand.owner_id == OwnerAccount.id,
+                RestaurantBrand.deleted_at.is_(None),
+                *extra,
+            )
+            .exists()
+        )
+
+    has_active = _owns(RestaurantLocation.status == RestaurantLocation.STATUS_ACTIVE)
+    has_any = _owns()
+    row = (
+        await db.execute(
+            select(
+                func.count(OwnerAccount.id),
+                func.count(OwnerAccount.id).filter(has_active),
+                func.count(OwnerAccount.id).filter(~has_any),
+            )
+        )
+    ).one()
+    total, active, without_locations = row
+    return AdminOwnersSummary(
+        total=total,
+        active=active,
+        inactive=total - active,
+        without_locations=without_locations,
     )
 
 
@@ -211,4 +249,5 @@ async def get_admin_owners(
         page=pagination.page,
         page_size=pagination.page_size,
         total=total,
+        summary=await _owners_summary(db),
     )
