@@ -20,15 +20,15 @@ export interface ConsoleNavItem {
 /** The owner/manager "Contact admin" form page. */
 export const CONTACT_ADMIN_HREF = "/portal/contact-admin";
 
+// Ordered most -> least important for a platform admin: the dashboard, then
+// the time-sensitive queues (claims have a 72h SLA, messages and problem
+// reports need a reply), then listing management, then account directories,
+// then reference data and history, then the admin's own profile.
 export const ADMIN_NAV_ITEMS: ReadonlyArray<ConsoleNavItem> = [
-  { href: "/account", label: "Profile", icon: "user" },
   { href: "/admin/overview", label: "Overview", icon: "chart" },
-  // Every account across all roles, with disable/confirm/reset actions.
-  { href: "/admin/users", label: "Users", icon: "user" },
-  { href: "/admin/owners", label: "Owners", icon: "user" },
-  { href: "/admin/managers", label: "Managers", icon: "user" },
-  { href: "/admin/registered-users", label: "Registered users", icon: "user" },
   { href: "/admin/claims", label: "Claims", icon: "claims" },
+  // "Contact admin" messages from owners/managers (GET /admin/messages).
+  { href: "/admin/messages", label: "Messages", icon: "mail" },
   // Not named "Reports" -- that label is already taken by the
   // report-a-problem triage queue directly below. This page is called
   // "Platform Overview" / "Overview" everywhere (page title, nav label)
@@ -38,12 +38,16 @@ export const ADMIN_NAV_ITEMS: ReadonlyArray<ConsoleNavItem> = [
   { href: "/admin/listings", label: "Listings", icon: "store" },
   // Bulk CSV import of unclaimed listings (POST /admin/import/validate + /commit).
   { href: "/admin/import", label: "Import", icon: "plus" },
-  // "Contact admin" messages from owners/managers (GET /admin/messages).
-  { href: "/admin/messages", label: "Messages", icon: "mail" },
+  // Every account across all roles, with disable/confirm/reset actions.
+  { href: "/admin/users", label: "Users", icon: "user" },
+  { href: "/admin/owners", label: "Owners", icon: "user" },
+  { href: "/admin/managers", label: "Managers", icon: "user" },
+  { href: "/admin/registered-users", label: "Registered users", icon: "user" },
   // Cuisine / dietary / restaurant-type tags (GET/POST/PATCH /admin/taxonomy).
   { href: "/admin/taxonomy", label: "Taxonomy", icon: "tag" },
   // Read-only history of audit_log (GET /admin/audit-log).
   { href: "/admin/audit-log", label: "Audit log", icon: "clock" },
+  { href: "/account", label: "Profile", icon: "user" },
 ];
 
 export const OWNER_NAV_ITEMS: ReadonlyArray<ConsoleNavItem> = [
