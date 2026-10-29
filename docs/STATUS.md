@@ -28,16 +28,20 @@ fully satisfied and asked to stop iterating for now, with an explicit intent
 to revisit later, not a final sign-off.
 
 ## Open PRs
-- Only in-flight docs PRs as of 2026-10-28: this wave-15 tracker/status/
-  cmd-log batch and the DECISIONS.md wave-15 entry. No code PRs open.
+- Only in-flight docs PRs as of 2026-10-28: this wave-16 tracker/status/
+  cmd-log batch and the DECISIONS.md wave-16 entries. No code PRs open.
 
 ## Live state (2026-10-28)
-- Migrations on main through `0021_food_truck_type`, all applied to dev.
+- Migrations on main through `0022_location_daily_stat`. 0001-0021 applied to
+  dev; `0022` needs `alembic_upgrade` after the #269 deploy (the tracking
+  endpoint and Insights error until it runs).
 - Terraform applied by the human 2026-10-28: admin Cognito IAM statement
   (#249) and the post-confirmation Lambda update (#254).
 - Frontend (Amplify) is a separate deploy from the backend workflow. The
   #262 build failed once on a transient Google Fonts fetch in `next/font`
   and succeeded on retry; if it recurs, self-host the fonts.
+- Deferred: migrate Amplify from OAuth/PAT to the GitHub App (needs a
+  planned Terraform sequence, see backlog).
 
 ## Live state (2026-09-25, earlier)
 - Migrations through `0016_location_cuisine` applied to dev via
@@ -53,6 +57,16 @@ to revisit later, not a final sign-off.
   the `set_platform_flag` management command when paid tiers exist.
 - Repo now has "Automatically delete head branches" enabled; the 200+
   merged branches were cleaned up by the user on 2026-09-23.
+
+## Landed 2026-10-28, wave 16 (#265-#269)
+- **Admin summary counts** (#265): summary strip on Users, Registered
+  users, Owners, Managers and Listings (whole-dataset totals).
+- **Admin menu** reordered by importance (#266), made **grouped and
+  collapsible** (#268: desktop groups, phone two-level pill row), and the
+  summary and search panels made **collapsible, collapsed by default** (#267).
+- **Owner analytics** (#269, migration `0022_location_daily_stat`): daily
+  anonymous counters, public tracking beacon, Insights section for owners,
+  managers and admins. Free-tier for now; tier gating deferred.
 
 ## Landed 2026-10-28, wave 15 (#262)
 - **Admin bulk listing import** (#262): `/admin/import` with dry-run

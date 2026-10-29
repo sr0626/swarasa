@@ -671,4 +671,11 @@ git push -u origin feature/admin-bulk-import   # claude
 aws amplify list-jobs --app-id d104yxa4ivcmdu --branch-name main --max-results 3 --profile swarasa-dev --region us-east-1 ...   # user  (frontend build for #262 had failed)
 aws amplify get-job --app-id d104yxa4ivcmdu --branch-name main --job-id <latest> --profile swarasa-dev --region us-east-1 ...   # user
 aws amplify start-job --app-id d104yxa4ivcmdu --branch-name main --job-type RETRY --job-id <failed job> --profile swarasa-dev --region us-east-1   # user  (retry after transient Google Fonts fetch failure; job 197 succeeded)
+git push -u origin docs/wave-262   # claude
+git push -u origin docs/decisions-wave-15   # claude
+git push -u origin feature/admin-summary-counts   # claude
+git push -u origin feat/admin-menu-order   # claude
+git push -u origin feature/collapsible-admin-panels   # claude
+git push -u origin feature/admin-menu-groups   # claude
+git push -u origin feature/owner-analytics   # claude
 ```
