@@ -75,6 +75,8 @@ async def test_reports_only_new_counted(client, db_session, as_user):
     item = body["reports"]["items"][0]
     assert item["brand_name"] == "Spice Route"
     assert item["category"] == "hours_incorrect"
+    # Legacy row (categories NULL) falls back to [category].
+    assert item["categories"] == ["hours_incorrect"]
     assert item["brand_id"] == brand.id
 
 

@@ -2485,16 +2485,26 @@ Body:
 {
   "brand_id": 123,
   "location_id": 456,
-  "category": "address_incorrect",
+  "categories": ["address_incorrect", "hours_incorrect"],
   "details": "They moved across the street to 123 Main St.",
   "reporter_email": "visitor@example.com",
   "website": ""
 }
 ```
-- `category`: `address_incorrect` | `hours_incorrect` | `phone_incorrect`
-  | `price_incorrect` | `menu_incorrect` | `deal_incorrect` |
-  `permanently_closed` | `other`. (`deal_incorrect` added 2026-09-24; the
-  column is plain text validated here, so no migration.)
+- `categories` (multi-select, added 2026-10-28, migration
+  `0023_report_categories`): **1-8** items, each one of `address_incorrect`
+  | `hours_incorrect` | `phone_incorrect` | `price_incorrect` |
+  `menu_incorrect` | `deal_incorrect` | `permanently_closed` | `other`.
+  Duplicates are dropped server-side and the list is stored in the canonical
+  order above (not click order). An empty list, an unknown value, or more
+  than 8 items is `422`. The **first** category after ordering is the
+  report's *primary* one and is also written to the legacy `category` column.
+- `category` (legacy single value, still accepted so an older cached
+  frontend keeps working): treated as `categories: [category]`. Send at least
+  one of `category` / `categories` (neither -> `422`). If both are sent,
+  **`categories` wins** (they need not agree; `category` is still validated
+  against the enum). (`deal_incorrect` added 2026-09-24; values are plain
+  text validated here.)
 - `details`: required, trimmed, 1-2000 chars.
 - `location_id`: optional; must belong to `brand_id` (else `400`
   `invalid_location`).
@@ -2527,7 +2537,14 @@ corrupted listings).
 ### GET /reports
 
 Auth: admin only. Query: `status` (optional; `new` | `resolved` |
-`dismissed`, else `422`), `page`, `page_size` (default 20, max 100).
+`dismissed`, else `422`), `category` (optional; one of the category values,
+else `422`; a report matches when the value is **any** of its `categories`,
+not only the primary), `page`, `page_size` (default 20, max 100). `total`
+counts matching reports (a multi-category report is one row / counted once).
+
+`category` is the primary (first) category; `categories` lists every selected
+category, primary first, and always has >= 1 item (reports filed before
+migration 0023 return `[category]`).
 
 Ordering: `status=new` is **oldest-first** (triage queue); every other
 view (no filter, `resolved`, `dismissed`) is newest-first.
@@ -2544,6 +2561,7 @@ Response: `200`
       "location_id": 456,
       "location_address": "100 Main St, Irving, TX 75038",
       "category": "address_incorrect",
+      "categories": ["address_incorrect", "hours_incorrect"],
       "details": "They moved across the street.",
       "reporter_email": "visitor@example.com",
       "reporter_user_id": null,
@@ -3011,7 +3029,7 @@ Response: `200`
     { "claim_id": 789, "brand_id": 123, "status": "approved", "proof_method": "google_business_profile", "submitted_at": "2026-09-01T10:00:00Z", "reviewed_at": "2026-09-02T10:00:00Z" }
   ],
   "listing_reports": [
-    { "report_id": 44, "brand_id": 123, "location_id": 42, "category": "hours_incorrect", "details": "Closed Mondays now.", "reporter_email": "owner@example.com", "status": "new", "submitted_at": "2026-09-18T10:00:00Z", "reviewed_at": null }
+    { "report_id": 44, "brand_id": 123, "location_id": 42, "category": "hours_incorrect", "categories": ["hours_incorrect", "phone_incorrect"], "details": "Closed Mondays now.", "reporter_email": "owner@example.com", "status": "new", "submitted_at": "2026-09-18T10:00:00Z", "reviewed_at": null }
   ],
   "activity_events": [
     { "event_type": "search", "created_at": "2026-09-20T18:00:00Z", "payload": { "q": "biryani", "cuisine": ["hyderabadi"], "loc": "Irving, TX", "result_count": 7 } },
@@ -3172,7 +3190,7 @@ Response: `200`
   "reports": {
     "count": 2,
     "items": [
-      { "report_id": 3, "brand_id": 88, "brand_name": "Spice Route", "category": "hours_incorrect", "submitted_at": "2026-09-19T08:30:00Z" }
+      { "report_id": 3, "brand_id": 88, "brand_name": "Spice Route", "category": "hours_incorrect", "categories": ["hours_incorrect"], "submitted_at": "2026-09-19T08:30:00Z" }
     ]
   },
   "new_users": {

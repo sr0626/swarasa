@@ -7,6 +7,28 @@
 > the migrations in `backend/migrations/versions/`. Backfilling the other
 > entities is a separate docs task.
 
+## listing_report — `categories` (migration `0023_report_categories`) — multi-select problem categories
+
+A reporter can tick several "What's wrong?" boxes. Additive, nullable:
+
+| Column | Type | Notes |
+|---|---|---|
+| `categories` | `JSON` NULL | Ordered list of every selected category slug, canonical option order, de-duplicated, 1-8 items. NULL on rows created before 0023. |
+
+- `category` (existing, `varchar(32) NOT NULL`) is **unchanged** and holds the
+  PRIMARY category = the first entry of `categories`. Every existing query,
+  index, grouping, export and admin filter keeps working on it.
+- Reads go through `ListingReport.all_categories`, which returns `[category]`
+  when `categories` is NULL, so no backfill is needed.
+- Plain `JSON` (not JSONB/ARRAY) so the SQLite test DB works (same precedent
+  as `deal.applicable_days`). The admin `category` filter matches a quoted
+  substring of the column's text form OR `category = :value`, portable across
+  PostgreSQL and SQLite; no index (the queue is small, status-indexed).
+- No per-category counts exist anywhere; queue/summary counts count reports
+  (`status = 'new'`), so a multi-category report is counted once.
+- CCPA export includes `categories`; deletion is unchanged (only
+  `reporter_email` is nulled).
+
 ## cuisine_tag — admin taxonomy management (migration `0021_food_truck_type`)
 
 `cuisine_tag(id, name UNIQUE slug, display_name, category, is_active NOT NULL

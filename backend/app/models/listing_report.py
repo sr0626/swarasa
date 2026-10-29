@@ -26,7 +26,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, String, Text, func
+from sqlalchemy import JSON, BigInteger, DateTime, ForeignKey, Index, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
@@ -63,7 +63,16 @@ class ListingReport(TimestampMixin, Base):
     # 'permanently_closed' | 'other'
     # — validated at the API boundary (schemas/listing_report.py), stored
     # as plain text so adding a category never needs a migration.
+    #
+    # Multi-select (migration 0023): `category` always holds the PRIMARY
+    # (first, in canonical option order) selected category, so every
+    # existing query/index/grouping/export keeps working unchanged;
+    # `categories` holds the full ordered list. NULL on rows created before
+    # 0023 -> read through `all_categories`, which falls back to
+    # `[category]` (no backfill). Plain `JSON` (not JSONB/ARRAY) so the
+    # SQLite test DB works -- same precedent as `deal.applicable_days`.
     category: Mapped[str] = mapped_column(String(32), nullable=False)
+    categories: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
 
     details: Mapped[str] = mapped_column(Text, nullable=False)
 
@@ -90,6 +99,12 @@ class ListingReport(TimestampMixin, Base):
 
     brand: Mapped["RestaurantBrand"] = relationship()
     location: Mapped["RestaurantLocation | None"] = relationship()
+
+    @property
+    def all_categories(self) -> list[str]:
+        """Every selected category, primary first; `[category]` for rows
+        that predate the `categories` column."""
+        return list(self.categories) if self.categories else [self.category]
 
     def __repr__(self) -> str:  # pragma: no cover
         return (

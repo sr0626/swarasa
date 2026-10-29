@@ -10,6 +10,7 @@ from app.dependencies.db import get_db
 from app.dependencies.pagination import Pagination, pagination_params
 from app.schemas.listing_report import (
     ReportCreate,
+    ReportCategory,
     ReportListResponse,
     ReportOut,
     ReportReceiptOut,
@@ -40,12 +41,17 @@ async def submit_report(
 @router.get("", response_model=ReportListResponse)
 async def list_reports(
     status_filter: ReportStatus | None = Query(default=None, alias="status"),
+    category: ReportCategory | None = Query(default=None),
     pagination: Pagination = Depends(pagination_params),
     db: AsyncSession = Depends(get_db),
     _admin: CurrentUser = Depends(require_admin),
 ) -> ReportListResponse:
-    """Auth: admin only. Optional `status` query filter (new | resolved | dismissed)."""
-    return await listing_report_service.list_reports(db, pagination, status_filter)
+    """Auth: admin only. Optional `status` query filter (new | resolved |
+    dismissed) and `category` filter (matches a report when the value is ANY
+    of its selected categories, not just the primary)."""
+    return await listing_report_service.list_reports(
+        db, pagination, status_filter, category
+    )
 
 
 @router.patch("/{report_id}", response_model=ReportOut)

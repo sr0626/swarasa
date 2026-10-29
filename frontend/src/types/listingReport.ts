@@ -18,7 +18,8 @@ export interface CreateReportInput {
   brand_id: number;
   /** Optional; must belong to `brand_id`. */
   location_id?: number;
-  category: ReportCategory;
+  /** 1-8 selected categories (multi-select); the first is stored as the primary. */
+  categories: ReportCategory[];
   /** 1-2000 chars. */
   details: string;
   /** Optional contact email for an admin follow-up. */
@@ -42,7 +43,10 @@ export interface ListingReport {
   /** The reported location's own page slug; null when no location was picked. */
   location_slug: string | null;
   location_address: string | null;
+  /** Primary (first) category, kept for older consumers. */
   category: ReportCategory;
+  /** Every selected category, primary first (always at least one). */
+  categories: ReportCategory[];
   details: string;
   reporter_email: string | null;
   reporter_user_id: string | null;

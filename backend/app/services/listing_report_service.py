@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import Text, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -55,6 +55,7 @@ def to_report_out(report: ListingReport) -> ReportOut:
             else None
         ),
         category=report.category,
+        categories=report.all_categories,
         details=report.details,
         reporter_email=report.reporter_email,
         reporter_user_id=report.reporter_user_id,
@@ -100,7 +101,10 @@ async def create_report(
     report = ListingReport(
         brand_id=brand.id,
         location_id=body.location_id,
+        # `body` is normalised by ReportCreate: `categories` is the
+        # de-duplicated canonical-order list and `category` its first entry.
         category=body.category,
+        categories=body.categories,
         details=body.details,
         reporter_email=reporter_email,
         reporter_user_id=current_user.cognito_sub if current_user is not None else None,
@@ -111,14 +115,34 @@ async def create_report(
     return report
 
 
+def _category_matches(category: str):
+    """True when `category` is the report's primary OR any of its selected
+    categories. `categories` is a JSON list of enum slugs, so a quoted
+    substring match on its text form is exact (slugs never contain quotes,
+    and the surrounding quotes stop `other` matching inside another slug);
+    it is portable across PostgreSQL JSON and the SQLite test DB. Rows that
+    predate multi-select (`categories` NULL) match on `category`.
+    """
+    return or_(
+        ListingReport.category == category,
+        cast(ListingReport.categories, Text).contains(f'"{category}"', autoescape=True),
+    )
+
+
 async def list_reports(
-    db: AsyncSession, pagination: Pagination, status: str | None
+    db: AsyncSession,
+    pagination: Pagination,
+    status: str | None,
+    category: str | None = None,
 ) -> ReportListResponse:
     base = select(ListingReport)
     count_stmt = select(func.count()).select_from(ListingReport)
     if status is not None:
         base = base.where(ListingReport.status == status)
         count_stmt = count_stmt.where(ListingReport.status == status)
+    if category is not None:
+        base = base.where(_category_matches(category))
+        count_stmt = count_stmt.where(_category_matches(category))
 
     # Triage queue reads oldest-first; every other view (resolved,
     # dismissed, or "all") reads newest-first.

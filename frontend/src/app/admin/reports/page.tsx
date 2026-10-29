@@ -9,7 +9,8 @@ import InfoPanel from "@/components/ui/InfoPanel";
 import ReportsTriagePanel from "@/components/admin/ReportsTriagePanel";
 import { ApiError } from "@/lib/api/client";
 import { listReports } from "@/lib/api/listingReports";
-import type { ListingReport, ReportStatus } from "@/types/listingReport";
+import { REPORT_CATEGORIES } from "@/lib/constants/reportCategories";
+import type { ListingReport, ReportCategory, ReportStatus } from "@/types/listingReport";
 
 export const metadata: Metadata = {
   title: "Reports Triage",
@@ -27,7 +28,7 @@ const TABS: ReadonlyArray<{ value: StatusTab; label: string }> = [
 ];
 
 interface AdminReportsPageProps {
-  searchParams: { status?: string; page?: string };
+  searchParams: { status?: string; page?: string; category?: string };
 }
 
 function parseTab(raw: string | undefined): StatusTab {
@@ -39,9 +40,14 @@ function parsePage(raw: string | undefined): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
 }
 
-function hrefFor(tab: StatusTab, page: number): string {
+function parseCategory(raw: string | undefined): ReportCategory | null {
+  return REPORT_CATEGORIES.find((c) => c.value === raw)?.value ?? null;
+}
+
+function hrefFor(tab: StatusTab, page: number, category: ReportCategory | null = null): string {
   const params = new URLSearchParams();
   if (tab !== "new") params.set("status", tab);
+  if (category) params.set("category", category);
   if (page > 1) params.set("page", String(page));
   const qs = params.toString();
   return qs ? `/admin/reports?${qs}` : "/admin/reports";
@@ -52,6 +58,7 @@ export default async function AdminReportsPage({ searchParams }: AdminReportsPag
 
   const tab = parseTab(searchParams.status);
   const page = parsePage(searchParams.page);
+  const category = parseCategory(searchParams.category);
   const statusFilter: ReportStatus | null = tab === "all" ? null : tab;
 
   let reports: ListingReport[] = [];
@@ -59,7 +66,7 @@ export default async function AdminReportsPage({ searchParams }: AdminReportsPag
   let loadError: string | null = null;
   try {
     const result = await listReports(
-      { status: statusFilter ?? undefined, page, page_size: PAGE_SIZE },
+      { status: statusFilter ?? undefined, category: category ?? undefined, page, page_size: PAGE_SIZE },
       session.accessToken
     );
     reports = result.results;
@@ -87,7 +94,7 @@ export default async function AdminReportsPage({ searchParams }: AdminReportsPag
         {TABS.map((t) => (
           <Link
             key={t.value}
-            href={hrefFor(t.value, 1)}
+            href={hrefFor(t.value, 1, category)}
             aria-current={t.value === tab ? "page" : undefined}
             className={
               t.value === tab
@@ -100,6 +107,37 @@ export default async function AdminReportsPage({ searchParams }: AdminReportsPag
         ))}
       </nav>
 
+      {/* Plain GET form so the filter is a real, shareable URL. A report
+          matches when the chosen category is ANY of the categories it was
+          filed under, not just its primary one. */}
+      <form method="get" action="/admin/reports" className="mt-4 flex flex-wrap items-end gap-2">
+        {tab !== "new" && <input type="hidden" name="status" value={tab} />}
+        <div>
+          <label htmlFor="reports_category" className="block text-sm font-semibold text-brand-ink">
+            Category
+          </label>
+          <select
+            id="reports_category"
+            name="category"
+            defaultValue={category ?? ""}
+            className="mt-1 min-h-[44px] rounded-brand-control border border-brand-border bg-white px-3 text-sm text-brand-ink focus:border-brand-accent focus:outline-none"
+          >
+            <option value="">All categories</option>
+            {REPORT_CATEGORIES.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <button
+          type="submit"
+          className="flex min-h-[44px] items-center rounded-brand-control border border-brand-border px-4 text-sm font-semibold text-brand-ink-muted transition hover:bg-brand-chip"
+        >
+          Filter
+        </button>
+      </form>
+
       <div className="mt-6">
         {loadError ? (
           <InfoPanel title="Couldn't load reports" body={loadError} />
@@ -111,7 +149,7 @@ export default async function AdminReportsPage({ searchParams }: AdminReportsPag
             {/* Keyed so a filter/page change remounts with fresh data
                 rather than reusing the previous view's local state. */}
             <ReportsTriagePanel
-              key={`${tab}-${page}`}
+              key={`${tab}-${page}-${category ?? "any"}`}
               initialReports={reports}
               statusFilter={statusFilter}
             />
@@ -126,7 +164,7 @@ export default async function AdminReportsPage({ searchParams }: AdminReportsPag
         >
           {page > 1 ? (
             <Link
-              href={hrefFor(tab, page - 1)}
+              href={hrefFor(tab, page - 1, category)}
               className="flex min-h-[40px] items-center rounded-brand-control border border-brand-border px-4 font-semibold text-brand-ink-muted transition hover:bg-brand-chip"
             >
               Previous
@@ -137,7 +175,7 @@ export default async function AdminReportsPage({ searchParams }: AdminReportsPag
           </span>
           {page < totalPages ? (
             <Link
-              href={hrefFor(tab, page + 1)}
+              href={hrefFor(tab, page + 1, category)}
               className="flex min-h-[40px] items-center rounded-brand-control border border-brand-border px-4 font-semibold text-brand-ink-muted transition hover:bg-brand-chip"
             >
               Next

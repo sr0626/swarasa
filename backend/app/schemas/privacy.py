@@ -64,7 +64,9 @@ class ListingReportExportOut(BaseModel):
     report_id: int
     brand_id: int
     location_id: int | None
+    # Primary (first) category, plus every selected category (migration 0023).
     category: str
+    categories: list[str]
     details: str
     reporter_email: str | None
     status: str

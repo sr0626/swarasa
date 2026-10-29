@@ -306,6 +306,7 @@ async def export_my_data(db: AsyncSession, current_user) -> DataExportOut:
                 brand_id=r.brand_id,
                 location_id=r.location_id,
                 category=r.category,
+                categories=r.all_categories,
                 details=r.details,
                 reporter_email=r.reporter_email,
                 status=r.status,
