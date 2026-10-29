@@ -206,3 +206,26 @@ the previous pending one. Accepting an invite creates an ordinary
 `location_manager` row (audited); `manager_invite` create/revoke are audited
 as `table_name="manager_invite"` without the email. Included in CCPA export;
 email redacted on approved deletion.
+
+## location_daily_stat (migration `0022_location_daily_stat`) — anonymous owner-analytics counters
+
+One row per (location, UTC day). Columns: `location_id` (FK
+`restaurant_location`, ON DELETE CASCADE), `stat_date` (DATE, **UTC** calendar
+day — one consistent day boundary, no timezone lookup on the write path),
+and integer counters `page_views`, `tile_clicks`, `deal_views`,
+`website_clicks`, `directions_clicks`, `phone_clicks` (all `NOT NULL DEFAULT
+0`). Primary key `(location_id, stat_date)` (no surrogate id).
+
+Written by an atomic upsert (`INSERT ... ON CONFLICT (location_id, stat_date)
+DO UPDATE SET col = col + 1`; PostgreSQL in production, SQLite in tests) from
+the public `POST /track/location/{id}`. Events by the location's own
+owner / assigned manager / any admin are dropped before the write.
+
+**Privacy / CCPA:** aggregate integers only — no IP address, user id, session
+id, cookie, user agent or per-visit row. There is therefore no personal data to
+export or delete, so this table has **no entry in `GET /auth/me/data-export`
+or the deletion flow**. It is deliberately separate from `user_activity_event`
+(per-signed-in-user search/tile-click history, personal data, 12-month
+retention); the two are never mixed. Rows cascade with the location. Not on
+the audited-entity list (counters are not business records) — no `audit_log`.
+No retention purge in v1 (≈ 1 small row per location per day).

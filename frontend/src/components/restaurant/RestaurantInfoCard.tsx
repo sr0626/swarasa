@@ -100,6 +100,7 @@ export default function RestaurantInfoCard({
           <>
             <a
               href={mapsSearchUrl}
+              data-track="directions"
               target="_blank"
               rel="noopener noreferrer"
               className={linkClass}
@@ -116,6 +117,7 @@ export default function RestaurantInfoCard({
             <div className="mt-1 flex flex-wrap gap-2">
               <a
                 href={mapsDirectionsUrl}
+                data-track="directions"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex min-h-[44px] flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-brand-pill border border-brand-ink px-4 text-sm font-semibold text-brand-ink transition hover:bg-brand-chip focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent"
@@ -136,7 +138,7 @@ export default function RestaurantInfoCard({
             </div>
 
             {location.phone && (
-              <a href={`tel:${phoneHref(location.phone)}`} className={linkClass}>
+              <a href={`tel:${phoneHref(location.phone)}`} data-track="phone" className={linkClass}>
                 <PhoneIcon className="h-4 w-4 shrink-0" />
                 {formatPhone(location.phone)}
               </a>
@@ -147,6 +149,7 @@ export default function RestaurantInfoCard({
         {site && (
           <a
             href={site.href}
+            data-track="website"
             target="_blank"
             rel="noopener noreferrer"
             className={linkClass}

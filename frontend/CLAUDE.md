@@ -208,7 +208,12 @@ NEXT_PUBLIC_MAPS_TILE_URL    OpenStreetMap tile URL (no key needed)
   control shows only when the API's `menu_photos_enabled` is true
   (docs/API_CONTRACTS.md "Menu")
 - Manager dashboard (Phase 2)
-- Analytics charts (Phase 2)
+- Analytics charts (Phase 2) — **basic "Insights" section pulled forward
+  2026-10-28** (direct user instruction): range switcher, stat cards and a plain
+  SVG bar series in the location editor (`components/portal/LocationInsights.tsx`,
+  logic in `lib/portal/analyticsView.ts`), plus the best-effort public beacons
+  (`lib/analytics/track.ts`, `components/restaurant/LocationTracker.tsx`).
+  No chart library; no tier gating (deferred with payments).
 - Natural language search UI (Phase 3)
 - Voice search (Phase 3)
 

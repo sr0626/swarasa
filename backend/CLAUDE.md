@@ -214,6 +214,9 @@ These routes are explicitly public — all others require auth:
 - `GET /restaurants/{id}/locations`
 - `GET /locations/{id}`
 - `GET /cuisine-tags`
+- `POST /track/location/{id}` (anonymous engagement counter; always `204`,
+  best-effort, optional token used only to drop the owner's/manager's/admin's
+  own views — `get_current_user_lenient`)
 - `POST /reports` (anonymous "report a problem"; uses `get_current_user_optional`
   to attribute a signed-in caller — honeypot + length limits are its only
   anti-abuse controls, see `services/listing_report_service.py`)
@@ -261,7 +264,12 @@ JWT_SECRET            Cognito JWT public key (fetched from Cognito endpoint)
   `null` and only the public `has_deal_today` boolean. One choke point:
   `deal_service.caller_may_view_deal_content_for_location`. `deals_hidden`
   and `deal.is_active` still suppress content for everyone.
-- Analytics endpoints (Phase 2)
+- Analytics endpoints (Phase 2) — **basic owner analytics pulled forward
+  2026-10-28 by direct user instruction**: anonymous per-location daily
+  counters (`location_daily_stat`), public `POST /track/location/{id}` and
+  owner/manager/admin `GET /locations/{id}/analytics` (docs/API_CONTRACTS.md
+  "Owner analytics"). Visible to every owner/manager (tier-gating deferred with
+  payments); no personal data stored. Advanced analytics stays Phase 4.
 - `open_now` as a `/search` query filter (Phase 3 — see DECISIONS.md
   "Restaurant hours"; grouped with map view / NLS search). Display-only
   open/closed status is NOT deferred — that's Phase 1, see above.

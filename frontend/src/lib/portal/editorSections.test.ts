@@ -7,17 +7,17 @@ import { statusMenuActions } from "./locationStatusActions.ts";
 
 test("owner sees every section, Deals then Hours first, Managers last", () => {
   const ids = editorSectionsForRole("owner").map((s) => s.id);
-  assert.deepEqual(ids, ["deals", "hours", "menu", "photos", "about", "tags", "info", "managers"]);
+  assert.deepEqual(ids, ["deals", "hours", "menu", "photos", "about", "tags", "info", "insights", "managers"]);
 });
 
-test("an assigned manager does not get the Managers link", () => {
+test("an assigned manager does not get the Managers link but does get Insights", () => {
   const ids = editorSectionsForRole("manager").map((s) => s.id);
-  assert.deepEqual(ids, ["deals", "hours", "menu", "photos", "about", "tags", "info"]);
+  assert.deepEqual(ids, ["deals", "hours", "menu", "photos", "about", "tags", "info", "insights"]);
 });
 
 test("admin gets the Managers link too (invite on the owner's behalf)", () => {
   const ids = editorSectionsForRole("admin").map((s) => s.id);
-  assert.deepEqual(ids, ["deals", "hours", "menu", "photos", "about", "tags", "info", "managers"]);
+  assert.deepEqual(ids, ["deals", "hours", "menu", "photos", "about", "tags", "info", "insights", "managers"]);
 });
 
 test("deals and menu keep the anchor ids the redirect pages use", () => {

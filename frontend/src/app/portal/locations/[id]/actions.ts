@@ -27,6 +27,9 @@ import {
   updateLocationPhoto,
   updateLocationStatus,
 } from "@/lib/api/locations";
+import { getLocationAnalytics } from "@/lib/api/analytics";
+import { parseRange } from "@/lib/portal/analyticsView";
+import type { LocationAnalytics } from "@/types/analytics";
 import { submitReopenRequest } from "@/lib/api/locationReopen";
 import {
   createLocationDeal,
@@ -990,5 +993,22 @@ export async function removeMenuItemPhotoAction(
     return { ok: true, data: item };
   } catch (error) {
     return { ok: false, error: messageFor(error, "Could not remove this photo.") };
+  }
+}
+
+/** GET /locations/{id}/analytics — the Insights section's range switcher.
+ * Read-only; the backend re-validates owner / assigned manager / admin. */
+export async function getLocationAnalyticsAction(
+  locationId: number,
+  days: number
+): Promise<ActionResult<LocationAnalytics>> {
+  const auth = await requireLocationSession();
+  if (!auth.ok) return auth;
+
+  try {
+    const data = await getLocationAnalytics(locationId, parseRange(days), auth.accessToken);
+    return { ok: true, data };
+  } catch (error) {
+    return { ok: false, error: messageFor(error, "Could not load insights right now.") };
   }
 }

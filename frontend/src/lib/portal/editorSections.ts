@@ -6,7 +6,7 @@
 //
 // Order is by how often each section is used (user request 2026-09-24):
 // Deals first, then Hours, then Menu, Photos, About, Tags (this location's cuisine &
-// dietary tags), Info, Managers last.
+// dietary tags), Info, Insights (anonymous counters, all roles), Managers last.
 // The page renders its panels in this same order (it maps over this list's
 // ids), so the link row and the page can't drift apart.
 
@@ -18,6 +18,7 @@ export type EditorSectionId =
   | "about"
   | "tags"
   | "info"
+  | "insights"
   | "managers";
 
 export interface EditorSection {
@@ -38,6 +39,7 @@ const ALL_SECTIONS: readonly EditorSection[] = [
   { id: "about", anchorId: "sec-about", label: "About" },
   { id: "tags", anchorId: "sec-tags", label: "Tags" },
   { id: "info", anchorId: "sec-info", label: "Info" },
+  { id: "insights", anchorId: "sec-insights", label: "Insights" },
   { id: "managers", anchorId: "sec-managers", label: "Managers" },
 ];
 
