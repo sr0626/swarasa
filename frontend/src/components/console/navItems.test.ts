@@ -50,3 +50,16 @@ test("admin menu has Taxonomy, highlighted on its own page", () => {
   assert.ok(ADMIN_NAV_ITEMS.some((i) => i.href === "/admin/taxonomy" && i.label === "Taxonomy"));
   assert.equal(activeNavHref("/admin/taxonomy", ADMIN_NAV_ITEMS), "/admin/taxonomy");
 });
+
+test("admin menu is ordered by importance: Overview first, queues before directories, Profile last", () => {
+  const labels = ADMIN_NAV_ITEMS.map((i) => i.label);
+  assert.equal(labels[0], "Overview");
+  assert.equal(labels[labels.length - 1], "Profile");
+  const idx = (l: string) => labels.indexOf(l);
+  assert.ok(idx("Claims") < idx("Users"));
+  assert.ok(idx("Messages") < idx("Users"));
+  assert.ok(idx("Listings") < idx("Owners"));
+  assert.ok(idx("Taxonomy") < idx("Audit log"));
+  assert.equal(new Set(labels).size, labels.length);
+});
+
