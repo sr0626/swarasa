@@ -2,6 +2,8 @@
 // "GET /admin/registered-users" -- the admin "Registered users" report
 // (email, Cognito status, signup date, last-visited).
 
+import type { AdminRegisteredUsersSummary } from "./adminSummary";
+
 /** `sort` values: newest/oldest by signup date, email A-Z, last_seen most-recent-first. */
 export type RegisteredUserSort = "newest" | "oldest" | "email" | "last_seen";
 
@@ -26,6 +28,8 @@ export interface RegisteredUsersResponse {
   page: number;
   page_size: number;
   total: number;
+  /** Whole-pool counts, unaffected by search/page. */
+  summary?: AdminRegisteredUsersSummary;
 }
 
 export interface RegisteredUsersParams {

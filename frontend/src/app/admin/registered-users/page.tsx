@@ -37,6 +37,8 @@ import {
 } from "@/lib/adminReportView";
 import { AdminReportPager, AdminReportSearchForm } from "@/components/admin/AdminReportControls";
 import LocalDateTime from "@/components/ui/LocalDateTime";
+import AdminSummaryStrip from "@/components/admin/AdminSummaryStrip";
+import { registeredUsersSummaryChips, truncatedNote } from "@/lib/adminSummary";
 
 export const metadata: Metadata = {
   title: "Registered Users",
@@ -122,6 +124,13 @@ export default async function RegisteredUsersPage({ searchParams }: RegisteredUs
         anyone who hasn&rsquo;t had a tracked authenticated request yet. Times are shown in your
         local timezone.
       </p>
+
+      {data?.summary && (
+        <AdminSummaryStrip
+          chips={registeredUsersSummaryChips(data.summary)}
+          note={truncatedNote(data.summary.truncated)}
+        />
+      )}
 
       <AdminReportSearchForm
         action={BASE_PATH}

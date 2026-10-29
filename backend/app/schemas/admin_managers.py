@@ -8,6 +8,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from app.schemas.admin_summary import AdminManagersSummary
 from app.schemas.utc import UtcDatetime
 
 ManagerSort = Literal["newest", "oldest", "most_locations", "email", "last_seen"]
@@ -61,3 +62,5 @@ class AdminManagersResponse(BaseModel):
     # True when the Cognito email lookup failed: emails are `null`, and a
     # `q` search then matches names only.
     email_lookup_degraded: bool = False
+    # Whole-dataset counts, independent of search/page (additive).
+    summary: AdminManagersSummary = AdminManagersSummary()

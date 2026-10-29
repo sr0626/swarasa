@@ -29,6 +29,8 @@ import {
   parsePage,
 } from "@/lib/adminOwnersView";
 import AddOwnerForm from "@/components/admin/AddOwnerForm";
+import AdminSummaryStrip from "@/components/admin/AdminSummaryStrip";
+import { ownersSummaryChips } from "@/lib/adminSummary";
 import LocalDateTime from "@/components/ui/LocalDateTime";
 import type { AdminOwnerRow } from "@/types/adminOwners";
 
@@ -82,6 +84,8 @@ export default async function AdminOwnersPage({ searchParams }: OwnersPageProps)
         </Link>
         .
       </p>
+
+      {data?.summary && <AdminSummaryStrip chips={ownersSummaryChips(data.summary)} />}
 
       <AddOwnerForm />
 

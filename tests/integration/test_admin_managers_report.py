@@ -77,7 +77,9 @@ async def test_empty_state(client, db_session, as_user, cognito):
     as_user("admin")
     resp = await client.get("/admin/managers")
     assert resp.status_code == 200, resp.text
-    assert resp.json() == {
+    body = resp.json()
+    body.pop("summary")  # covered by test_admin_summary_counts.py
+    assert body == {
         "results": [],
         "page": 1,
         "page_size": 20,

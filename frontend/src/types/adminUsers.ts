@@ -1,6 +1,8 @@
 // Types for GET /admin/users and POST /admin/users/{username}/<action>,
 // matching docs/API_CONTRACTS.md "GET /admin/users".
 
+import type { AdminUsersSummary } from "./adminSummary";
+
 export type AdminUserRole = "admin" | "owner" | "manager" | "registered_user";
 export type AdminUserStatusFilter = "enabled" | "disabled" | "unconfirmed";
 export type AdminUserSort = "newest" | "oldest" | "email" | "last_seen";
@@ -34,6 +36,8 @@ export interface AdminUsersResponse {
   total: number;
   /** True when a group exceeded the per-group cap, so the list is incomplete. */
   truncated: boolean;
+  /** Whole-pool counts, unaffected by search/role/status/page. */
+  summary?: AdminUsersSummary;
 }
 
 export interface AdminUsersParams {

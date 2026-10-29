@@ -205,6 +205,9 @@ class RegisteredUserRecord:
     email: str | None
     status: str
     signup_at: datetime | None
+    # Cognito `Enabled` (False = disabled by an admin). Defaults True so
+    # existing constructors keep working.
+    enabled: bool = True
 
 
 def list_registered_users() -> list[RegisteredUserRecord]:
@@ -254,6 +257,7 @@ def list_registered_users() -> list[RegisteredUserRecord]:
                     email=attrs.get("email"),
                     status=user.get("UserStatus", "UNKNOWN"),
                     signup_at=user.get("UserCreateDate"),
+                    enabled=bool(user.get("Enabled", True)),
                 )
             )
         next_token = response.get("NextToken")

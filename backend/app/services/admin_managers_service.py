@@ -41,7 +41,9 @@ from app.schemas.admin_managers import (
     ManagerOwnerOut,
     ManagerSort,
 )
+from app.schemas.admin_summary import AdminManagersSummary
 from app.services import admin_actor_service
+from app.services.admin_summary import seen_cutoff, seen_recently
 
 _CHUNK = 500
 
@@ -200,6 +202,15 @@ async def get_admin_managers(
             )
         )
 
+    cutoff = seen_cutoff()
+    active_count = sum(1 for m in managers if m.active_location_count > 0)
+    summary = AdminManagersSummary(
+        total=len(managers),
+        active=active_count,
+        inactive=len(managers) - active_count,
+        seen_last_30_days=sum(1 for m in managers if seen_recently(m.last_seen_at, cutoff)),
+    )
+
     term = (search or "").strip()
     if term:
         managers = [m for m in managers if _matches(m, term)]
@@ -213,4 +224,5 @@ async def get_admin_managers(
         page_size=pagination.page_size,
         total=total,
         email_lookup_degraded=degraded,
+        summary=summary,
     )

@@ -27,6 +27,8 @@ import {
 } from "@/lib/adminUsersView";
 import { AdminReportPager } from "@/components/admin/AdminReportControls";
 import AdminUsersPanel from "@/components/admin/AdminUsersPanel";
+import AdminSummaryStrip from "@/components/admin/AdminSummaryStrip";
+import { truncatedNote, usersSummaryChips } from "@/lib/adminSummary";
 
 export const metadata: Metadata = {
   title: "Users",
@@ -97,6 +99,13 @@ export default async function AdminUsersPage({ searchParams }: UsersPageProps) {
         </Link>
         . Times are shown in your local timezone.
       </p>
+
+      {data?.summary && (
+        <AdminSummaryStrip
+          chips={usersSummaryChips(data.summary)}
+          note={truncatedNote(data.summary.truncated)}
+        />
+      )}
 
       <form
         method="get"

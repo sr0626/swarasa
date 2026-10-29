@@ -5,6 +5,7 @@
 // public, owner or manager payload.
 import type { CuisineTag } from "./cuisine";
 import type { LocationStatus } from "./location";
+import type { AdminListingsSummary } from "./adminSummary";
 
 export type ListingCreatorRole = "owner" | "manager" | "admin" | "system";
 
@@ -63,6 +64,8 @@ export interface AdminListingsResponse {
   page: number;
   page_size: number;
   total: number;
+  /** Platform-wide live brand/location counts, unaffected by filters. */
+  summary?: AdminListingsSummary;
 }
 
 export type AdminListingSort = "newest" | "oldest" | "followers";

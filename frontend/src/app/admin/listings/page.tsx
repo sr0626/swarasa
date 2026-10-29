@@ -31,6 +31,9 @@ import AdminListingsPanel, {
   type AdminListingsFilters,
 } from "@/components/admin/AdminListingsPanel";
 import { parseListingStatusFilter } from "@/lib/adminListings";
+import AdminSummaryStrip from "@/components/admin/AdminSummaryStrip";
+import { listingsSummaryChips } from "@/lib/adminSummary";
+import type { AdminListingsSummary } from "@/types/adminSummary";
 import type { AdminListing, AdminListingSort } from "@/types/adminListings";
 
 export const metadata: Metadata = {
@@ -97,6 +100,7 @@ export default async function AdminListingsPage({ searchParams }: AdminListingsP
 
   let brands: AdminListing[] = [];
   let total = 0;
+  let summary: AdminListingsSummary | undefined;
   let loadError: string | null = null;
   try {
     const result = await getAdminListings(
@@ -105,6 +109,7 @@ export default async function AdminListingsPage({ searchParams }: AdminListingsP
     );
     brands = result.results;
     total = result.total;
+    summary = result.summary;
   } catch (error) {
     loadError =
       error instanceof ApiError
@@ -125,6 +130,8 @@ export default async function AdminListingsPage({ searchParams }: AdminListingsP
         or deactivate a single location. Filtering by status, tier or city highlights WHICH of a
         restaurant&rsquo;s locations matches.
       </p>
+
+      {summary && <AdminSummaryStrip chips={listingsSummaryChips(summary)} />}
 
       {loadError ? (
         <p className="mt-6 rounded-brand-control bg-brand-closed-bg px-3 py-2.5 text-sm text-brand-closed">

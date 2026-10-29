@@ -13,6 +13,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 from app.schemas.admin_overview import StatusBreakdown
+from app.schemas.admin_summary import AdminOwnersSummary
 from app.schemas.utc import UtcDatetime
 
 OwnerSort = Literal["newest", "oldest", "most_locations", "email"]
@@ -56,3 +57,5 @@ class AdminOwnersResponse(BaseModel):
     page: int
     page_size: int
     total: int
+    # Whole-dataset counts, independent of search/page (additive).
+    summary: AdminOwnersSummary = AdminOwnersSummary()

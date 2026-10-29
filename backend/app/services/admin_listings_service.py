@@ -41,6 +41,7 @@ from app.schemas.admin_listings import (
     AdminListingSort,
     AdminListingsResponse,
 )
+from app.schemas.admin_summary import AdminListingsSummary
 from app.schemas.cuisine import CuisineTagOut
 from app.services import admin_actor_service, cuisine_service
 from app.services.restaurant_service import brand_level_filters
@@ -67,6 +68,39 @@ def _location_matches(
     if city and (location.city or "").strip().lower() != city.strip().lower():
         return False
     return True
+
+
+async def _listings_summary(db: AsyncSession) -> AdminListingsSummary:
+    """Two small aggregates over LIVE (not soft-deleted) brands, independent
+    of every filter: brand count + unclaimed count, and locations GROUP BY
+    status."""
+    brands, unclaimed = (
+        await db.execute(
+            select(
+                func.count(RestaurantBrand.id),
+                func.count(RestaurantBrand.id).filter(RestaurantBrand.is_claimed.is_(False)),
+            ).where(RestaurantBrand.deleted_at.is_(None))
+        )
+    ).one()
+    by_status: dict[str, int] = {}
+    for status_value, count in (
+        await db.execute(
+            select(RestaurantLocation.status, func.count(RestaurantLocation.id))
+            .join(RestaurantBrand, RestaurantBrand.id == RestaurantLocation.brand_id)
+            .where(RestaurantBrand.deleted_at.is_(None))
+            .group_by(RestaurantLocation.status)
+        )
+    ).all():
+        by_status[status_value] = count
+    return AdminListingsSummary(
+        brands=brands,
+        unclaimed_brands=unclaimed,
+        locations=sum(by_status.values()),
+        active=by_status.get(RestaurantLocation.STATUS_ACTIVE, 0),
+        coming_soon=by_status.get(RestaurantLocation.STATUS_COMING_SOON, 0),
+        owner_deactivated=by_status.get(RestaurantLocation.STATUS_OWNER_DEACTIVATED, 0),
+        closed_pending_reopen=by_status.get(RestaurantLocation.STATUS_CLOSED_PENDING_REOPEN, 0),
+    )
 
 
 async def get_admin_listings(
@@ -129,9 +163,14 @@ async def get_admin_listings(
         .scalars()
         .all()
     )
+    summary = await _listings_summary(db)
     if not brands:
         return AdminListingsResponse(
-            results=[], page=pagination.page, page_size=pagination.page_size, total=total
+            results=[],
+            page=pagination.page,
+            page_size=pagination.page_size,
+            total=total,
+            summary=summary,
         )
 
     brand_ids = [b.id for b in brands]
@@ -250,5 +289,9 @@ async def get_admin_listings(
         )
 
     return AdminListingsResponse(
-        results=results, page=pagination.page, page_size=pagination.page_size, total=total
+        results=results,
+        page=pagination.page,
+        page_size=pagination.page_size,
+        total=total,
+        summary=summary,
     )

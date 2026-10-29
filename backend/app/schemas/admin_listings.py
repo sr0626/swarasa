@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 from app.schemas.cuisine import CuisineTagOut
 from app.schemas.location import LocationStatusValue
+from app.schemas.admin_summary import AdminListingsSummary
 from app.schemas.utc import UtcDatetime
 
 # Who created a record, per its `audit_log` "create" row:
@@ -92,3 +93,6 @@ class AdminListingsResponse(BaseModel):
     page: int
     page_size: int
     total: int
+    # Platform-wide counts of live brands/locations, independent of every
+    # filter and of page (additive).
+    summary: AdminListingsSummary = AdminListingsSummary()
