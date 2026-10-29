@@ -20,11 +20,15 @@ Stateless two-step design (no import-batch table, no migration):
      whole file after a successful import creates nothing.
 
 Written listings follow the data-seeding decision (docs/DECISIONS.md "Data
-seeding: admin-curated import ..."): UNCLAIMED (`owner_id` NULL,
-`is_claimed=false`), location `status='active'` + `is_verified=true` (the
-admin reviewed the validation report before confirming), free tier. Audit rows
-for each created brand/location carry actor = the admin and
-`provenance: "bulk_import"`.
+seeding: admin-curated import ...") EXCEPT visibility (docs/DECISIONS.md "Bulk
+import is invisible by default"): UNCLAIMED (`owner_id` NULL,
+`is_claimed=false`), `is_verified=true`, free tier, but location
+`status='coming_soon'` ALWAYS -- hidden everywhere, even when complete. The
+admin opens each one, completes what is missing and activates it through the
+normal server rule (`listing_readiness`). The optional `hours` column only
+shortens the per-row `missing` list. Audit rows for each created
+brand/location carry actor = the admin, `provenance: "bulk_import"` and the
+location's `missing` list.
 
 Geocoding is NOT done here: the Lambda has no route to the internet (no NAT
 Gateway). The Next.js server action geocodes before calling commit; rows with
@@ -44,6 +48,7 @@ from app.dependencies.auth import CurrentUser
 from app.models.cuisine_tag import CuisineTag
 from app.models.restaurant_brand import RestaurantBrand
 from app.models.restaurant_location import RestaurantLocation
+from app.core.bulk_import_hours import HoursDay
 from app.schemas.admin_import import (
     CommittedRowOut,
     ImportCommitResponse,
@@ -63,6 +68,7 @@ from app.services.restaurant_bulk_import_service import (
     _link_cuisine_tag,
     load_active_cuisine_tags,
     match_cuisine_tag_text,
+    missing_for_new_listing,
 )
 from app.services.restaurant_service import slugify
 
@@ -85,6 +91,8 @@ class RowVerdict:
     name_key: str = ""
     addr_key: str = ""
     phone: str | None = None
+    # What is still needed before the (always hidden) listing can be activated.
+    missing: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -105,6 +113,15 @@ def _echo_name(raw: ImportRowIn) -> str:
 
 
 def evaluate_row(raw: ImportRowIn, check: RowCheck, ctx: ImportContext) -> RowVerdict:
+    """Judge one row (see `_judge_row`), then attach the activation checklist
+    to rows that may be imported."""
+    verdict = _judge_row(raw, check, ctx)
+    if verdict.status in ("valid", "warning"):
+        verdict.missing = predict_missing(verdict.values)
+    return verdict
+
+
+def _judge_row(raw: ImportRowIn, check: RowCheck, ctx: ImportContext) -> RowVerdict:
     """Judge one row. Order: field errors -> definite duplicate -> brand
     conflicts -> possible duplicate / unknown type (warnings). A definite
     duplicate wins over a brand conflict so a re-upload of an already
@@ -211,6 +228,22 @@ def evaluate_row(raw: ImportRowIn, check: RowCheck, ctx: ImportContext) -> RowVe
         else:
             verdict.matched_tag = tag
     return verdict
+
+
+def predict_missing(values: dict[str, object]) -> list[str]:
+    """Everything still needed before this row's listing (always created
+    hidden) can be activated -- the very rule the server applies at
+    activation time, evaluated on a transient location."""
+    location = RestaurantLocation(
+        address_line1=str(values.get("address_line1") or ""),
+        city=str(values.get("city") or ""),
+        state=str(values.get("state") or ""),
+        postal_code=str(values.get("postal_code") or ""),
+        phone=values.get("phone") if isinstance(values.get("phone"), str) else None,  # type: ignore[arg-type]
+    )
+    hours = values.get("hours")
+    days: tuple[HoursDay, ...] = tuple(hours) if isinstance(hours, tuple) else ()
+    return missing_for_new_listing(location, str(values.get("name") or ""), days)
 
 
 def _register(verdict: RowVerdict, ctx: ImportContext) -> None:
@@ -327,6 +360,7 @@ async def validate_rows(db: AsyncSession, rows: list[ImportRowIn]) -> ImportVali
                 issues=[_to_issue_out(i) for i in verdict.issues],
                 needs_geocoding=verdict.needs_geocoding,
                 matched_tag=verdict.matched_tag.name if verdict.matched_tag else None,
+                missing=verdict.missing,
                 duplicate_of_row=verdict.dup.entry.row_number if verdict.dup else None,
                 duplicate_of_listing_id=verdict.dup.entry.listing_id if verdict.dup else None,
             )
@@ -334,6 +368,8 @@ async def validate_rows(db: AsyncSession, rows: list[ImportRowIn]) -> ImportVali
 
     def count(status: str) -> int:
         return sum(1 for r in out if r.status == status)
+
+    importable = [r for r in out if r.status in ("valid", "warning")]
 
     return ImportValidateResponse(
         rows=out,
@@ -344,6 +380,8 @@ async def validate_rows(db: AsyncSession, rows: list[ImportRowIn]) -> ImportVali
             error=count("error"),
             duplicate=count("duplicate"),
             needs_geocoding=sum(1 for r in out if r.needs_geocoding and r.status != "error"),
+            ready_to_activate=sum(1 for r in importable if not r.missing),
+            incomplete=sum(1 for r in importable if r.missing),
         ),
     )
 
@@ -410,7 +448,13 @@ async def commit_rows(
             result("skipped_duplicate", "This restaurant and street address already exist. Skipped.")
             continue
         _register(verdict, ctx)
-        result("created", brand_id=brand_id, location_id=location_id)
+        result(
+            "created",
+            brand_id=brand_id,
+            location_id=location_id,
+            listing_status=RestaurantLocation.STATUS_COMING_SOON,
+            missing=verdict.missing,
+        )
 
     await db.commit()
     return ImportCommitResponse(
@@ -421,6 +465,8 @@ async def commit_rows(
             skipped_warning=sum(1 for r in out if r.result == "skipped_warning"),
             failed=sum(1 for r in out if r.result == "failed"),
             needs_geocoding=sum(1 for r in out if r.needs_geocoding),
+            created_ready_to_activate=sum(1 for r in out if r.result == "created" and not r.missing),
+            created_incomplete=sum(1 for r in out if r.result == "created" and r.missing),
         ),
     )
 
@@ -446,6 +492,8 @@ async def _create_listing(
         longitude=v.get("longitude"),  # type: ignore[arg-type]
         is_verified=True,
     )
+    hours = v.get("hours")
+    hour_days: tuple[HoursDay, ...] = tuple(hours) if isinstance(hours, tuple) else ()
     async with db.begin_nested():
         brand, brand_created = await _find_or_create_brand(
             db,
@@ -464,6 +512,7 @@ async def _create_listing(
             actor_id=current_user.cognito_sub,
             actor_role="admin",
             provenance=PROVENANCE,
+            hours=hour_days,
         )
         if location_created and verdict.matched_tag is not None:
             await _link_cuisine_tag(db, location_id=location.id, cuisine_tag_id=verdict.matched_tag.id)

@@ -103,6 +103,7 @@ async def test_validate_report_per_row_and_writes_nothing(client, db_session, as
     assert by_row[6]["status"] == "valid" and by_row[6]["needs_geocoding"] is True
     assert data["summary"] == {
         "total": 5, "valid": 2, "warning": 1, "error": 2, "duplicate": 0, "needs_geocoding": 1,
+        "ready_to_activate": 0, "incomplete": 3,
     }
     assert await count(db_session, RestaurantBrand) == 0
     assert await count(db_session, RestaurantLocation) == 0
@@ -217,7 +218,8 @@ async def test_commit_writes_unclaimed_verified_audited_listings(client, db_sess
     assert len(brands) == 2
     assert all(b.owner_id is None and b.is_claimed is False and b.claimed_at is None for b in brands)
     locations = (await db_session.execute(select(RestaurantLocation))).scalars().all()
-    assert all(loc.is_verified and loc.status == "active" and not loc.is_paid for loc in locations)
+    # Imported listings are ALWAYS hidden until an admin activates them.
+    assert all(loc.is_verified and loc.status == "coming_soon" and not loc.is_paid for loc in locations)
     phones = {loc.phone for loc in locations}
     assert phones == {"+12145550002", "+12145550003"}
     assert await count(db_session, LocationCuisine) == 2
@@ -229,6 +231,10 @@ async def test_commit_writes_unclaimed_verified_audited_listings(client, db_sess
         assert entry.action == "create"
         assert entry.actor_id == admin.cognito_sub and entry.actor_role == "admin"
         assert entry.new_val["provenance"] == "bulk_import"
+    assert all(
+        a.new_val["status"] == "coming_soon" and a.new_val["missing"] == ["hours"]
+        for a in by_table["restaurant_location"]
+    )
 
 
 @pytest.mark.asyncio

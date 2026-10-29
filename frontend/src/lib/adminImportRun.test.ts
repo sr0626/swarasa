@@ -21,6 +21,8 @@ const created = (r: ImportRowInput): CommittedRow => ({
   brand_id: 1,
   location_id: 1,
   needs_geocoding: false,
+  listing_status: null,
+  missing: [],
 });
 
 test("runChunks sends sequentially, reports progress and collects results", async () => {

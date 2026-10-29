@@ -435,3 +435,40 @@ async def test_bulk_import_csv_is_idempotent_on_rerun(db_session):
 
     count = (await db_session.execute(select(func.count()).select_from(RestaurantBrand))).scalar_one()
     assert count == 1
+
+
+# ---------------------------------------------------------------------------
+# Readiness + optional `hours` column (docs/DECISIONS.md "Bulk import is
+# invisible by default"): every created location is `coming_soon`.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_bulk_import_csv_hours_column_is_stored_but_listing_stays_hidden(db_session):
+    from app.models.restaurant_hours import RestaurantHours
+
+    owner = await create_owner(db_session, email="owner@example.com")
+    await db_session.commit()
+
+    rows = [
+        _csv_row(owner_email=owner.email, phone="(972) 555-0101", hours="daily 11:00-22:00"),
+        _csv_row(
+            owner_email=owner.email,
+            name="Second Grill",
+            address_line1="1 Other St",
+            phone="(972) 555-0102",
+            hours="not hours",
+        ),
+    ]
+    result = await bulk_import_restaurants_csv(
+        db_session, rows, actor_id="system:test", actor_role="admin"
+    )
+
+    assert result.created == 2 and result.errors == 0
+    complete, unreadable = result.rows
+    assert complete.listing_status == "coming_soon" and complete.missing == []
+    assert unreadable.listing_status == "coming_soon" and unreadable.missing == ["hours"]
+    assert unreadable.hours_warning is not None
+    assert await _count(db_session, RestaurantHours) == 7
+    statuses = (await db_session.execute(select(RestaurantLocation.status))).scalars().all()
+    assert statuses == ["coming_soon", "coming_soon"]

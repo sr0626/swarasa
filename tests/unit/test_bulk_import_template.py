@@ -24,7 +24,7 @@ _TAXONOMY = _REPO / "backend" / "app" / "scripts" / "taxonomy.json"
 _KNOWN_HEADERS = {
     "name", "address_line1", "address_line2", "city", "state", "postal_code",
     "country", "phone", "website", "type", "description", "owner_email",
-    "latitude", "longitude",
+    "latitude", "longitude", "hours",
 }
 
 
@@ -42,6 +42,8 @@ def test_template_header_is_exactly_the_supported_columns():
         header = next(csv.reader(f))
     assert set(header) == _KNOWN_HEADERS
     assert len(header) == len(set(header))
+    # New optional columns are appended so files made from the older template keep working.
+    assert header[-1] == "hours"
 
 
 def test_template_rows_pass_parse_schema_and_phone_rule():

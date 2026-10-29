@@ -900,7 +900,9 @@ New locations start `is_paid=false`, `is_verified=false` and — changed
 `active` is public), NOT `active`. This endpoint backs the Add-restaurant
 and Add-location UI flows only: bulk import (`POST
 /admin/restaurants/bulk-import`, the CSV command), the seed scripts and
-claim approval build `RestaurantLocation` rows directly and keep their own
+claim approval build `RestaurantLocation` rows directly. Bulk import (all
+three paths) now ALWAYS creates `coming_soon` too; the dev seed script
+(`seed_dev_data.py`, dev-only fixtures) and claim approval keep their own
 defaults (`active`). The owner/admin enters the required info (hours,
 phone, address) and then activates the listing with `POST
 /locations/{id}/status` — see below. The response carries
@@ -4139,7 +4141,11 @@ Response: `200`
   ]
 }
 ```
-`rows[].status` is one of `created` | `skipped` | `error`. `detail` is
+Created rows also carry `listing_status` (always `"coming_soon"`: imported
+listings are hidden until an admin activates them), `missing` (what is still
+needed before activation) and `hours_warning` (the optional `hours` cell was
+not understood). Optional per-row `hours` string: see "Admin bulk listing
+import". `rows[].status` is one of `created` | `skipped` | `error`. `detail` is
 null for `created`, a short human-readable reason for `skipped` (already
 existed) or `error` (validation failure, or a slug collision with a
 different owner's existing brand).
@@ -4205,6 +4211,7 @@ reads, before it geocodes and adds `latitude`/`longitude` itself):
 | description | no | |
 | type | no | Free-text cuisine, e.g. "south indian" — matched case-insensitively against `cuisine_tag.name`/`display_name`; no match is reported per-row, not a failure |
 | latitude / longitude | no | Added by `scripts/bulk_import_restaurants_csv.py` after geocoding via Nominatim — left blank in the file a human authors by hand |
+| hours | no | LAST column. Strict one-line format (see "Admin bulk listing import" → Row); unreadable = ignored, reported as `hours_warning`. Rows created by this path (and the JSON path, which accepts the same string as `hours`) are also always created `coming_soon` (hidden); `listing_status` / `missing` / `hours_warning` are added to each created row of the response |
 
 Effect: same idempotent create-or-skip brand/location logic as the JSON
 path (slug natural key for the brand, `(brand_id, address_line1)` for the
@@ -4255,15 +4262,25 @@ and the brand/location create + cuisine-link code in
 
 **Row** (`ImportRowIn`): `row_number` (spreadsheet row, header = 1, first data row = 2)
 plus string cells `name, address_line1, address_line2, city, state, postal_code,
-country, phone, website, type, description` and `latitude`/`longitude` (string or
-number). Unknown columns (e.g. `owner_email`) are ignored. Cells over 2100 chars
+country, phone, website, type, description, hours` (the last one optional) and
+`latitude`/`longitude` (string or number). `hours` is one line in the strict format
+`Mon-Fri 11:00-22:00; Sat 11:00-23:00; Sun closed` / `daily 11:00-22:00` (parser:
+`app/core/bulk_import_hours.py`): days `Mon`..`Sun` (ranges may wrap, `Sat-Mon`), `closed`, or ONE
+`HH:MM-HH:MM` 24-hour window per day (close earlier than open = after midnight; `24:00` allowed as
+a close), no day twice. Anything not understood is a **warning-severity** issue (`bad_hours`) that
+does NOT change the row's status: the row imports without any hours (never partial). A readable
+cell covering fewer than 7 days is stored and raises `partial_hours` (warning). Unknown columns (e.g. `owner_email`) are ignored. Cells over 2100 chars
 are a 422; the browser truncates to 2050 so an over-long cell becomes a per-row
 `too_long` error instead.
 
 **`POST /admin/import/validate`** — auth: admin. Body `{rows: [...]}`, 1..500 rows
 (else 422). Writes nothing. Response `{rows: [...], summary}`; each row:
 `row_number, name, status, issues[{field, severity (error|warning|info), code,
-message}], needs_geocoding, matched_tag, duplicate_of_row, duplicate_of_listing_id`.
+message}], needs_geocoding, matched_tag, missing, duplicate_of_row, duplicate_of_listing_id`.
+`missing` (importable rows only; `[]` otherwise) = everything still needed before the created
+(always hidden) listing can be activated, as `listing_readiness` keys
+(`name | address | phone | hours`; `[]` = ready to activate). `summary` also has
+`ready_to_activate` / `incomplete` (counts over valid + warning rows).
 `status`:
 - `valid` — will import.
 - `warning` — imports only if the admin opts in: unknown `type` tag (imported
@@ -4292,12 +4309,20 @@ names the listing.
 re-evaluated with the same logic against the database as it stands (so rows created by earlier
 chunks, or by an earlier upload of the same file, are duplicates). Response `{rows, summary}`;
 per row `result` is `created | skipped_duplicate | skipped_warning | failed`, with `reason`,
-`brand_id`, `location_id`, `needs_geocoding`. Created listings: brand `owner_id` NULL /
-`is_claimed=false`; location `status='active'`, `is_verified=true`, free tier, hours unknown
-(DECISIONS.md "Data seeding"); `type` linked as a location cuisine tag; rows sharing a brand
+`brand_id`, `location_id`, `needs_geocoding`, `listing_status` (created rows: always
+`"coming_soon"`), `missing` (created rows: what is still needed before activation; `[]` = ready to
+activate); `summary` also has `created_ready_to_activate` / `created_incomplete`. Created
+listings: brand `owner_id` NULL / `is_claimed=false`; location **`status='coming_soon'` ALWAYS**
+(hidden everywhere - never auto-activated, even when complete; DECISIONS.md "Bulk import is
+invisible by default" supersedes the "seeded rows are active" part of "Data seeding"),
+`is_verified=true`, free tier, `restaurant_hours` rows only for days given in `hours`. An admin
+opens each listing, completes what is missing (`LocationOut.setup_missing` / the Go-live bar list
+it) and activates it via `POST /locations/{id}/status`, which keeps returning 422
+`listing_incomplete` with the full `missing` list until ready; `type` linked as a location cuisine tag; rows sharing a brand
 name with an *unclaimed* brand become another location of it. One SAVEPOINT per row, one commit
 per chunk; `audit_log` `create` rows for every brand and location with `actor_id` = the admin's
-Cognito sub, `actor_role='admin'` and `new_val.provenance = "bulk_import"`. Failure reasons are
+Cognito sub, `actor_role='admin'` and `new_val.provenance = "bulk_import"` (location rows also carry
+`new_val.status` and `new_val.missing`). Failure reasons are
 fixed plain-language strings; internals are never returned.
 
 **Geocoding** is not done by the API (the Lambda has no internet route and a NAT Gateway is
@@ -4307,7 +4332,9 @@ bounded to 4 concurrent lookups / 14 s per chunk). A row that cannot be placed i
 and reported with `needs_geocoding: true`; fix via Admin > Listings or
 `scripts/geocode_missing_locations.py`.
 
-Downloaded reports (check + results) are generated in the browser with every string cell
+Downloaded reports: the check CSV has `will_be` (`hidden`) and `missing` columns, the results CSV
+has `status` (`hidden` on created rows) and `missing` (empty = ready to activate). They are
+generated in the browser with every string cell
 prefixed by `'` when it starts with `= + - @ TAB CR` (spreadsheet formula injection guard).
 
 ---
