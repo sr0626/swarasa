@@ -95,6 +95,7 @@ async def _reports(db: AsyncSession) -> ReportNotifications:
                 ListingReport.brand_id,
                 RestaurantBrand.name,
                 ListingReport.category,
+                ListingReport.categories,
                 ListingReport.submitted_at,
             )
             .join(RestaurantBrand, RestaurantBrand.id == ListingReport.brand_id)
@@ -111,6 +112,7 @@ async def _reports(db: AsyncSession) -> ReportNotifications:
                 brand_id=r.brand_id,
                 brand_name=r.name,
                 category=r.category,
+                categories=list(r.categories) if r.categories else [r.category],
                 submitted_at=r.submitted_at,
             )
             for r in rows

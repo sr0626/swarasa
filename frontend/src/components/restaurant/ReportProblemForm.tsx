@@ -10,10 +10,14 @@
 // unfocusable for humans (aria-hidden, tabIndex -1, off-screen), so only a
 // bot filling every input populates it. The backend answers those with the
 // same success response and stores nothing, so the UI needs no special case.
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { submitReportAction } from "@/app/restaurant/[brandSlug]/report/actions";
 import { REPORT_CATEGORIES } from "@/lib/constants/reportCategories";
+import {
+  toggleCategory,
+  validateCategorySelection,
+} from "@/lib/reportCategorySelection";
 import {
   createReportSchema,
   REPORT_DETAILS_MAX_LENGTH,
@@ -46,7 +50,11 @@ export default function ReportProblemForm({
   defaultLocationId = null,
   signedInEmail = null,
 }: ReportProblemFormProps) {
-  const [category, setCategory] = useState<ReportCategory | "">("");
+  // Multi-select, always held in canonical option order (see
+  // lib/reportCategorySelection.ts). Kept across validation errors.
+  const [categories, setCategories] = useState<ReportCategory[]>([]);
+  const [categoryError, setCategoryError] = useState<string | null>(null);
+  const firstCheckboxRef = useRef<HTMLInputElement | null>(null);
   const [details, setDetails] = useState("");
   const [email, setEmail] = useState("");
   const [website, setWebsite] = useState("");
@@ -65,15 +73,17 @@ export default function ReportProblemForm({
     e.preventDefault();
     setError(null);
 
-    if (category === "") {
-      setError("Please choose what's wrong.");
+    const missing = validateCategorySelection(categories);
+    setCategoryError(missing);
+    if (missing) {
+      firstCheckboxRef.current?.focus();
       return;
     }
 
     const input = {
       brand_id: brandId,
       location_id: locationId === "" ? undefined : locationId,
-      category,
+      categories,
       details,
       // Signed in: never send an email — the backend uses the token's.
       reporter_email: signedInEmail ? "" : email,
@@ -134,13 +144,16 @@ export default function ReportProblemForm({
       noValidate
       className="rounded-brand-card border border-brand-border bg-white p-6 shadow-brand-card sm:p-8"
     >
-      <fieldset>
+      <fieldset aria-describedby={categoryError ? "report_category_error" : undefined}>
         <legend className="font-display text-base font-semibold text-brand-ink">
-          What&apos;s wrong?
+          What&apos;s wrong?{" "}
+          <span className="font-sans text-sm font-normal text-brand-ink-muted">
+            Select all that apply
+          </span>
         </legend>
         <div className="mt-3 flex flex-col gap-2">
-          {REPORT_CATEGORIES.map((option) => {
-            const selected = category === option.value;
+          {REPORT_CATEGORIES.map((option, index) => {
+            const selected = categories.includes(option.value);
             return (
               <label
                 key={option.value}
@@ -151,18 +164,38 @@ export default function ReportProblemForm({
                 }
               >
                 <input
-                  type="radio"
-                  name="category"
+                  ref={index === 0 ? firstCheckboxRef : undefined}
+                  type="checkbox"
+                  name="categories"
                   value={option.value}
                   checked={selected}
-                  onChange={() => setCategory(option.value)}
-                  className="h-4 w-4 shrink-0 accent-brand-accent"
+                  onChange={() => {
+                    const next = toggleCategory(categories, option.value);
+                    setCategories(next);
+                    // Clear the inline error as soon as the group becomes valid.
+                    if (categoryError && validateCategorySelection(next) === null) {
+                      setCategoryError(null);
+                    }
+                  }}
+                  className="h-5 w-5 shrink-0 accent-brand-accent"
                 />
                 <span className="text-sm font-medium text-brand-ink">{option.label}</span>
               </label>
             );
           })}
         </div>
+        <p
+          id="report_category_error"
+          role="alert"
+          aria-live="polite"
+          className={
+            categoryError
+              ? "mt-2 rounded-brand-control bg-brand-closed-bg px-3 py-2 text-sm text-brand-closed"
+              : "sr-only"
+          }
+        >
+          {categoryError}
+        </p>
       </fieldset>
 
       {locations.length > 1 && (

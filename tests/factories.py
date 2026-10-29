@@ -157,6 +157,7 @@ class ListingReportFactory(factory.Factory):
     brand_id = factory.Sequence(lambda n: n + 1)
     location_id = None
     category = "address_incorrect"
+    categories = None
     details = FactoryFaker("sentence")
     reporter_email = None
     reporter_user_id = None

@@ -45,7 +45,10 @@ export interface ListingReportExport {
   report_id: number;
   brand_id: number;
   location_id: number | null;
+  /** Primary (first) category. */
   category: string;
+  /** Every selected category, primary first. */
+  categories: string[];
   details: string;
   reporter_email: string | null;
   status: string;

@@ -5,6 +5,7 @@ import type { PaginatedResponse, PaginationParams } from "@/types/common";
 import type {
   CreateReportInput,
   ListingReport,
+  ReportCategory,
   ReportReceipt,
   ReportStatus,
   UpdateReportInput,
@@ -31,11 +32,12 @@ export async function submitReport(
  * first; `status: "new"` is the oldest-first triage queue.
  */
 export async function listReports(
-  params: PaginationParams & { status?: ReportStatus },
+  params: PaginationParams & { status?: ReportStatus; category?: ReportCategory },
   accessToken: string
 ): Promise<PaginatedResponse<ListingReport>> {
   const query = toQueryString({
     status: params.status,
+    category: params.category,
     page: params.page,
     page_size: params.page_size,
   });

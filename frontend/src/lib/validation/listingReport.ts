@@ -19,7 +19,10 @@ export const reportCategorySchema = z.enum([
 export const createReportSchema = z.object({
   brand_id: z.number().int().positive(),
   location_id: z.number().int().positive().optional(),
-  category: reportCategorySchema,
+  categories: z
+    .array(reportCategorySchema)
+    .min(1, "Please select at least one thing that's wrong.")
+    .max(8, "Please select at most 8 categories."),
   details: z
     .string()
     .trim()

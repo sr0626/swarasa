@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import re
-from typing import Literal
+from typing import Literal, get_args
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.schemas.utc import UtcDatetime
 
@@ -19,6 +19,11 @@ ReportCategory = Literal[
     "permanently_closed",
     "other",
 ]
+# Canonical option order (same order the public form lists them). A report's
+# `categories` are always stored in this order and its primary `category` is
+# the first of them.
+REPORT_CATEGORY_ORDER: tuple[str, ...] = get_args(ReportCategory)
+REPORT_CATEGORIES_MAX = len(REPORT_CATEGORY_ORDER)
 ReportStatus = Literal["new", "resolved", "dismissed"]
 
 DETAILS_MAX_LENGTH = 2000
@@ -35,7 +40,15 @@ _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 class ReportCreate(BaseModel):
     brand_id: int
     location_id: int | None = None
-    category: ReportCategory
+    # Send `categories` (1..8, multi-select). The single `category` is the
+    # legacy field, still accepted so an old cached frontend keeps working.
+    # When both are sent, `categories` wins (they are not required to agree).
+    # After validation `categories` is always the de-duplicated list in
+    # canonical order and `category` is its first entry (the primary).
+    category: ReportCategory | None = None
+    categories: list[ReportCategory] | None = Field(
+        default=None, min_length=1, max_length=REPORT_CATEGORIES_MAX
+    )
     details: str = Field(min_length=1, max_length=DETAILS_MAX_LENGTH)
     # Anonymous callers only. For a signed-in caller the service IGNORES
     # this and uses the verified token's email instead (see
@@ -45,6 +58,21 @@ class ReportCreate(BaseModel):
     # populates it. Any non-empty value => 201 fake success, nothing stored.
     # Length-capped only so a bot can't POST a megabyte into it.
     website: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def _normalise_categories(self) -> "ReportCreate":
+        chosen: list[str]
+        if self.categories is not None:
+            chosen = list(self.categories)
+        elif self.category is not None:
+            chosen = [self.category]
+        else:
+            raise ValueError("categories must contain at least one category")
+        wanted = set(chosen)
+        ordered = [c for c in REPORT_CATEGORY_ORDER if c in wanted]
+        self.categories = ordered  # type: ignore[assignment]
+        self.category = ordered[0]  # type: ignore[assignment]
+        return self
 
     @field_validator("details")
     @classmethod
@@ -86,7 +114,11 @@ class ReportOut(BaseModel):
     # The reported location's own page slug (null when no location was picked).
     location_slug: str | None = None
     location_address: str | None = None
+    # Primary (first) category -- kept for existing clients.
     category: str
+    # Every selected category, primary first. Always >= 1 item (rows that
+    # predate multi-select report `[category]`).
+    categories: list[str]
     details: str
     reporter_email: str | None = None
     reporter_user_id: str | None = None

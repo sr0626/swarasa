@@ -14,6 +14,8 @@ export interface ReportNotificationItem {
   brand_id: number;
   brand_name: string;
   category: ReportCategory;
+  /** Every selected category, primary first. */
+  categories: ReportCategory[];
   submitted_at: string;
 }
 

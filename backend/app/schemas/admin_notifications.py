@@ -19,6 +19,8 @@ class ReportNotificationItem(BaseModel):
     brand_id: int
     brand_name: str
     category: str
+    # Every selected category, primary first (multi-select reports).
+    categories: list[str]
     submitted_at: UtcDatetime
 
 

@@ -134,9 +134,22 @@ function ReportCard({
         <StatusBadge status={report.status} />
       </div>
 
-      <p className="mt-3 inline-flex rounded-brand-pill bg-brand-bg px-3 py-1 text-xs font-semibold text-brand-ink">
-        {reportCategoryLabel(report.category)}
-      </p>
+      <ul aria-label="Categories" className="mt-3 flex flex-wrap gap-2">
+        {(report.categories?.length ? report.categories : [report.category]).map(
+          (category, index) => (
+            <li
+              key={category}
+              className={
+                index === 0
+                  ? "inline-flex rounded-brand-pill bg-brand-bg px-3 py-1 text-xs font-semibold text-brand-ink ring-1 ring-brand-border"
+                  : "inline-flex rounded-brand-pill bg-brand-bg px-3 py-1 text-xs font-semibold text-brand-ink"
+              }
+            >
+              {reportCategoryLabel(category)}
+            </li>
+          )
+        )}
+      </ul>
       <p className="mt-3 whitespace-pre-wrap break-words text-sm text-brand-ink">
         {report.details}
       </p>

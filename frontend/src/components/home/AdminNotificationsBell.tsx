@@ -192,7 +192,9 @@ export default function AdminNotificationsBell({ data }: { data: AdminNotificati
                         <span className="min-w-0">
                           <span className="block truncate font-medium">{r.brand_name}</span>
                           <span className="block truncate text-xs text-brand-ink-muted">
-                            {CATEGORY_LABELS[r.category] ?? r.category}
+                            {(r.categories?.length ? r.categories : [r.category])
+                              .map((c) => CATEGORY_LABELS[c] ?? c)
+                              .join(", ")}
                           </span>
                         </span>
                         <span className="shrink-0 text-xs text-brand-ink-subtle">
