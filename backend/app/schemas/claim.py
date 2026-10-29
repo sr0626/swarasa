@@ -1,11 +1,24 @@
 """Claim flow (/claim) — see docs/API_CONTRACTS.md "Claim flow (/claim)"."""
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, StringConstraints, model_validator
 
 from app.schemas.utc import UtcDatetime
+
+# Reviewer/verification notes: trimmed, capped at 2000 chars (a longer value
+# is a generic 422 "Invalid request parameters" -- see app/core/errors.py).
+REVIEWER_NOTES_MAX_LENGTH = 2000
+ReviewerNotes = Annotated[
+    str, StringConstraints(strip_whitespace=True, max_length=REVIEWER_NOTES_MAX_LENGTH)
+]
+RequiredReviewerNotes = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True, min_length=1, max_length=REVIEWER_NOTES_MAX_LENGTH
+    ),
+]
 
 ProofMethod = Literal["google_business_profile", "phone_verification", "document_upload"]
 
@@ -64,6 +77,16 @@ class ClaimQueueItem(BaseModel):
     sla_due_at: UtcDatetime
     reviewed_at: UtcDatetime | None = None
     reviewer_notes: str | None = None
+    # Admin Cognito sub who approved/rejected the claim, and its email
+    # (best-effort, batched per page; `None` when the lookup fails or finds
+    # nothing -- the UI then shows a short form of `reviewed_by`).
+    reviewed_by: str | None = None
+    reviewed_by_email: str | None = None
+    # Latest edit of `reviewer_notes` AFTER the review (from audit_log);
+    # all `None` when the note was never edited after the review.
+    notes_edited_at: UtcDatetime | None = None
+    notes_edited_by: str | None = None
+    notes_edited_by_email: str | None = None
 
 
 class ClaimListResponse(BaseModel):
@@ -74,8 +97,15 @@ class ClaimListResponse(BaseModel):
 
 
 class ClaimApproveRequest(BaseModel):
-    reviewer_notes: str | None = None
+    reviewer_notes: ReviewerNotes | None = None
 
 
 class ClaimRejectRequest(BaseModel):
-    reviewer_notes: str
+    reviewer_notes: RequiredReviewerNotes
+
+
+class ClaimNotesUpdateRequest(BaseModel):
+    """`PATCH /claim/{id}/notes`. Blank clears the note on an approved claim;
+    a rejected claim must keep a non-empty note (checked in the service)."""
+
+    reviewer_notes: ReviewerNotes

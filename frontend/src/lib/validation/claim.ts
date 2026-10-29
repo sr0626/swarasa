@@ -5,6 +5,7 @@
 // the backend re-validates independently, this is not a substitute for
 // server-side checks.
 import { z } from "zod";
+import { CLAIM_NOTES_MAX_LENGTH } from "@/lib/claimReview";
 
 export const claimProofMethodSchema = z.enum([
   "google_business_profile",
@@ -45,10 +46,22 @@ export const createClaimSchema = z
 
 export type CreateClaimFormValues = z.infer<typeof createClaimSchema>;
 
+const notesTooLong = `Notes can be at most ${CLAIM_NOTES_MAX_LENGTH} characters.`;
+
 export const rejectClaimSchema = z.object({
-  reviewer_notes: z.string().min(1, "Reviewer notes are required to reject a claim."),
+  reviewer_notes: z
+    .string()
+    .trim()
+    .min(1, "Reviewer notes are required to reject a claim.")
+    .max(CLAIM_NOTES_MAX_LENGTH, notesTooLong),
 });
 
 export const approveClaimSchema = z.object({
-  reviewer_notes: z.string().optional(),
+  reviewer_notes: z.string().trim().max(CLAIM_NOTES_MAX_LENGTH, notesTooLong).optional(),
+});
+
+/** Blank is allowed here (clears an approved claim's note); the server
+ * refuses a blank note on a rejected claim. */
+export const claimNotesSchema = z.object({
+  reviewer_notes: z.string().trim().max(CLAIM_NOTES_MAX_LENGTH, notesTooLong),
 });

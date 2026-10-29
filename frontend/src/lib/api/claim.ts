@@ -8,6 +8,7 @@ import type {
   ClaimStatus,
   CreateClaimInput,
   RejectClaimInput,
+  UpdateClaimNotesInput,
 } from "@/types/claim";
 
 /** POST /claim — auth: any authenticated Cognito user (the claimant). */
@@ -63,6 +64,22 @@ export async function approveClaim(
   return apiFetch<ClaimResponse>(
     `/claim/${id}/approve`,
     { method: "POST", body: JSON.stringify(input) },
+    { accessToken }
+  );
+}
+
+/**
+ * PATCH /claim/{id}/notes — auth: admin. Add/replace the reviewer note on an
+ * already approved/rejected claim; returns the refreshed admin queue row.
+ */
+export async function updateClaimNotes(
+  id: number,
+  input: UpdateClaimNotesInput,
+  accessToken: string
+): Promise<ClaimQueueItem> {
+  return apiFetch<ClaimQueueItem>(
+    `/claim/${id}/notes`,
+    { method: "PATCH", body: JSON.stringify(input) },
     { accessToken }
   );
 }
