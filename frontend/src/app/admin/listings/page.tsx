@@ -31,6 +31,7 @@ import AdminListingsPanel, {
   type AdminListingsFilters,
 } from "@/components/admin/AdminListingsPanel";
 import { parseListingStatusFilter } from "@/lib/adminListings";
+import AdminPanelRow, { PANEL_IN_ROW } from "@/components/admin/AdminPanelRow";
 import AdminSummaryStrip from "@/components/admin/AdminSummaryStrip";
 import { listingsSummaryChips } from "@/lib/adminSummary";
 import type { AdminListingsSummary } from "@/types/adminSummary";
@@ -131,12 +132,21 @@ export default async function AdminListingsPage({ searchParams }: AdminListingsP
         restaurant&rsquo;s locations matches.
       </p>
 
-      {summary && <AdminSummaryStrip page="listings" chips={listingsSummaryChips(summary)} />}
-
       {loadError ? (
+        <>
+          {summary && (
+            <AdminPanelRow>
+              <AdminSummaryStrip
+                page="listings"
+                chips={listingsSummaryChips(summary)}
+                className={PANEL_IN_ROW}
+              />
+            </AdminPanelRow>
+          )}
         <p className="mt-6 rounded-brand-control bg-brand-closed-bg px-3 py-2.5 text-sm text-brand-closed">
           {loadError}
         </p>
+        </>
       ) : (
         // Keyed on every filter + page so a filter/page change remounts
         // with fresh data rather than reusing the previous view's local
@@ -149,6 +159,15 @@ export default async function AdminListingsPage({ searchParams }: AdminListingsP
           total={total}
           page={page}
           totalPages={totalPages}
+          summary={
+            summary ? (
+              <AdminSummaryStrip
+                page="listings"
+                chips={listingsSummaryChips(summary)}
+                className={PANEL_IN_ROW}
+              />
+            ) : null
+          }
         />
       )}
     </section>

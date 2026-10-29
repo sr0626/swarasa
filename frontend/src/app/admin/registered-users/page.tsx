@@ -37,6 +37,7 @@ import {
 } from "@/lib/adminReportView";
 import { AdminReportPager, AdminReportSearchForm } from "@/components/admin/AdminReportControls";
 import LocalDateTime from "@/components/ui/LocalDateTime";
+import AdminPanelRow, { PANEL_IN_ROW } from "@/components/admin/AdminPanelRow";
 import AdminSummaryStrip from "@/components/admin/AdminSummaryStrip";
 import { registeredUsersSummaryChips, truncatedNote } from "@/lib/adminSummary";
 
@@ -125,15 +126,18 @@ export default async function RegisteredUsersPage({ searchParams }: RegisteredUs
         local timezone.
       </p>
 
+      <AdminPanelRow>
       {data?.summary && (
         <AdminSummaryStrip
           page="registered-users"
           chips={registeredUsersSummaryChips(data.summary)}
           note={truncatedNote(data.summary.truncated)}
+          className={PANEL_IN_ROW}
         />
       )}
 
       <AdminReportSearchForm
+        className={PANEL_IN_ROW}
         panelPage="registered-users"
         action={BASE_PATH}
         idPrefix="users"
@@ -146,6 +150,7 @@ export default async function RegisteredUsersPage({ searchParams }: RegisteredUs
         }))}
         placeholder="Email or name"
       />
+      </AdminPanelRow>
 
       {loadError || !data ? (
         <p

@@ -60,23 +60,21 @@ test("admin menu has Taxonomy, highlighted on its own page", () => {
   assert.equal(activeNavHref("/admin/taxonomy", ADMIN_NAV_ITEMS), "/admin/taxonomy");
 });
 
-test("admin menu is ordered by importance: Overview first, queues before directories, Profile last", () => {
+test("admin menu order: Overview first, then Listings, People, Work queue, System (Profile last)", () => {
   const labels = ADMIN_NAV_ITEMS.map((i) => i.label);
   assert.equal(labels[0], "Overview");
   assert.equal(labels[labels.length - 1], "Profile");
   const idx = (l: string) => labels.indexOf(l);
-  assert.ok(idx("Claims") < idx("Users"));
-  assert.ok(idx("Messages") < idx("Users"));
-  assert.ok(idx("Listings") < idx("Owners"));
-  assert.ok(idx("Taxonomy") < idx("Audit log"));
+  assert.ok(idx("Taxonomy") < idx("Users"));
+  assert.ok(idx("Registered users") < idx("Claims"));
+  assert.ok(idx("Reopen requests") < idx("Audit log"));
   assert.equal(new Set(labels).size, labels.length);
 });
 
-
 const ADMIN_GROUP_ITEMS: Record<string, string[]> = {
-  "Work queue": ["Claims", "Messages", "Reports", "Reopen requests"],
   Listings: ["Listings", "Import", "Taxonomy"],
   People: ["Users", "Owners", "Managers", "Registered users"],
+  "Work queue": ["Claims", "Messages", "Reports", "Reopen requests"],
   System: ["Audit log", "Profile"],
 };
 
@@ -97,8 +95,8 @@ test("admin menu: every item appears exactly once and ADMIN_NAV_ITEMS is the fla
   );
 });
 
-test("admin menu groups: only Work queue is open by default; ids are unique", () => {
-  assert.deepEqual(ADMIN_NAV_GROUPS.filter((g) => g.defaultOpen).map((g) => g.title), ["Work queue"]);
+test("admin menu groups: only Listings is open by default; ids are unique", () => {
+  assert.deepEqual(ADMIN_NAV_GROUPS.filter((g) => g.defaultOpen).map((g) => g.title), ["Listings"]);
   assert.equal(new Set(ADMIN_NAV_GROUPS.map((g) => g.id)).size, ADMIN_NAV_GROUPS.length);
 });
 
