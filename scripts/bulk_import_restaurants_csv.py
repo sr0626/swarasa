@@ -42,7 +42,16 @@ Required columns (header row, any order):
 
 Optional columns:
     address_line2, country (default "US"), phone, website, type,
-    description, latitude, longitude
+    description, latitude, longitude, hours
+
+`hours` (append it last) is a strict one-line format, e.g.
+`Mon-Fri 11:00-22:00; Sat 11:00-23:00; Sun closed` or `daily 11:00-22:00`
+(24-hour times, days Mon..Sun, `closed`; see backend/app/core/bulk_import_hours.py).
+A cell that cannot be understood is a warning and the row is imported without hours.
+
+EVERY imported listing is created HIDDEN (`coming_soon`), even when complete:
+open it in the location editor, finish what is missing (hours, phone, ...) and
+activate it. The script reports what each created row still needs.
 
 `type` is free-text regional/dietary/type cuisine, e.g. "south indian",
 "vegetarian", "biryani" -- matched case-insensitively against
@@ -107,7 +116,7 @@ REQUIRED_COLUMNS = {"name", "address_line1", "city", "state", "postal_code", "ow
 OUTPUT_COLUMNS = [
     "name", "description", "website",
     "address_line1", "address_line2", "city", "state", "postal_code", "country",
-    "phone", "type", "owner_email", "latitude", "longitude",
+    "phone", "type", "owner_email", "latitude", "longitude", "hours",
 ]
 
 
@@ -165,6 +174,8 @@ def validate_rows(rows: list[dict]) -> tuple[list[str], list[str]]:
         for issue in check.issues:
             if issue.severity == "error":
                 errors.append(f"{label}: {issue.message}")
+            elif issue.code in ("bad_hours", "partial_hours"):
+                warnings.append(f"{label}: {issue.message}")
         type_text = (row.get("type") or "").strip().lower()
         if known_tags and type_text and type_text.replace(" ", "_").replace("-", "_") not in known_tags \
                 and type_text not in known_tags:
@@ -321,6 +332,12 @@ def main() -> None:
         f"\nDone. created={summary.get('created')} skipped={summary.get('skipped')} "
         f"errors={summary.get('errors')}"
     )
+    created = [r for r in result.get("rows", []) if r.get("status") == "created"]
+    if created:
+        print(f"\n{len(created)} listing(s) were created HIDDEN (coming soon). Still needed before each can be activated:")
+        for row in created:
+            needs = ", ".join(row.get("missing") or []) or "nothing - ready to activate"
+            print(f"  - {row['name']!r} (location {row.get('location_id')}): {needs}")
     unmatched = [
         row for row in result.get("rows", [])
         if row.get("cuisine_type_input") and not row.get("cuisine_match")

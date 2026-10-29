@@ -330,6 +330,9 @@ def _run_bulk_import_restaurants(event: dict) -> dict:
                         "brand_id": row.brand_id,
                         "location_id": row.location_id,
                         "detail": row.detail,
+                        "listing_status": row.listing_status,
+                        "missing": row.missing,
+                        "hours_warning": row.hours_warning,
                     }
                     for row in result.rows
                 ],
@@ -388,6 +391,9 @@ async def _run_csv_bulk_import(csv_content: str) -> dict:
                     "brand_id": row.brand_id,
                     "location_id": row.location_id,
                     "detail": row.detail,
+                    "listing_status": row.listing_status,
+                    "missing": row.missing,
+                    "hours_warning": row.hours_warning,
                     "cuisine_type_input": row.cuisine_type_input,
                     "cuisine_match": row.cuisine_match,
                 }
@@ -533,6 +539,48 @@ def _run_set_platform_flag(event: dict) -> dict:
     except SetPlatformFlagError as exc:
         return {"ok": False, "command": "set_platform_flag", "error": str(exc)}
     return {"ok": True, "command": "set_platform_flag", **result}
+
+
+@_command("deactivate_incomplete_listings")
+def _run_deactivate_incomplete_listings(event: dict) -> dict:
+    """Hide (set `coming_soon`) every ACTIVE listing missing required info
+    (name, full address, valid US phone, all 7 days of hours). DRY RUN BY
+    DEFAULT -- only `"apply": true` writes. See
+    app/scripts/deactivate_incomplete_listings.py.
+
+    Event payload shape:
+        {"_management_command": "deactivate_incomplete_listings"}            # report only
+        {"_management_command": "deactivate_incomplete_listings",
+         "apply": true}                                                     # hide them
+    Optional: "only_unclaimed": true (brands with no owner only).
+    """
+    from app.db.session import dispose_engine
+    from app.scripts.deactivate_incomplete_listings import (
+        DeactivateIncompleteError,
+        parse_flag,
+        run_deactivate_incomplete_listings,
+    )
+
+    try:
+        apply = parse_flag(event, "apply")
+        only_unclaimed = parse_flag(event, "only_unclaimed")
+    except DeactivateIncompleteError as exc:
+        return {"ok": False, "command": "deactivate_incomplete_listings", "error": str(exc)}
+
+    # Same same-loop-disposal reasoning as _run_seed_dev_data above.
+    async def _run_and_dispose() -> dict:
+        try:
+            return await run_deactivate_incomplete_listings(
+                apply=apply, only_unclaimed=only_unclaimed
+            )
+        finally:
+            await dispose_engine()
+
+    return {
+        "ok": True,
+        "command": "deactivate_incomplete_listings",
+        **asyncio.run(_run_and_dispose()),
+    }
 
 
 @_command("dev_clear_manager_assignments")

@@ -16,6 +16,8 @@ export interface ImportRowInput {
   website?: string | null;
   type?: string | null;
   description?: string | null;
+  /** Optional opening hours, e.g. "Mon-Fri 11:00-22:00; Sat 11:00-23:00; Sun closed". */
+  hours?: string | null;
   latitude?: string | number | null;
   longitude?: string | number | null;
 }
@@ -37,6 +39,12 @@ export interface ValidatedRow {
   issues: ImportIssue[];
   needs_geocoding: boolean;
   matched_tag: string | null;
+  /**
+   * Importable rows only: what is still needed before the (always hidden)
+   * imported listing can be activated — any of name | address | phone | hours.
+   * Empty = ready to activate once reviewed.
+   */
+  missing: string[];
   duplicate_of_row: number | null;
   duplicate_of_listing_id: number | null;
 }
@@ -48,6 +56,9 @@ export interface ValidateSummary {
   error: number;
   duplicate: number;
   needs_geocoding: number;
+  /** Importable rows (ready or warning) that will have nothing missing / still be missing something. */
+  ready_to_activate: number;
+  incomplete: number;
 }
 
 export interface ValidateResponse {
@@ -65,6 +76,10 @@ export interface CommittedRow {
   brand_id: number | null;
   location_id: number | null;
   needs_geocoding: boolean;
+  /** Created rows: always "coming_soon" (hidden). Null for rows that were not created. */
+  listing_status: string | null;
+  /** Created rows: what is still needed before activation (empty = ready to activate). */
+  missing: string[];
 }
 
 export interface CommitSummary {
@@ -73,6 +88,9 @@ export interface CommitSummary {
   skipped_warning: number;
   failed: number;
   needs_geocoding: number;
+  /** Of `created` (all hidden): nothing missing vs still missing something. */
+  created_ready_to_activate: number;
+  created_incomplete: number;
 }
 
 export interface CommitResponse {

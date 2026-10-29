@@ -11,6 +11,7 @@
 // resumed (the API is idempotent, so a re-sent chunk never duplicates).
 // Pure logic lives in lib/adminImport{Csv,Report,Run}.ts. Mobile-first: 44px
 // targets, tables scroll inside their own container.
+import Link from "next/link";
 import { useRef, useState } from "react";
 import { importChunkAction, validateImportAction } from "@/app/admin/import/actions";
 import {
@@ -30,6 +31,7 @@ import {
   finalReport,
   importableRows,
   issueSummary,
+  missingText,
   progressPercent,
   resultCsv,
   summarizeResults,
@@ -219,9 +221,13 @@ export default function AdminImportPanel() {
           1. Get the template and choose your file
         </h2>
         <p className="mt-2 text-sm text-brand-ink-muted">
-          One restaurant per row. Imported listings are <strong>unclaimed</strong>, live and verified,
-          so owners can claim them later. Up to {IMPORT_LIMITS.maxRows} rows and 1 MB, saved as CSV
-          (UTF-8). Nothing is saved until you confirm in step 2.
+          One restaurant per row. Imported listings are <strong>unclaimed</strong> and verified.{" "}
+          <strong>
+            They are created hidden (coming soon). Open each one, complete what&apos;s missing and activate
+            it.
+          </strong>{" "}
+          Up to {IMPORT_LIMITS.maxRows} rows and 1 MB, saved as CSV (UTF-8). Nothing is saved until you
+          confirm in step 2.
         </p>
         <details className="mt-3 text-sm text-brand-ink-muted">
           <summary className="min-h-[44px] cursor-pointer py-3 font-semibold text-brand-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent">
@@ -236,6 +242,16 @@ export default function AdminImportPanel() {
             <li>state is two letters; postal_code is a 5-digit ZIP.</li>
             <li>phone is a 10-digit US number, for example (214) 555-0142.</li>
             <li>type is one cuisine or restaurant-type tag, for example South Indian.</li>
+            <li>
+              hours (last column, optional) looks like{" "}
+              <code>Mon-Fri 11:00-22:00; Sat 11:00-23:00; Sun closed</code> or{" "}
+              <code>daily 11:00-22:00</code>: days Mon to Sun, 24-hour times, one window per day. If it
+              cannot be read the row still imports, without hours.
+            </li>
+            <li>
+              Every imported listing needs a name, full address, valid US phone and opening hours for all 7
+              days before it can be activated. The check below shows what each row still needs.
+            </li>
             <li>
               Leave latitude and longitude blank to have them looked up when you import. Rows that
               cannot be placed are listed so you can fix them later.
@@ -318,6 +334,12 @@ export default function AdminImportPanel() {
               <span className="font-semibold text-brand-ink">{summary.needs_geocoding}</span>
             </li>
           </ul>
+          <p className="mt-3 text-sm text-brand-ink-muted">
+            Every row that can be imported is created <strong>hidden</strong>.{" "}
+            <strong>{summary.ready_to_activate}</strong> will have nothing missing (review and activate
+            them); <strong>{summary.incomplete}</strong> still need something filled in (see &quot;Still
+            needed&quot;).
+          </p>
 
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
             <div className="sm:w-56">
@@ -347,7 +369,7 @@ export default function AdminImportPanel() {
           </div>
 
           <div className="mt-4 overflow-x-auto rounded-brand-control border border-brand-border">
-            <table className="w-full min-w-[640px] text-left text-sm">
+            <table className="w-full min-w-[760px] text-left text-sm">
               <caption className="sr-only">Per-row check results</caption>
               <thead className="bg-brand-chip text-brand-ink">
                 <tr>
@@ -355,6 +377,7 @@ export default function AdminImportPanel() {
                   <th scope="col" className="px-3 py-2">Name</th>
                   <th scope="col" className="px-3 py-2">Status</th>
                   <th scope="col" className="px-3 py-2">Problems</th>
+                  <th scope="col" className="px-3 py-2">Still needed before activation</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-brand-border">
@@ -370,11 +393,18 @@ export default function AdminImportPanel() {
                     <td className="px-3 py-2 break-words text-brand-ink-muted">
                       {issueSummary(r) || (r.needs_geocoding ? "No coordinates: will be looked up on import." : "")}
                     </td>
+                    <td className="px-3 py-2 break-words text-brand-ink-muted">
+                      {r.status === "valid" || r.status === "warning"
+                        ? r.missing.length > 0
+                          ? missingText(r.missing)
+                          : "Nothing: ready to activate"
+                        : ""}
+                    </td>
                   </tr>
                 ))}
                 {shownRows.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="px-3 py-6 text-center text-brand-ink-muted">
+                    <td colSpan={5} className="px-3 py-6 text-center text-brand-ink-muted">
                       No rows in this view.
                     </td>
                   </tr>
@@ -402,8 +432,9 @@ export default function AdminImportPanel() {
             </label>
           )}
           <p className="mt-2 text-sm text-brand-ink-muted">
-            {toImport.length} listing(s) will be created. Errors and duplicates are skipped. Running this
-            again with the same file creates nothing new.
+            {toImport.length} listing(s) will be created <strong>hidden (coming soon)</strong>, not public
+            anywhere until you open each one, complete what&apos;s missing and activate it. Errors and
+            duplicates are skipped. Running this again with the same file creates nothing new.
           </p>
           <button
             type="button"
@@ -436,7 +467,7 @@ export default function AdminImportPanel() {
           </div>
           <p role="status" className="mt-2 text-sm text-brand-ink-muted">
             {stage === "done"
-              ? `Done: ${resultSummary.created} created, ${resultSummary.skipped_duplicate} skipped as duplicates, ${resultSummary.skipped_warning} skipped (warnings), ${resultSummary.failed} not imported.`
+              ? `Done: ${resultSummary.created} created hidden (${resultSummary.created_ready_to_activate} with nothing missing, ${resultSummary.created_incomplete} still needing info), ${resultSummary.skipped_duplicate} skipped as duplicates, ${resultSummary.skipped_warning} skipped (warnings), ${resultSummary.failed} not imported.`
               : `${doneRows} of ${totalRows} rows processed…`}
           </p>
           {runError && (
@@ -470,6 +501,18 @@ export default function AdminImportPanel() {
               </button>
             )}
           </div>
+          {(stage === "done" || stage === "paused") && resultSummary.created > 0 && (
+            <p className="mt-3 text-sm text-brand-ink-muted">
+              None of the {resultSummary.created} created listing(s) are public yet. Open each one, complete
+              what is missing and activate it.{" "}
+              <Link
+                href="/admin/listings?status=coming_soon"
+                className="inline-flex min-h-[44px] items-center font-semibold text-brand-accent underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent"
+              >
+                Find them in Admin &gt; Listings (Coming soon)
+              </Link>
+            </p>
+          )}
           {stage === "done" && resultSummary.needs_geocoding > 0 && (
             <p className="mt-3 text-sm text-brand-ink-muted">
               {resultSummary.needs_geocoding} listing(s) were created without a map point (the address could
@@ -481,13 +524,14 @@ export default function AdminImportPanel() {
 
           {(stage === "done" || stage === "paused") && report.length > 0 && (
             <div className="mt-4 overflow-x-auto rounded-brand-control border border-brand-border">
-              <table className="w-full min-w-[640px] text-left text-sm">
+              <table className="w-full min-w-[760px] text-left text-sm">
                 <caption className="sr-only">Per-row import results</caption>
                 <thead className="bg-brand-chip text-brand-ink">
                   <tr>
                     <th scope="col" className="px-3 py-2">Row</th>
                     <th scope="col" className="px-3 py-2">Name</th>
                     <th scope="col" className="px-3 py-2">Result</th>
+                    <th scope="col" className="px-3 py-2">Still needed before activation</th>
                     <th scope="col" className="px-3 py-2">Reason</th>
                   </tr>
                 </thead>
@@ -500,6 +544,13 @@ export default function AdminImportPanel() {
                         <span className={`rounded px-2 py-0.5 text-xs font-semibold ${RESULT_STYLE[r.result]}`}>
                           {RESULT_LABEL[r.result]}
                         </span>
+                      </td>
+                      <td className="px-3 py-2 break-words text-brand-ink-muted">
+                        {r.result === "created"
+                          ? r.missing.length > 0
+                            ? missingText(r.missing)
+                            : "Nothing: ready to activate"
+                          : ""}
                       </td>
                       <td className="px-3 py-2 break-words text-brand-ink-muted">
                         {r.reason ?? (r.needs_geocoding ? "Created without coordinates." : "")}

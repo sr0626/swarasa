@@ -41,20 +41,56 @@ export function issueSummary(row: ValidatedRow): string {
     .join(" ");
 }
 
+/** Short wording per `listing_readiness` key, for the "what's missing" column. */
+export const MISSING_LABEL: Record<string, string> = {
+  name: "restaurant name",
+  address: "full street address",
+  phone: "valid US phone number",
+  hours: "opening hours for all 7 days",
+};
+
+/** Human labels for the missing keys, in the order given (unknown keys are shown as-is). */
+export function missingLabels(keys: readonly string[]): string[] {
+  return keys.map((key) => MISSING_LABEL[key] ?? key);
+}
+
+/** "opening hours for all 7 days; valid US phone number" — empty string when nothing is missing. */
+export function missingText(keys: readonly string[]): string {
+  return missingLabels(keys).join("; ");
+}
+
 export function validationCsv(rows: ValidatedRow[]): string {
   return toCsvText(
-    ["row", "name", "status", "problems", "needs_geocoding"],
-    rows.map((r) => [r.row_number, r.name, r.status, issueSummary(r), r.needs_geocoding ? "yes" : "no"])
+    ["row", "name", "status", "problems", "needs_geocoding", "will_be", "missing"],
+    rows.map((r) => {
+      const importable = r.status === "valid" || r.status === "warning";
+      return [
+        r.row_number,
+        r.name,
+        r.status,
+        issueSummary(r),
+        r.needs_geocoding ? "yes" : "no",
+        importable ? "hidden" : "",
+        importable ? missingText(r.missing) : "",
+      ];
+    })
   );
 }
 
+/**
+ * `status` = what the listing is now ("hidden" for every created row, empty
+ * for rows that were not created); `missing` = everything still needed before
+ * it can be activated (empty on a created row = ready to activate).
+ */
 export function resultCsv(rows: CommittedRow[]): string {
   return toCsvText(
-    ["row", "name", "result", "reason", "listing_id", "needs_geocoding"],
+    ["row", "name", "result", "status", "missing", "reason", "listing_id", "needs_geocoding"],
     rows.map((r) => [
       r.row_number,
       r.name,
       r.result,
+      r.result === "created" ? "hidden" : "",
+      r.result === "created" ? missingText(r.missing) : "",
       r.reason,
       r.location_id,
       r.needs_geocoding ? "yes" : "no",
@@ -70,7 +106,7 @@ export const STATUS_LABEL: Record<ImportRowStatus, string> = {
 };
 
 export const RESULT_LABEL: Record<CommittedRow["result"], string> = {
-  created: "Created",
+  created: "Created hidden",
   skipped_duplicate: "Skipped (duplicate)",
   skipped_warning: "Skipped (warning)",
   failed: "Failed",
@@ -102,6 +138,7 @@ export function filterByStatus(rows: ValidatedRow[], status: ImportRowStatus | "
 
 export function summarizeValidation(rows: ValidatedRow[]): ValidateSummary {
   const count = (s: ImportRowStatus) => rows.filter((r) => r.status === s).length;
+  const importable = rows.filter((r) => r.status === "valid" || r.status === "warning");
   return {
     total: rows.length,
     valid: count("valid"),
@@ -109,6 +146,8 @@ export function summarizeValidation(rows: ValidatedRow[]): ValidateSummary {
     error: count("error"),
     duplicate: count("duplicate"),
     needs_geocoding: rows.filter((r) => r.needs_geocoding && r.status !== "error").length,
+    ready_to_activate: importable.filter((r) => r.missing.length === 0).length,
+    incomplete: importable.filter((r) => r.missing.length > 0).length,
   };
 }
 
@@ -120,6 +159,8 @@ export function summarizeResults(rows: CommittedRow[]): CommitSummary {
     skipped_warning: count("skipped_warning"),
     failed: count("failed"),
     needs_geocoding: rows.filter((r) => r.needs_geocoding).length,
+    created_ready_to_activate: rows.filter((r) => r.result === "created" && r.missing.length === 0).length,
+    created_incomplete: rows.filter((r) => r.result === "created" && r.missing.length > 0).length,
   };
 }
 
@@ -145,6 +186,8 @@ export function finalReport(validated: ValidatedRow[], committed: CommittedRow[]
       brand_id: null,
       location_id: null,
       needs_geocoding: false,
+      listing_status: null,
+      missing: [],
     };
   });
 }
