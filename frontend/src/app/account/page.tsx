@@ -47,6 +47,7 @@ import {
   getMyManagedLocations,
 } from "@/lib/api/auth";
 import AdminShell from "@/components/admin/AdminShell";
+import { loadAdminNavBadges } from "@/lib/admin/navBadges";
 import ManagerShell from "@/components/portal/ManagerShell";
 import OwnerShell from "@/components/portal/OwnerShell";
 import AdminAccountView from "@/components/account/AdminAccountView";
@@ -113,8 +114,9 @@ export default async function AccountPage() {
   // Admins get the admin console frame (banner + left menu, Profile active)
   // -- the same AdminShell app/admin/layout.tsx uses for the other sections.
   if (me?.role === "admin") {
+    const navBadges = await loadAdminNavBadges(session.accessToken);
     return (
-      <AdminShell me={me} profile>
+      <AdminShell me={me} profile navBadges={navBadges}>
         <AdminAccountView me={me} />
       </AdminShell>
     );

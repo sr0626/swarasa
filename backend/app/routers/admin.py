@@ -33,6 +33,7 @@ from app.schemas.admin_users import (
 from app.schemas.admin_listings import AdminListingSort, AdminListingsResponse
 from app.schemas.admin_managers import AdminManagersResponse, ManagerSort
 from app.schemas.admin_overview import AdminOverviewResponse
+from app.schemas.admin_queue_counts import AdminQueueCountsResponse
 from app.schemas.admin_owners import AdminOwnersResponse, OwnerSort
 from app.schemas.admin_registered_users import RegisteredUserSort, RegisteredUsersResponse
 from app.schemas.restaurant import RestaurantListStatusValue
@@ -48,6 +49,7 @@ from app.services.admin_listings_service import get_admin_listings
 from app.services.admin_managers_service import get_admin_managers
 from app.services.admin_notification_service import get_admin_notifications
 from app.services.admin_overview_service import get_admin_overview
+from app.services.admin_queue_counts_service import get_admin_queue_counts
 from app.services.admin_owners_service import get_admin_owners
 from app.services.admin_registered_users_service import get_registered_users
 from app.services.admin_users_service import get_admin_users, perform_user_action
@@ -68,6 +70,19 @@ async def admin_notifications_endpoint(
     aggregate computed per request (see docs/API_CONTRACTS.md "Admin
     notifications" for the new-users limitation)."""
     return await get_admin_notifications(db)
+
+
+@router.get("/queue-counts", response_model=AdminQueueCountsResponse)
+async def admin_queue_counts_endpoint(
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_admin),
+) -> AdminQueueCountsResponse:
+    """Auth: admin only. How many items in each work queue (claims, messages,
+    problem reports, reopen requests) are waiting on an admin decision, plus
+    how many claims are past their SLA. Read-only COUNT aggregate behind the
+    admin menu's "Work queue" badges; see docs/API_CONTRACTS.md "Admin queue
+    counts"."""
+    return await get_admin_queue_counts(db)
 
 
 @router.get("/registered-user-count", response_model=RegisteredUserCountResponse)

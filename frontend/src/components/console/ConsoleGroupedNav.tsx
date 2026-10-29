@@ -19,6 +19,8 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import ConsoleNavItemRow from "@/components/console/ConsoleNavItemRow";
+import NavBadgePill from "@/components/console/NavBadgePill";
+import { useNavBadges } from "@/components/console/NavBadgesProvider";
 import { useScrollRow } from "@/components/console/useScrollRow";
 import { activeNavHref, flattenNavMenu, groupForPath } from "@/components/console/navItems";
 import type { ConsoleNavGroup, ConsoleNavMenu } from "@/components/console/navItems";
@@ -30,6 +32,8 @@ import {
   resolveSelectedGroupId,
 } from "@/lib/ui/navGroupState";
 import type { StoredGroupState } from "@/lib/ui/navGroupState";
+import { groupControlLabel } from "@/lib/ui/queueBadges";
+import type { NavBadge } from "@/lib/ui/queueBadges";
 
 const FOCUS = "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent";
 
@@ -69,18 +73,35 @@ function PillRow({
   );
 }
 
+/** Group-level badge: the total plus a dot, so "needs action" shows on a collapsed group. */
+function GroupBadge({ badge }: { badge: NavBadge }) {
+  return (
+    <span aria-hidden="true" className="inline-flex items-center gap-1">
+      <span
+        className={`h-2 w-2 rounded-full ring-2 ${
+          badge.urgent ? "bg-brand-accent ring-brand-accent/30" : "bg-brand-chip-ink ring-brand-chip-ink/30"
+        }`}
+      />
+      <NavBadgePill badge={badge} />
+    </span>
+  );
+}
+
 /** Group header + collapsible item list in the desktop card. */
 function DesktopGroup({
   group,
   open,
   containsActive,
   current,
+  badge,
   onToggle,
 }: {
   group: ConsoleNavGroup;
   open: boolean;
   containsActive: boolean;
   current: string | null;
+  /** Action-item badge for the whole group: visible even while collapsed. */
+  badge: NavBadge | undefined;
   onToggle: () => void;
 }) {
   const panelId = useId();
@@ -90,11 +111,13 @@ function DesktopGroup({
         type="button"
         aria-expanded={open}
         aria-controls={panelId}
+        aria-label={groupControlLabel(badge, !open && containsActive)}
         onClick={onToggle}
         className={`flex min-h-[44px] w-full items-center justify-between gap-2 rounded-brand-control px-4 text-xs font-bold uppercase tracking-wider text-brand-ink-muted transition hover:bg-brand-chip hover:text-brand-ink ${FOCUS}`}
       >
         <span className="flex items-center gap-2">
           {group.title}
+          {badge && <GroupBadge badge={badge} />}
           {!open && containsActive && (
             <>
               <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-brand-accent" />
@@ -140,6 +163,7 @@ export default function ConsoleGroupedNav({ menu, label }: { menu: ConsoleNavMen
   const activeGroupId = groupForPath(pathname, groups)?.id ?? null;
   const storageKey = navGroupStorageKey(label);
   const itemsRowId = useId();
+  const badges = useNavBadges();
 
   // Desktop open/close. Server render and first client render use the defaults
   // only (no storage); stored choices are applied in the mount effect below.
@@ -185,12 +209,14 @@ export default function ConsoleGroupedNav({ menu, label }: { menu: ConsoleNavMen
             ))}
             {groups.map((g) => {
               const isSelected = g.id === selectedId;
+              const groupBadge = badges.groups[g.id];
               return (
                 <li key={g.id} className="shrink-0">
                   <button
                     type="button"
                     aria-pressed={isSelected}
                     aria-controls={itemsRowId}
+                    aria-label={groupControlLabel(groupBadge, g.id === activeGroupId)}
                     onClick={() => setPick({ path: pathname, id: g.id })}
                     className={`flex min-h-[44px] items-center gap-2 whitespace-nowrap rounded-brand-pill border px-4 text-sm font-semibold transition ${FOCUS} ${
                       isSelected
@@ -199,6 +225,7 @@ export default function ConsoleGroupedNav({ menu, label }: { menu: ConsoleNavMen
                     }`}
                   >
                     {g.title}
+                    {groupBadge && <GroupBadge badge={groupBadge} />}
                     {g.id === activeGroupId && (
                       <>
                         <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-brand-accent" />
@@ -235,6 +262,7 @@ export default function ConsoleGroupedNav({ menu, label }: { menu: ConsoleNavMen
               open={open[g.id] ?? false}
               containsActive={g.id === activeGroupId}
               current={current}
+              badge={badges.groups[g.id]}
               onToggle={() => toggle(g.id)}
             />
           ))}

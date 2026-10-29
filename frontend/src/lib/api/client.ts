@@ -71,6 +71,12 @@ export interface ApiFetchOptions {
   accessToken?: string | null;
   /** Next.js data cache revalidation window, in seconds, for GET requests. */
   revalidateSeconds?: number;
+  /**
+   * Overrides the default 25s give-up bound for this call. For best-effort,
+   * non-essential calls (e.g. the admin menu badges) that must never hold a
+   * page render up.
+   */
+  timeoutMs?: number;
 }
 
 /**
@@ -138,7 +144,7 @@ export async function apiFetch<TResponse>(
   const timeoutController = new AbortController();
   const timeoutId = setTimeout(
     () => timeoutController.abort(),
-    API_FETCH_TIMEOUT_MS
+    options.timeoutMs ?? API_FETCH_TIMEOUT_MS
   );
 
   let res: Response;

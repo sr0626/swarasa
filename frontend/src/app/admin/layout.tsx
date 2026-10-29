@@ -6,20 +6,29 @@
 // requireSession(["admin"]) itself -- layouts don't re-render on sibling
 // navigation, so a layout alone is not a sufficient guard.
 //
-// No per-section notification badges in the menu on purpose: a layout is not
-// re-rendered when navigating between /admin/* pages, so counts fetched here
-// would go stale after approving a claim. The TopBar bell (rendered per page)
-// already carries the live counts.
+// Work queue badges: counts are fetched here once per server render
+// (best-effort, ~1.5s bound -- on any failure the menu simply has no badges).
+// A layout is NOT re-rendered on client-side navigation between /admin/* pages,
+// so NavBadgesProvider re-fetches through a Server Action when the path
+// changes; the TopBar bell (rendered per page) carries its own live counts.
 import type { ReactNode } from "react";
 import { requireSession } from "@/lib/auth/guards";
 import { loadConsoleIdentity } from "@/lib/auth/consoleIdentity";
+import { loadAdminNavBadges } from "@/lib/admin/navBadges";
 import AdminShell from "@/components/admin/AdminShell";
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
   const session = await requireSession(["admin"]);
 
-  // Banner identity is best-effort (falls back to the session claims).
-  const me = await loadConsoleIdentity(session);
+  // Banner identity and menu badges are both best-effort; fetched in parallel.
+  const [me, navBadges] = await Promise.all([
+    loadConsoleIdentity(session),
+    loadAdminNavBadges(session.accessToken),
+  ]);
 
-  return <AdminShell me={me}>{children}</AdminShell>;
+  return (
+    <AdminShell me={me} navBadges={navBadges}>
+      {children}
+    </AdminShell>
+  );
 }
