@@ -80,6 +80,7 @@ from __future__ import annotations
 
 import csv
 import io
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -91,14 +92,16 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.bulk_import_hours import HoursDay, parse_hours
 from app.core.phone import US_PHONE_ERROR, normalize_us_phone
 from app.models.cuisine_tag import CuisineTag
 from app.models.owner_account import OwnerAccount
 from app.models.restaurant_brand import RestaurantBrand
+from app.models.restaurant_hours import RestaurantHours
 from app.models.location_cuisine import LocationCuisine
 from app.models.restaurant_location import RestaurantLocation
 from app.schemas.restaurant_bulk_import import RestaurantBasicDetailIn, RestaurantCsvRowIn
-from app.services import audit_service, location_slug
+from app.services import audit_service, listing_readiness, location_slug
 from app.services.restaurant_service import slugify
 
 _MAX_ROWS_PER_BATCH = 500  # sanity cap -- generous for a manual admin batch
@@ -132,6 +135,14 @@ class RowResult:
     # `cuisine_match` None).
     cuisine_type_input: str | None = None
     cuisine_match: str | None = None  # matched cuisine_tag.name, or None
+    # Readiness outcome of a CREATED row (docs/DECISIONS.md "Bulk import is
+    # invisible by default"): the location's status (always "coming_soon") and
+    # everything still needed before it can be activated (`listing_readiness`
+    # keys; [] = ready to activate). `hours_warning` = the optional `hours`
+    # cell could not be understood (row imported without hours).
+    listing_status: str | None = None
+    missing: list[str] = field(default_factory=list)
+    hours_warning: str | None = None
 
 
 @dataclass
@@ -247,6 +258,28 @@ async def _find_or_create_brand(
     return brand, True
 
 
+def hours_models(days: Sequence[HoursDay]) -> list[RestaurantHours]:
+    """Transient `restaurant_hours` rows (not yet attached to a location)."""
+    return [
+        RestaurantHours(
+            day_of_week=d.day_of_week,
+            is_closed=d.is_closed,
+            open_time=d.open_time,
+            close_time=d.close_time,
+        )
+        for d in days
+    ]
+
+
+def missing_for_new_listing(
+    location: RestaurantLocation, brand_name: str | None, days: Sequence[HoursDay]
+) -> list[str]:
+    """What `listing_readiness` says is missing for a listing about to be (or
+    just) created from import data -- the single rule behind "live vs hidden"
+    for every import path and the admin validate-step prediction."""
+    return listing_readiness.missing_for_activation(location, brand_name, hours_models(days))
+
+
 async def _find_or_create_location(
     db: AsyncSession,
     *,
@@ -255,7 +288,16 @@ async def _find_or_create_location(
     actor_id: str,
     actor_role: str,
     provenance: str | None = None,
+    hours: Sequence[HoursDay] | None = None,
 ) -> tuple[RestaurantLocation, bool]:
+    """Create-or-skip a location. A NEW imported location is ALWAYS created
+    `coming_soon` (hidden everywhere), even when nothing is missing: an admin
+    opens it, completes what is missing and activates it deliberately, through
+    the normal server rule (`listing_readiness.missing_for_activation`, same as
+    a manually added listing). `missing` (name, full address, valid US phone,
+    all 7 days of hours) is recorded in the audit row and reported per row.
+    `hours` = already-parsed days; when omitted they are parsed from
+    `row.hours`."""
     result = await db.execute(
         select(RestaurantLocation).where(
             RestaurantLocation.brand_id == brand_id,
@@ -284,10 +326,17 @@ async def _find_or_create_location(
         is_paid=False,
         paid_until=None,
         is_verified=row.is_verified,
-        is_active=True,
     )
+    hour_days: Sequence[HoursDay] = hours if hours is not None else parse_hours(row.hours).days
+    missing = missing_for_new_listing(location, row.name, hour_days)
+    location.status = RestaurantLocation.STATUS_COMING_SOON
     db.add(location)
     await db.flush()
+    for hours_row in hours_models(hour_days):
+        hours_row.location_id = location.id
+        db.add(hours_row)
+    if hour_days:
+        await db.flush()
 
     if row.latitude is not None and row.longitude is not None:
         await _sync_geom(db, location.id, row.latitude, row.longitude)
@@ -304,10 +353,19 @@ async def _find_or_create_location(
             "brand_id": brand_id,
             "address_line1": location.address_line1,
             "city": location.city,
+            "status": location.status,
+            "missing": missing,
             **({"provenance": provenance} if provenance else {}),
         },
     )
     return location, True
+
+
+def _readiness_fields(location: RestaurantLocation, row: RestaurantBasicDetailIn) -> dict:
+    """`RowResult` readiness fields for a row whose location was just created."""
+    parsed = parse_hours(row.hours)
+    missing = missing_for_new_listing(location, row.name, parsed.days)
+    return {"listing_status": location.status, "missing": missing, "hours_warning": parsed.error}
 
 
 async def _import_one_row(
@@ -344,6 +402,7 @@ async def _import_one_row(
             status=RowStatus.CREATED,
             brand_id=brand.id,
             location_id=location.id,
+            **_readiness_fields(location, row),
         )
     return RowResult(
         index=index,
@@ -659,6 +718,7 @@ async def _import_one_csv_row(
             location_id=location.id,
             cuisine_type_input=row.cuisine_type,
             cuisine_match=cuisine_match,
+            **_readiness_fields(location, row),
         )
     return RowResult(
         index=index,

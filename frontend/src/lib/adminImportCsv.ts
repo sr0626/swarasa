@@ -28,6 +28,8 @@ export const IMPORT_COLUMNS = [
   "description",
   "latitude",
   "longitude",
+  // Appended LAST so files made from the older template keep working.
+  "hours",
 ] as const;
 
 export const REQUIRED_COLUMNS = ["name", "address_line1", "city", "state", "postal_code"] as const;
@@ -51,6 +53,9 @@ const HEADER_ALIASES: Record<string, string> = {
   cuisine: "type",
   website_url: "website",
   url: "website",
+  opening_hours: "hours",
+  business_hours: "hours",
+  hours_of_operation: "hours",
 };
 
 /** Decode bytes as strict UTF-8; null when the file is not valid UTF-8 (e.g. Excel "CSV" in Windows-1252). */

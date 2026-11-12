@@ -19,7 +19,8 @@ Covers:
     is unchanged (seeded/imported listings keep working).
   - Admin (and only owner-of-brand / admin) can add a location; a manager or
     another owner cannot.
-  - Bulk import / seed defaults are unchanged (still `active`).
+  - Bulk import is the opposite default: every imported listing is created
+    `coming_soon` (docs/DECISIONS.md "Bulk import is invisible by default").
 """
 from __future__ import annotations
 
@@ -588,12 +589,12 @@ async def test_leading_country_code_is_normalised_on_create_and_update(client, d
 
 
 # ---------------------------------------------------------------------------
-# Bulk import / seed defaults are unchanged
+# Bulk import creates hidden listings
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_bulk_import_still_creates_active_listings(db_session):
+async def test_bulk_import_creates_hidden_listings(db_session):
     owner = await create_owner(db_session)
     await db_session.commit()
 
@@ -615,7 +616,9 @@ async def test_bulk_import_still_creates_active_listings(db_session):
     )
     assert result.created == 1
     location = (await db_session.execute(select(RestaurantLocation))).scalar_one()
-    assert location.status == "active"
+    assert location.status == "coming_soon"  # hidden even though the phone is valid
+    assert result.rows[0].listing_status == "coming_soon"
+    assert result.rows[0].missing == ["hours"]
     # Same US rule as every other phone field: stored canonical.
     assert location.phone == "+19725550101"
 

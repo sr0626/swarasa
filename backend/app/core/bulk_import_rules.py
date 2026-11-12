@@ -14,6 +14,11 @@ listing import"):
   * latitude/longitude: both or neither, in range, inside the US
   * no control characters in any cell (a hostile/garbled file is rejected
     per row, never stored)
+  * `hours` (optional, appended last in the template) is parsed by
+    `app.core.bulk_import_hours`; a problem is a WARNING-severity issue
+    (`bad_hours`) that never blocks the row and never changes its status --
+    the row is simply imported without hours (imported listings are always
+    created hidden; missing hours just stay on its "still needed" list).
 `type` (cuisine tag) matching needs the taxonomy, so it is NOT checked here.
 """
 from __future__ import annotations
@@ -24,6 +29,7 @@ import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
+from app.core.bulk_import_hours import MAX_HOURS_CELL_LENGTH, parse_hours
 from app.core.geo_bounds import is_plausible_us_point
 from app.core.phone import US_PHONE_ERROR, normalize_us_phone
 
@@ -91,6 +97,45 @@ def _parse_coordinate(raw: str, limit: float) -> float | None:
     if not math.isfinite(number) or abs(number) > limit:
         return None
     return number
+
+
+def _check_hours(raw: object, out: RowCheck) -> None:
+    """Parse the optional `hours` cell into `out.values["hours"]` (a tuple of
+    `HoursDay`). Any problem -- including control characters or an over-long
+    cell -- is a warning, never an error: the row imports without hours."""
+    if raw is None:
+        return
+    text = str(raw)
+    if not text.strip():
+        return
+    if len(text) > MAX_HOURS_CELL_LENGTH or _has_control_chars(text):
+        error_text = "the text is too long or has characters that are not allowed"
+        parsed = None
+    else:
+        parsed = parse_hours(text)
+        error_text = parsed.error
+    if parsed is None or parsed.error is not None:
+        out.issues.append(
+            RuleIssue(
+                "hours",
+                "warning",
+                "bad_hours",
+                f"Hours not understood ({error_text}); the row is imported without hours. "
+                "Use the format: Mon-Fri 11:00-22:00; Sat 11:00-23:00; Sun closed.",
+            )
+        )
+        return
+    out.values["hours"] = tuple(parsed.days)
+    if not parsed.covers_all_days:
+        out.issues.append(
+            RuleIssue(
+                "hours",
+                "warning",
+                "partial_hours",
+                f"Hours cover {len({d.day_of_week for d in parsed.days})} of 7 days; "
+                "the remaining days must be filled in before the listing can be activated.",
+            )
+        )
 
 
 def check_row_fields(
@@ -177,6 +222,8 @@ def check_row_fields(
                 out.values["latitude"], out.values["longitude"] = lat, lng
             else:
                 error("latitude", "outside_us", "The coordinates are outside the United States.")
+
+    _check_hours(row.get("hours"), out)
 
     for key in ("name", "address_line1", "address_line2", "city", "description", "type"):
         if cleaned.get(key) is not None and not any(i.field == key for i in out.issues):

@@ -94,3 +94,22 @@ test("non-UTF-8 bytes decode to null instead of throwing", () => {
   assert.equal(decodeUtf8(new Uint8Array([0x6e, 0x61, 0x6d, 0x65, 0x20, 0xe9])), null); // 'name é' in Latin-1
   assert.equal(decodeUtf8(new TextEncoder().encode("café")), "café");
 });
+
+test("hours is the LAST template column, so older files without it keep working", () => {
+  const header = TEMPLATE_CSV.trim().split(",");
+  assert.equal(header[header.length - 1], "hours");
+  const old = parseImportCsv("name,address_line1,city,state,postal_code\nA,1 Main,Plano,TX,75024\n");
+  assert.ok(old.ok);
+  if (old.ok) assert.equal(old.rows[0]?.hours, undefined);
+});
+
+test("the hours cell is passed through verbatim (the server parses it); alias headers work", () => {
+  const cell = "Mon-Fri 11:00-22:00; Sat 11:00-23:00; Sun closed";
+  const result = parseImportCsv(
+    `name,address_line1,city,state,postal_code,Opening Hours\nA,1 Main,Plano,TX,75024,"${cell}"\nB,2 Main,Plano,TX,75024,\n`
+  );
+  assert.ok(result.ok);
+  if (!result.ok) return;
+  assert.equal(result.rows[0]?.hours, cell);
+  assert.equal(result.rows[1]?.hours, null);
+});

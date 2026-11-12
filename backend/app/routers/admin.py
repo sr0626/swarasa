@@ -436,6 +436,9 @@ async def bulk_import_restaurants_endpoint(
                 brand_id=row.brand_id,
                 location_id=row.location_id,
                 detail=row.detail,
+                listing_status=row.listing_status,
+                missing=row.missing,
+                hours_warning=row.hours_warning,
             )
             for row in result.rows
         ],
