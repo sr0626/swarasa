@@ -114,11 +114,17 @@ aws lambda invoke --function-name swarasa-api-dev --profile swarasa-dev --region
 aws lambda invoke --function-name swarasa-api-dev --profile swarasa-dev --region us-east-1 \
   --cli-binary-format raw-in-base64-out \
   --payload '{"_management_command":"deactivate_incomplete_listings","apply":true,"only_unclaimed":true}' /dev/stdout
+
+# Optional: only specific locations (e.g. just test rows); dry run first by leaving out "apply"
+aws lambda invoke --function-name swarasa-api-dev --profile swarasa-dev --region us-east-1 \
+  --cli-binary-format raw-in-base64-out \
+  --payload '{"_management_command":"deactivate_incomplete_listings","apply":true,"location_ids":[67,68,69,70,71]}' /dev/stdout
 ```
 
 Idempotent (a second run finds nothing), never touches locations that are already hidden, already
 complete, or whose restaurant is deleted. `apply` / `only_unclaimed` must be real JSON booleans
-(`"apply":"true"` is rejected). Output: `mode` (`dry_run`/`apply`), `checked_active`, `incomplete`,
+(`"apply":"true"` is rejected). `location_ids` must be a non-empty list of positive integers (max 1000);
+naming a complete, hidden or deleted location is a harmless no-op. Output: `mode` (`dry_run`/`apply`), `checked_active`, `incomplete`,
 `changed`, `missing_counts`, `listings[]` (`location_id`, `name`, `city`, `missing`),
 `listings_truncated`. **Undo:** set a listing back to Active in the location editor once it is complete
 (the editor lists exactly what is still needed).
