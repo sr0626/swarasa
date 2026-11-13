@@ -27,7 +27,7 @@ export function parseListingStatusFilter(value: string | undefined): ListingStat
 }
 
 /**
- * Warning shown before an admin confirms "Delete listing". `activeLocationCount`
+ * Warning shown before an admin confirms "Delete restaurant". `activeLocationCount`
  * is the brand's `location_count` from `GET /restaurants` — which counts
  * ACTIVE locations only, i.e. exactly the ones the delete will deactivate
  * (locations that are already hidden are left as they are).
