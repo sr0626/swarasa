@@ -252,6 +252,71 @@ retention); the two are never mixed. Rows cascade with the location. Not on
 the audited-entity list (counters are not business records) — no `audit_log`.
 No retention purge in v1 (≈ 1 small row per location per day).
 
+## Catering quote requests (migration `0024_catering_requests`)
+
+A signed-in diner (`registered_user`) describes a catering order once and sends
+it to up to N subscribed restaurant locations, each of which answers with a
+quote. In-app only (no email — SES deferred).
+
+**`restaurant_location.accepts_catering`** — `BOOLEAN NOT NULL DEFAULT false`.
+Per-location opt-in; a location appears in the requester's picker only when it
+has opted in AND is *subscribed* (below). Changes are audited
+(`restaurant_location`, `{accepts_catering}` old/new).
+
+**`catering_request`** — one row per submit. `requester_user_sub` (Cognito
+`sub`, bare string, NOT a FK — same convention as `user_follow`),
+`requester_name` / `requester_email` (snapshots at submit time),
+`requester_phone` (optional, <= 20), `event_date` (DATE), `headcount` (1..5000),
+`delivery_or_pickup` (`delivery|pickup`), `delivery_city`, `delivery_zip`
+(optional), `notes` (<= 2000), `status` (`open|closed|cancelled`; `closed` =
+expired), `created_at`, `expires_at` (created + 14 days). Indexes
+`(requester_user_sub, created_at)`, `(status, expires_at)`.
+
+**`catering_request_item`** — `request_id` (FK, ON DELETE CASCADE),
+`item_name` (<= 120), `size` (`full_tray|medium_tray|flat_tray|other`),
+`quantity` (1..100), `note` (<= 255, optional). 1..30 per request.
+
+**`catering_request_recipient`** — `request_id` (FK CASCADE), `location_id`
+(FK `restaurant_location`, CASCADE), `status`
+(`pending|quoted|declined|expired`), `quote_amount_cents` (BIGINT, integer
+cents, `0 < amount <= 1,000,000 dollars`), `quote_note` (<= 2000),
+`quoted_at`, `quoted_by_user_sub`, `viewed_at`, `created_at`.
+`UNIQUE (request_id, location_id)`; index `(location_id, status)`.
+
+**Subscribed** = `restaurant_location.is_paid` AND (`paid_until` IS NULL OR
+`paid_until` > now). One helper —
+`app/services/subscription_service.py` (`is_location_subscribed`,
+`subscribed_clause`) — so the later Stripe integration (which sets `is_paid` /
+`paid_until`) changes one place. Until a payment processor exists an admin sets
+it by hand (`PUT /admin/locations/{id}/subscription`, audited with
+`note: "manual"`); menu and deals stay free regardless.
+
+**Eligible location** (list + submit) = `status = 'active'` AND brand not
+soft-deleted AND `accepts_catering` AND subscribed
+(`catering_service.eligible_conditions`).
+
+**platform_config `catering_max_restaurants`** — seeded `"5"` by the
+migration; the reader (`catering_service.get_max_restaurants`) clamps to
+1..20, so a bad value can't blow up the fan-out. Change it with the
+`set_platform_int` management command (docs/SCRIPTS.md).
+
+**Expiry** is lazy: every catering read first runs
+`expire_due_requests` (open + past `expires_at` -> `closed`; their `pending`
+recipients -> `expired`; quoted/declined keep their outcome). No cron.
+
+**Notifications.** A quote creates a `user_notification` with
+`kind = 'catering_quote'` (`kind` is free text), `location_id` = the quoting
+location, `deal_id` NULL, `title` like `Catering quote from X: $450.50`. The
+bell links it to `/account/catering`.
+
+**Privacy / CCPA.** Included in `GET /auth/me/data-export`
+(`catering_requests` with items + each restaurant's response;
+`catering_quotes_submitted` for quotes the caller wrote as a restaurant user).
+An approved deletion hard-deletes the caller's requests (items and every
+restaurant's quote text cascade); quotes the caller authored on other people's
+requests keep their content but `quoted_by_user_sub` becomes `deleted-user`.
+Audit rows: `catering_request` (create / cancel) and
+`catering_request_recipient` (quote / decline changes).
 
 ## restaurant_location.status — `import_review` (no migration)
 

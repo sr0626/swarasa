@@ -21,6 +21,9 @@ import { getLocationDeals } from "@/lib/api/deals";
 import { getLocationMenuForManagement } from "@/lib/api/menu";
 import { getLocationAnalytics } from "@/lib/api/analytics";
 import LocationInsights from "@/components/portal/LocationInsights";
+import LocationCateringSettings from "@/components/portal/LocationCateringSettings";
+import { getCateringSettings } from "@/lib/api/catering";
+import type { CateringSettings } from "@/types/catering";
 import { DEFAULT_RANGE } from "@/lib/portal/analyticsView";
 import type { LocationAnalytics } from "@/types/analytics";
 import LocationInfoForm from "@/components/portal/LocationInfoForm";
@@ -166,6 +169,15 @@ export default async function PortalLocationPage({ params, searchParams }: Locat
     insights = null;
   }
 
+  // Catering opt-in (same access rule as the rest of the editor). A failure
+  // shows the panel's own "try again" note instead of hiding the section.
+  let cateringSettings: CateringSettings | null = null;
+  try {
+    cateringSettings = await getCateringSettings(locationId, session.accessToken);
+  } catch {
+    cateringSettings = null;
+  }
+
   // The tag taxonomy for this location's "Cuisine & dietary tags" panel. A load failure
   // shows the panel's own "try again" note rather than hiding the section.
   let allTags: CuisineTag[] = [];
@@ -273,6 +285,14 @@ export default async function PortalLocationPage({ params, searchParams }: Locat
     insights: anchored(
       sectionById("insights"),
       <LocationInsights locationId={location.id} initial={insights} />
+    ),
+    catering: anchored(
+      sectionById("catering"),
+      <LocationCateringSettings
+        locationId={location.id}
+        initial={cateringSettings}
+        role={session.role}
+      />
     ),
     managers:
       isOwner || isAdmin

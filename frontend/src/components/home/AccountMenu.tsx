@@ -62,7 +62,10 @@ function leadingItemsFor(role: UserRole | null): MenuItem[] {
     ];
   }
   if (role === "registered_user") {
-    return [{ key: "profile", label: "My Favorites", href: "/account" }];
+    return [
+      { key: "profile", label: "My Favorites", href: "/account" },
+      { key: "catering", label: "Catering quotes", href: "/account/catering" },
+    ];
   }
   // admin, and any unexpected/null role — same single-item fallback as before.
   return [{ key: "profile", label: "Profile", href: "/account" }];

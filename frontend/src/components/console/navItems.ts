@@ -17,6 +17,9 @@ export interface ConsoleNavItem {
   subItems?: ReadonlyArray<ConsoleNavSubItem>;
 }
 
+/** The owner/manager catering quote-request inbox. */
+export const CATERING_INBOX_HREF = "/portal/catering";
+
 /** The owner/manager "Contact admin" form page. */
 export const CONTACT_ADMIN_HREF = "/portal/contact-admin";
 
@@ -87,6 +90,8 @@ export const ADMIN_NAV_MENU: ConsoleNavMenu = {
         // "Overview" (not "Reports") to avoid colliding with this label.
         { href: "/admin/reports", label: "Reports", icon: "reports" },
         { href: "/admin/reopen-requests", label: "Reopen requests", icon: "clock" },
+        // Read-only list of catering quote requests (GET /admin/catering).
+        { href: "/admin/catering", label: "Catering", icon: "mail" },
       ],
     },
     {
@@ -121,6 +126,8 @@ export const OWNER_NAV_ITEMS: ReadonlyArray<ConsoleNavItem> = [
   // and rendered when this item is selected -- see app/account/activity.
   { href: "/account/activity", label: "Activity", icon: "clock" },
   { href: "/portal/brands/new", label: "Add a restaurant", icon: "plus" },
+  // Catering quote requests addressed to the owner's locations (GET /catering/inbox).
+  { href: CATERING_INBOX_HREF, label: "Catering requests", icon: "mail" },
   // Write to the platform admins (POST /contact-admin) -- /portal/contact-admin.
   { href: CONTACT_ADMIN_HREF, label: "Contact admin", icon: "mail" },
 ];
@@ -138,6 +145,7 @@ export const OWNER_NAV_ITEMS: ReadonlyArray<ConsoleNavItem> = [
 export const MANAGER_NAV_ITEMS: ReadonlyArray<ConsoleNavItem> = [
   { href: "/account", label: "My locations", icon: "store" },
   { href: "/account/activity", label: "Activity", icon: "clock" },
+  { href: CATERING_INBOX_HREF, label: "Catering requests", icon: "mail" },
   { href: "/account#profile", label: "Profile", icon: "user" },
   { href: CONTACT_ADMIN_HREF, label: "Contact admin", icon: "mail" },
 ];

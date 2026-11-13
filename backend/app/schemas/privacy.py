@@ -2,7 +2,7 @@
 data export / deletion)"."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from pydantic import BaseModel
@@ -98,6 +98,51 @@ class NotificationExportOut(BaseModel):
     read_at: datetime | None
 
 
+class CateringItemExportOut(BaseModel):
+    item_name: str
+    size: str
+    quantity: int
+    note: str | None
+
+
+class CateringRecipientExportOut(BaseModel):
+    location_id: int
+    status: str
+    quote_amount_cents: int | None
+    quote_note: str | None
+    quoted_at: datetime | None
+
+
+class CateringRequestExportOut(BaseModel):
+    """A catering quote request the caller SENT as a diner, with its items
+    and each restaurant's response — see `app/models/catering.py`."""
+
+    request_id: int
+    event_date: date
+    headcount: int
+    delivery_or_pickup: str
+    delivery_city: str | None
+    delivery_zip: str | None
+    requester_phone: str | None
+    notes: str | None
+    status: str
+    created_at: datetime
+    expires_at: datetime
+    items: list[CateringItemExportOut]
+    recipients: list[CateringRecipientExportOut]
+
+
+class CateringQuoteExportOut(BaseModel):
+    """A quote/decline the caller submitted as a restaurant owner/manager."""
+
+    request_id: int
+    location_id: int
+    status: str
+    quote_amount_cents: int | None
+    quote_note: str | None
+    quoted_at: datetime | None
+
+
 class ManagerInviteExportOut(BaseModel):
     """A manager invitation the caller SENT (as an owner; `direction="sent"`)
     or that is addressed to the caller's own email (`direction="received"`)
@@ -143,6 +188,8 @@ class DataExportOut(BaseModel):
     activity_events: list[ActivityEventExportOut]
     notifications: list[NotificationExportOut] = []
     manager_invites: list[ManagerInviteExportOut] = []
+    catering_requests: list[CateringRequestExportOut] = []
+    catering_quotes_submitted: list[CateringQuoteExportOut] = []
     audit_log_entries: list[AuditLogExportOut]
     notice: str
 

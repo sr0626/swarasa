@@ -2,12 +2,12 @@
 // "Notifications" — the in-app deal alerts behind the bell in the top bar
 // (registered_user only).
 
-export type NotificationKind = "deal_new";
+export type NotificationKind = "deal_new" | "catering_quote";
 
 export interface UserNotification {
   id: number;
   kind: NotificationKind;
-  /** Snapshot of the deal title when the alert was created. */
+  /** Deal title (deal_new) or a one-line summary like "Catering quote from X: $450.00" (catering_quote). */
   title: string;
   location_id: number;
   /** The location's own name when set, else the brand name. */

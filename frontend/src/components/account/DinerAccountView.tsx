@@ -67,6 +67,28 @@ export default function DinerAccountView({
           <FollowedRestaurantsGrid follows={follows} loadError={followsError} />
         </div>
         <div className="flex min-w-0 flex-col gap-5">
+          <section
+            aria-labelledby="diner-catering-heading"
+            className="rounded-brand-card border border-brand-border bg-white p-5 shadow-brand-card"
+          >
+            <h2 id="diner-catering-heading" className="font-display text-lg font-bold text-brand-ink">
+              Catering quotes
+            </h2>
+            <p className="mt-1 text-sm text-brand-ink-muted">
+              Planning an event? Ask several restaurants for a quote at once.
+            </p>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row lg:flex-col">
+              <Link href="/account/catering/new" className={primaryLinkClass}>
+                Request catering quotes
+              </Link>
+              <Link
+                href="/account/catering"
+                className="flex min-h-[44px] items-center justify-center rounded-brand-pill border border-brand-border px-5 text-sm font-semibold text-brand-ink-muted transition hover:bg-brand-chip"
+              >
+                My catering requests
+              </Link>
+            </div>
+          </section>
           {/* Set-once: the editable card only shows until a name exists; after
               that the name is read-only in Account details below. */}
           {!isNameLocked(me.full_name) && <DisplayNameForm initialFullName={me.full_name} />}

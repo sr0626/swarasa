@@ -74,7 +74,7 @@ test("admin menu order: Overview first, then Listings, People, Work queue, Syste
 const ADMIN_GROUP_ITEMS: Record<string, string[]> = {
   Listings: ["Listings", "Import", "Taxonomy"],
   People: ["Users", "Owners", "Managers", "Registered users"],
-  "Work queue": ["Claims", "Messages", "Reports", "Reopen requests"],
+  "Work queue": ["Claims", "Messages", "Reports", "Reopen requests", "Catering"],
   System: ["Audit log", "Profile"],
 };
 
@@ -87,7 +87,7 @@ test("admin menu groups: Overview on top, then the four groups with the agreed m
 test("admin menu: every item appears exactly once and ADMIN_NAV_ITEMS is the flat grouped order", () => {
   const hrefs = ADMIN_NAV_ITEMS.map((i) => i.href);
   assert.equal(new Set(hrefs).size, hrefs.length);
-  assert.equal(ADMIN_NAV_ITEMS.length, 14);
+  assert.equal(ADMIN_NAV_ITEMS.length, 15);
   assert.deepEqual(hrefs, flattenNavMenu(ADMIN_NAV_MENU).map((i) => i.href));
   assert.deepEqual(
     ADMIN_NAV_ITEMS.map((i) => i.label),

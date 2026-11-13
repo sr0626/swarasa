@@ -4666,3 +4666,114 @@ or another owner, `404` unknown/deleted). Same shape as above with
 `brand_id`, `location_count`, and series/totals **summed over all the brand's
 locations**; `follower_count` is the brand's count (once); plus
 `by_location: [{location_id, label, totals}]`.
+
+## Catering quote requests (`/catering/*`, `/locations/{id}/catering-settings`, `/admin/catering`, `/admin/locations/{id}/subscription`)
+
+Tables: `catering_request`, `catering_request_item`,
+`catering_request_recipient`, plus `restaurant_location.accepts_catering`
+(migration `0024_catering_requests`; docs/DATA_MODEL.md "Catering quote
+requests"). Errors use the usual `{"detail","code"}` shape. No email.
+
+**Who is "subscribed"?** `is_paid` AND (`paid_until` NULL or in the future) —
+one helper (`subscription_service.is_location_subscribed`). A location is
+**eligible** for requests when it is also `active`, its brand isn't deleted and
+it has opted in (`accepts_catering`). Until payments exist the paid flag is set
+manually by an admin (see below).
+
+### Requester — registered_user ONLY
+Any other role -> `403 forbidden` (generic "Registered user access required");
+anonymous -> `401`. An owner/manager/admin cannot request quotes (decision:
+requesting is a diner action, like follows).
+
+- `GET /catering/config` -> `{max_restaurants, max_items: 30, max_headcount: 5000}`.
+  `max_restaurants` = `platform_config.catering_max_restaurants`
+  (default 5, hard-clamped 1..20).
+- `GET /catering/restaurants?city=&q=&page=&page_size=` -> paginated
+  `{results:[{location_id, restaurant_name, city, state, brand_slug,
+  location_slug}], page, page_size, total, max_restaurants}`. ONLY eligible
+  locations. `city` exact (case-insensitive), `q` substring of brand/location
+  name. No other fields.
+- `GET /catering/eligibility/{location_id}` — **PUBLIC (no auth)**.
+  `{location_id, eligible, restaurant}`; `restaurant` (the same public picker
+  fields) only when `eligible`, else `null`. Unknown / hidden / free / lapsed /
+  not-opted-in are indistinguishable. Drives the "Get catering quotes" entry
+  point on a location page.
+- `POST /catering/requests` -> `201` request. Body: `event_date` (today-1 ..
+  +730d), `headcount` 1..5000, `delivery_or_pickup` (`delivery|pickup`),
+  `delivery_city?`, `delivery_zip?`, `requester_phone?` (<=20), `notes?` (<=2000),
+  `items` 1..30 `[{item_name 1..120, size full_tray|medium_tray|flat_tray|other,
+  quantity 1..100, note? <=255}]`, `location_ids` 1..N distinct.
+  Errors: `400 email_required`; `422 validation_error`;
+  `422 duplicate_restaurants`; `422 too_many_restaurants` (more than the
+  configured max); `422 restaurants_unavailable` ("One or more restaurants are
+  not available") if ANY chosen location is not eligible — the same response
+  for unknown, hidden, deleted-brand, free, lapsed and not-opted-in, so nothing
+  about a specific restaurant is revealed; `429 rate_limited` (5 requests per
+  rolling 24h per user). Expires after 14 days. Audited (`catering_request`).
+- `GET /catering/requests?page=&page_size=` — own requests, newest first, each
+  `{id, event_date, headcount, delivery_or_pickup, delivery_city, delivery_zip,
+  requester_phone, notes, status, created_at, expires_at, items[], recipients:[{
+  location_id, restaurant_name, city, brand_slug, location_slug, status
+  (pending|quoted|declined|expired), quote_amount_cents, quote_note, quoted_at}]}`.
+  Lazily expires old open requests first.
+- `GET /catering/requests/{id}` — own only (`404` otherwise, never `403`).
+- `POST /catering/requests/{id}/cancel` — own only; open -> `cancelled`
+  (pending recipients -> `expired`); idempotent when already cancelled;
+  `409 request_not_open` when it has already expired.
+
+### Restaurant side — owner / assigned manager / admin
+Scope is re-queried on every call: owner = locations under their (live)
+brands, manager = ACTIVE `location_manager` rows, admin = all. A recipient
+outside the caller's scope is `404`. `registered_user` -> `403`.
+
+- `GET /catering/inbox?location_id=&page=&page_size=` ->
+  `{results:[{recipient_id, request_id, location_id, restaurant_name, city,
+  requester_first_name, event_date, headcount, delivery_or_pickup, item_count,
+  request_status, status, quote_amount_cents, is_unread, created_at,
+  expires_at}], page, page_size, total, unread_count}`; newest first.
+  `location_id` can only narrow, never widen, the scope.
+- `GET /catering/inbox/{recipient_id}` — detail with items/notes/date/headcount/
+  delivery; marks `viewed_at` (owner/manager only — an admin looking in does
+  not). **Privacy rule:** the restaurant sees the requester's FIRST NAME and the
+  event details; `requester_email` / `requester_phone` are `null` until THIS
+  restaurant has submitted a quote (never for pending/declined, never to another
+  restaurant that got the same request). `can_respond` is true while the
+  request is open and unexpired.
+- `PUT /catering/inbox/{recipient_id}/response` — body `{decision: "quote" |
+  "decline", amount?: "450.50", note?: <=2000}`. `quote` needs `amount` in
+  dollars with <= 2 decimals, `0 < amount <= 1,000,000` (`422 invalid_amount`).
+  One response per recipient row, editable (quote <-> decline, amount/note) until
+  the request expires or is cancelled (`409 request_not_open` after). A quote
+  creates a `user_notification` (`kind = catering_quote`) for the requester.
+  Audited (`catering_request_recipient`). Returns the detail (contact revealed
+  after a quote).
+- `GET|PUT /locations/{id}/catering-settings` (`require_location_write_access`:
+  owner / assigned manager / admin) — body `{accepts_catering: bool}`; returns
+  `{location_id, accepts_catering, subscribed, paid_until}`. Idempotent; a real
+  change is audited on `restaurant_location`.
+
+### Admin
+- `GET /admin/catering?q=&status=&page=&page_size=` (admin only, read-only):
+  `{results:[{id, requester_email, requester_name, event_date, headcount, status,
+  created_at, expires_at, recipient_count, pending_count, quoted_count,
+  declined_count, expired_count}], ..., open_count}`; `q` searches requester
+  email/name.
+- `PUT /admin/locations/{location_id}/subscription` (admin only) — **MANUAL paid
+  flag, no payment taken**, used as "subscribed" until a payment processor exists.
+  Body `{is_paid: bool, paid_until: "YYYY-MM-DD" | null}`. `is_paid=false` always
+  clears `paid_until`; a given `paid_until` (end of that UTC day) must be in the
+  future (`422`); unknown location `404`. Returns `{location_id, is_paid,
+  paid_until, subscribed}`. Audited on `restaurant_location` with old/new values,
+  actor admin and `note: "manual"`. Does not touch Stripe code paths and does not
+  gate any existing free feature (menu, deals).
+
+### Notifications
+`NotificationOut.kind` now also allows `catering_quote` (`title` is a one-line
+summary such as `Catering quote from X: $450.50`; the bell links it to
+`/account/catering`).
+
+### Configuration
+`catering_max_restaurants` (platform_config, seeded 5, clamped 1..20): set with
+the `set_platform_int` management command, e.g.
+`{"_management_command": "set_platform_int", "key": "catering_max_restaurants", "value": 8}`
+(omit `value` to read it).

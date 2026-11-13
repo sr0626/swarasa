@@ -105,3 +105,11 @@ test("a plain primary click is intercepted; modified / non-primary / handled cli
   assert.equal(shouldInterceptClick({ ...plain, button: 1 }), false);
   assert.equal(shouldInterceptClick({ ...plain, defaultPrevented: true }), false);
 });
+
+test("a catering quote alert opens My catering requests with its own headline", () => {
+  const quote: UserNotification = { ...alert(7), kind: "catering_quote", restaurant_name: "Spice Route" };
+  assert.equal(notificationHref(quote), "/account/catering");
+  assert.equal(notificationHeadline(quote), "Spice Route sent a catering quote");
+  // Deal alerts are unchanged.
+  assert.equal(notificationHref(alert(1)), "/restaurant/spice-route/irving#deals");
+});

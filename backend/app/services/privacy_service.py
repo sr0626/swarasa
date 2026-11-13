@@ -59,10 +59,12 @@ from typing import Any
 
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.errors import AppError
 from app.dependencies.pagination import Pagination
 from app.models.audit_log import AuditLog
+from app.models.catering import CateringRequest, CateringRequestRecipient
 from app.models.claim_request import ClaimRequest
 from app.models.data_deletion_request import DataDeletionRequest
 from app.models.listing_report import ListingReport
@@ -76,6 +78,10 @@ from app.models.user_profile import UserProfile
 from app.schemas.privacy import (
     ActivityEventExportOut,
     AuditLogExportOut,
+    CateringItemExportOut,
+    CateringQuoteExportOut,
+    CateringRecipientExportOut,
+    CateringRequestExportOut,
     ClaimRequestExportOut,
     DataDeletionListResponse,
     DataDeletionRequestCreate,
@@ -101,7 +107,8 @@ _REDACTED_MARKER = "deleted-user"
 
 _EXPORT_NOTICE = (
     "This export covers personal data held directly by this app "
-    "(location manager assignments, manager invitations you sent or that "
+    "(catering quote requests you sent and quotes you submitted, "
+    "location manager assignments, manager invitations you sent or that "
     "were addressed to your email, restaurant follows, in-app deal "
     "notifications, claim requests, "
     "listing reports you submitted while signed in, your display name and "
@@ -178,6 +185,34 @@ async def _gather(
         )
     ).scalars().all()
 
+    # Catering: requests this identity sent as a diner (children cascade),
+    # and quotes/declines it submitted as a restaurant owner/manager/admin.
+    catering_rows = (
+        (
+            await db.execute(
+                select(CateringRequest)
+                .where(CateringRequest.requester_user_sub == cognito_sub)
+                .options(
+                    selectinload(CateringRequest.items), selectinload(CateringRequest.recipients)
+                )
+                .order_by(CateringRequest.created_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    catering_quote_rows = (
+        (
+            await db.execute(
+                select(CateringRequestRecipient).where(
+                    CateringRequestRecipient.quoted_by_user_sub == cognito_sub
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
     # Manager invites: ones this identity sent (as an owner) and ones
     # addressed to its email. Keyed by email only when it is known.
     invite_filters = []
@@ -214,6 +249,8 @@ async def _gather(
         "activity": activity_rows,
         "notifications": notification_rows,
         "manager_invites": list(invite_rows),
+        "catering_requests": list(catering_rows),
+        "catering_quotes": list(catering_quote_rows),
         "audit": audit_rows,
     }
 
@@ -231,6 +268,8 @@ def _data_scope(gathered: dict[str, Any]) -> dict[str, int]:
         "activity_events": len(gathered["activity"]),
         "notifications": len(gathered["notifications"]),
         "manager_invites": len(gathered["manager_invites"]),
+        "catering_requests": len(gathered["catering_requests"]),
+        "catering_quotes_submitted": len(gathered["catering_quotes"]),
         "audit_log_entries": len(gathered["audit"]),
     }
 
@@ -349,6 +388,49 @@ async def export_my_data(db: AsyncSession, current_user) -> DataExportOut:
                 revoked_at=i.revoked_at,
             )
             for i in gathered["manager_invites"]
+        ],
+        catering_requests=[
+            CateringRequestExportOut(
+                request_id=c.id,
+                event_date=c.event_date,
+                headcount=c.headcount,
+                delivery_or_pickup=c.delivery_or_pickup,
+                delivery_city=c.delivery_city,
+                delivery_zip=c.delivery_zip,
+                requester_phone=c.requester_phone,
+                notes=c.notes,
+                status=c.status,
+                created_at=c.created_at,
+                expires_at=c.expires_at,
+                items=[
+                    CateringItemExportOut(
+                        item_name=i.item_name, size=i.size, quantity=i.quantity, note=i.note
+                    )
+                    for i in c.items
+                ],
+                recipients=[
+                    CateringRecipientExportOut(
+                        location_id=r.location_id,
+                        status=r.status,
+                        quote_amount_cents=r.quote_amount_cents,
+                        quote_note=r.quote_note,
+                        quoted_at=r.quoted_at,
+                    )
+                    for r in c.recipients
+                ],
+            )
+            for c in gathered["catering_requests"]
+        ],
+        catering_quotes_submitted=[
+            CateringQuoteExportOut(
+                request_id=r.request_id,
+                location_id=r.location_id,
+                status=r.status,
+                quote_amount_cents=r.quote_amount_cents,
+                quote_note=r.quote_note,
+                quoted_at=r.quoted_at,
+            )
+            for r in gathered["catering_quotes"]
         ],
         audit_log_entries=[
             AuditLogExportOut(
@@ -515,6 +597,19 @@ async def approve_deletion_request(
     await db.execute(
         delete(UserNotification).where(UserNotification.user_sub == cognito_sub)
     )
+
+    # catering_request: hard delete every request this identity sent as a
+    # diner. Items and every restaurant's recipient row (incl. quote text)
+    # cascade with it (FK ON DELETE CASCADE) — the quote text lives only as
+    # long as the request. Not on the audit-required list.
+    await db.execute(
+        delete(CateringRequest).where(CateringRequest.requester_user_sub == cognito_sub)
+    )
+    # Quotes this identity wrote as a restaurant owner/manager stay attached to
+    # their (other people's) requests, but lose the author's identifier.
+    for quote in gathered["catering_quotes"]:
+        if quote.request_id not in {c.id for c in gathered["catering_requests"]}:
+            quote.quoted_by_user_sub = _REDACTED_MARKER
 
     # user_profile: hard delete (registered_user/manager display name +
     # last_seen_at — see module docstring). Not audit-required. A later

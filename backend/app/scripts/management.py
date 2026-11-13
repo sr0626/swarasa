@@ -541,6 +541,33 @@ def _run_set_platform_flag(event: dict) -> dict:
     return {"ok": True, "command": "set_platform_flag", **result}
 
 
+@_command("set_platform_int")
+def _run_set_platform_int(event: dict) -> dict:
+    """Set (or read) an integer platform setting in `platform_config` --
+    today only `catering_max_restaurants` (1..20). See
+    app/scripts/set_platform_int.py.
+
+    Event payload shape:
+        {"_management_command": "set_platform_int",
+         "key": "catering_max_restaurants",
+         "value": 8}             # omit "value" to just read the current one
+    """
+    from app.db.session import dispose_engine
+    from app.scripts.set_platform_int import SetPlatformIntError, set_platform_int
+
+    async def _run_and_dispose() -> dict:
+        try:
+            return await set_platform_int(event.get("key"), event.get("value"))
+        finally:
+            await dispose_engine()
+
+    try:
+        result = asyncio.run(_run_and_dispose())
+    except SetPlatformIntError as exc:
+        return {"ok": False, "command": "set_platform_int", "error": str(exc)}
+    return {"ok": True, "command": "set_platform_int", **result}
+
+
 @_command("deactivate_incomplete_listings")
 def _run_deactivate_incomplete_listings(event: dict) -> dict:
     """Hide (set `coming_soon`) every ACTIVE listing missing required info

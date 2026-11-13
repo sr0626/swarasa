@@ -250,6 +250,14 @@ class RestaurantLocation(TimestampMixin, Base):
         Boolean, default=False, server_default="false", nullable=False
     )
 
+    # Per-location opt-in to receive catering quote requests (migration 0024,
+    # docs/DECISIONS.md "Catering quote requests"). Default off: a location only
+    # appears in the requester's "choose restaurants" list when it has opted in
+    # AND is subscribed (`subscription_service.is_location_subscribed`).
+    accepts_catering: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+
     @hybrid_property
     def is_active(self) -> bool:
         """Backward-compat read: True only when `status == 'active'` — the

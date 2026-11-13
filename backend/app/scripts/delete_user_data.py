@@ -31,6 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_session_factory
 from app.models.audit_log import AuditLog
+from app.models.catering import CateringRequest
 from app.models.claim_request import ClaimRequest
 from app.models.data_deletion_request import DataDeletionRequest
 from app.models.location_manager import LocationManager
@@ -88,6 +89,7 @@ async def _delete_rows(db: AsyncSession, sub: str) -> dict:
         ("user_follow", UserFollow, UserFollow.user_id),
         ("user_activity_event", UserActivityEvent, UserActivityEvent.user_sub),
         ("user_notification", UserNotification, UserNotification.user_sub),
+        ("catering_request", CateringRequest, CateringRequest.requester_user_sub),
         ("user_profile", UserProfile, UserProfile.cognito_sub),
         (
             "data_deletion_request",

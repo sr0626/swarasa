@@ -7,13 +7,14 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-NotificationKind = Literal["deal_new"]
+NotificationKind = Literal["deal_new", "catering_quote"]
 
 
 class NotificationOut(BaseModel):
     id: int
     kind: NotificationKind
-    # Snapshot of the deal title at the time the alert was created.
+    # Snapshot of the deal title (deal_new) or a one-line summary such as
+    # "Catering quote from X: $450.00" (catering_quote) at creation time.
     title: str
     location_id: int
     # Ready-to-render context for the restaurant location the alert is about:

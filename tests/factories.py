@@ -432,3 +432,62 @@ async def add_full_week_hours(
             )
         )
     await db.flush()
+
+
+# ---------------------------------------------------------------------------
+# Catering quote requests (docs/API_CONTRACTS.md "Catering quote requests")
+# ---------------------------------------------------------------------------
+
+
+async def create_catering_location(
+    db: AsyncSession, *, owner: OwnerAccount | None = None, **location_overrides
+) -> RestaurantLocation:
+    """An ELIGIBLE catering location: active, live brand, opted in, and
+    subscribed (is_paid, open-ended). Override any of those to make it
+    ineligible. Brand is owned by `owner` (a fresh claimed one by default)."""
+    owner = owner or await create_owner(db)
+    brand = await create_brand(db, owner_id=owner.id, is_claimed=True)
+    values = {"brand_id": brand.id, "is_paid": True, "paid_until": None, "accepts_catering": True}
+    values.update(location_overrides)
+    return await create_location(db, **values)
+
+
+async def create_catering_request(
+    db: AsyncSession,
+    *,
+    location_ids: list[int],
+    requester_sub: str | None = None,
+    requester_name: str | None = "Priya Nair",
+    **overrides,
+):
+    """A catering request with one item and one pending recipient per location."""
+    from app.models.catering import (
+        CateringRequest,
+        CateringRequestItem,
+        CateringRequestRecipient,
+    )
+
+    now = datetime.now(timezone.utc)
+    values = {
+        "requester_user_sub": requester_sub or _cognito_sub(),
+        "requester_name": requester_name,
+        "requester_email": f"{uuid.uuid4().hex[:10]}@example.com",
+        "requester_phone": "2145550142",
+        "event_date": (now + timedelta(days=10)).date(),
+        "headcount": 40,
+        "delivery_or_pickup": "pickup",
+        "status": "open",
+        "created_at": now,
+        "expires_at": now + timedelta(days=14),
+    }
+    values.update(overrides)
+    request = CateringRequest(
+        **values,
+        items=[CateringRequestItem(item_name="Paneer tikka", size="full_tray", quantity=2)],
+        recipients=[
+            CateringRequestRecipient(location_id=lid, status="pending") for lid in location_ids
+        ],
+    )
+    db.add(request)
+    await db.flush()
+    return request
