@@ -15,6 +15,7 @@ from app.scripts.deactivate_incomplete_listings import (
     DeactivateIncompleteError,
     deactivate_incomplete_listings,
     parse_flag,
+    parse_location_ids,
 )
 from app.scripts.management import _COMMANDS, run_management_command
 from factories import add_full_week_hours, create_brand, create_location, create_owner
@@ -139,3 +140,47 @@ def test_management_wrapper_rejects_a_non_boolean_apply_without_touching_the_db(
         {"_management_command": "deactivate_incomplete_listings", "apply": "false"}, None
     )
     assert out["ok"] is False and "'apply' must be true or false" in out["error"]
+
+
+@pytest.mark.asyncio
+async def test_location_ids_limits_the_run_to_exactly_those_locations(db_session):
+    locs = await _setup(db_session)
+
+    report = await deactivate_incomplete_listings(
+        db_session, apply=True, location_ids=[locs["no_hours"].id]
+    )
+
+    assert report["location_ids"] == [locs["no_hours"].id]
+    assert report["checked_active"] == 1 and report["changed"] == 1
+    statuses = await _statuses(db_session)
+    assert statuses[locs["no_hours"].id] == "coming_soon"
+    assert statuses[locs["no_phone"].id] == "active"  # incomplete but NOT named
+    assert statuses[locs["complete"].id] == "active"
+
+
+@pytest.mark.asyncio
+async def test_location_ids_naming_complete_or_hidden_locations_is_a_noop(db_session):
+    locs = await _setup(db_session)
+    before = await _statuses(db_session)
+
+    report = await deactivate_incomplete_listings(
+        db_session, apply=True, location_ids=[locs["complete"].id, locs["hidden"].id, locs["deleted"].id, 999999]
+    )
+
+    assert report["changed"] == 0 and report["incomplete"] == 0
+    assert await _statuses(db_session) == before
+
+
+def test_parse_location_ids_validation():
+    assert parse_location_ids({}) is None
+    assert parse_location_ids({"location_ids": [3, 1, 3]}) == [1, 3]
+    for bad in ([], "67", [True], [0], [-1], ["1"], [1.5], 5, [1] * 0, list(range(1, 1002))):
+        with pytest.raises(DeactivateIncompleteError):
+            parse_location_ids({"location_ids": bad})
+
+
+def test_management_command_rejects_bad_location_ids(monkeypatch):
+    result = run_management_command(
+        {"_management_command": "deactivate_incomplete_listings", "location_ids": "67"}, None
+    )
+    assert result["ok"] is False and "location_ids" in result["error"]

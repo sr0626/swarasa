@@ -15,13 +15,16 @@ writes one `audit_log` row per changed location (actor
 idempotent (a hidden location is no longer `active`, so a second run finds
 nothing) and never touches a location that is already non-active, complete, or
 belongs to a soft-deleted brand. `"only_unclaimed": true` limits it to brands
-with `owner_id IS NULL` (e.g. only the imported ones).
+with `owner_id IS NULL` (e.g. only the imported ones). `"location_ids": [67, 68]`
+limits it to exactly those locations (still only if they are active AND
+incomplete, so naming a complete or already-hidden one is a harmless no-op).
 
 Run via the `deactivate_incomplete_listings` management command (the human runs
 it -- docs/SCRIPTS.md):
     {"_management_command": "deactivate_incomplete_listings"}                       # dry run
     {"_management_command": "deactivate_incomplete_listings", "apply": true}        # do it
     {"_management_command": "deactivate_incomplete_listings", "apply": true, "only_unclaimed": true}
+    {"_management_command": "deactivate_incomplete_listings", "apply": true, "location_ids": [67, 68]}
 """
 from __future__ import annotations
 
@@ -56,8 +59,29 @@ def parse_flag(event: dict, key: str) -> bool:
     return value
 
 
+def parse_location_ids(event: dict) -> list[int] | None:
+    """Absent -> None (no id filter). Otherwise a non-empty list of positive
+    ints (real JSON numbers, not booleans or strings); anything else is
+    rejected so a typo can never silently widen a command that writes."""
+    value = event.get("location_ids")
+    if value is None:
+        return None
+    if (
+        not isinstance(value, list)
+        or not value
+        or len(value) > 1000
+        or any(isinstance(v, bool) or not isinstance(v, int) or v <= 0 for v in value)
+    ):
+        raise DeactivateIncompleteError("'location_ids' must be a non-empty list of positive integers.")
+    return sorted(set(value))
+
+
 async def deactivate_incomplete_listings(
-    db: AsyncSession, *, apply: bool = False, only_unclaimed: bool = False
+    db: AsyncSession,
+    *,
+    apply: bool = False,
+    only_unclaimed: bool = False,
+    location_ids: list[int] | None = None,
 ) -> dict:
     """Flushes and commits only when `apply` is true; a dry run writes nothing."""
     query = (
@@ -71,6 +95,8 @@ async def deactivate_incomplete_listings(
     )
     if only_unclaimed:
         query = query.where(RestaurantBrand.owner_id.is_(None))
+    if location_ids is not None:
+        query = query.where(RestaurantLocation.id.in_(location_ids))
     rows = (await db.execute(query)).all()
 
     hours_by_location: dict[int, list] = {}
@@ -110,6 +136,7 @@ async def deactivate_incomplete_listings(
     return {
         "mode": "apply" if apply else "dry_run",
         "only_unclaimed": only_unclaimed,
+        "location_ids": location_ids,
         "checked_active": len(rows),
         "incomplete": len(incomplete),
         "changed": changed,
@@ -127,6 +154,10 @@ async def deactivate_incomplete_listings(
     }
 
 
-async def run_deactivate_incomplete_listings(*, apply: bool, only_unclaimed: bool) -> dict:
+async def run_deactivate_incomplete_listings(
+    *, apply: bool, only_unclaimed: bool, location_ids: list[int] | None = None
+) -> dict:
     async with get_session_factory()() as db:
-        return await deactivate_incomplete_listings(db, apply=apply, only_unclaimed=only_unclaimed)
+        return await deactivate_incomplete_listings(
+            db, apply=apply, only_unclaimed=only_unclaimed, location_ids=location_ids
+        )

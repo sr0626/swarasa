@@ -552,18 +552,21 @@ def _run_deactivate_incomplete_listings(event: dict) -> dict:
         {"_management_command": "deactivate_incomplete_listings"}            # report only
         {"_management_command": "deactivate_incomplete_listings",
          "apply": true}                                                     # hide them
-    Optional: "only_unclaimed": true (brands with no owner only).
+    Optional: "only_unclaimed": true (brands with no owner only);
+    "location_ids": [67, 68] (only those locations).
     """
     from app.db.session import dispose_engine
     from app.scripts.deactivate_incomplete_listings import (
         DeactivateIncompleteError,
         parse_flag,
+        parse_location_ids,
         run_deactivate_incomplete_listings,
     )
 
     try:
         apply = parse_flag(event, "apply")
         only_unclaimed = parse_flag(event, "only_unclaimed")
+        location_ids = parse_location_ids(event)
     except DeactivateIncompleteError as exc:
         return {"ok": False, "command": "deactivate_incomplete_listings", "error": str(exc)}
 
@@ -571,7 +574,7 @@ def _run_deactivate_incomplete_listings(event: dict) -> dict:
     async def _run_and_dispose() -> dict:
         try:
             return await run_deactivate_incomplete_listings(
-                apply=apply, only_unclaimed=only_unclaimed
+                apply=apply, only_unclaimed=only_unclaimed, location_ids=location_ids
             )
         finally:
             await dispose_engine()
