@@ -12,6 +12,8 @@ import LocationPromptBanner from "@/components/account/LocationPromptBanner";
 import Hero from "@/components/home/Hero";
 import PopularNearYou from "@/components/home/PopularNearYou";
 import PopularNearYouSkeleton from "@/components/home/PopularNearYouSkeleton";
+import SignupPromptModal from "@/components/home/SignupPromptModal";
+import { getServerSession } from "@/lib/auth/session";
 import { DEFAULT_CITY_LABEL } from "@/lib/constants/city";
 
 export const metadata: Metadata = {
@@ -20,7 +22,11 @@ export const metadata: Metadata = {
     `Discover your taste across ${DEFAULT_CITY_LABEL} — verified restaurants, filtered by regional cuisine and dietary needs.`,
 };
 
-export default function HomePage() {
+export default async function HomePage() {
+  // Same server-side session check TopBar uses; only signed-out visitors get the
+  // sign-up popup (a client component that renders nothing until a timer/scroll
+  // trigger fires, so no markup reaches crawlers or Lighthouse).
+  const session = await getServerSession();
   return (
     <main className="min-h-screen bg-brand-bg">
       <TopBar />
@@ -43,6 +49,8 @@ export default function HomePage() {
           </Suspense>
         </div>
       </section>
+
+      <SignupPromptModal signedIn={session !== null} />
     </main>
   );
 }
