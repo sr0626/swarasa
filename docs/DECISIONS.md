@@ -2987,6 +2987,83 @@ pills, then the selected group's items). Owner and manager menus stay ungrouped
 filtering the summary by the current search (a header that changes with every
 query is confusing)*
 
+**Bulk import is invisible by default (supersedes "seeded rows are verified and publicly visible" and "hours default to unknown" for bulk import)**
+2026-10-28 | Fixed in PR #277, no migration. User decision after an imported
+listing appeared publicly with no opening hours. Every bulk-imported location
+(admin `/admin/import`, the CSV/JSON management import commands and
+`scripts/bulk_import_restaurants_csv.py`) is created `coming_soon` (hidden
+everywhere), EVEN IF all required info is present; an admin completes what is
+missing and activates each one deliberately. Activation still goes through the
+existing readiness rule (`listing_readiness.missing_for_activation`: name, full
+address, valid US phone, hours for all 7 days): activating an incomplete
+listing returns the 422 `listing_incomplete` naming every missing item, and
+admin viewers see the full `setup_missing` checklist when they open the
+listing. The validate and results reports (and downloadable CSVs) carry a
+`missing` list per row (empty = ready to activate). Unclaimed, verified,
+free-tier and audit provenance are unchanged. An optional trailing `hours`
+column (`Mon-Fri 11:00-22:00; Sat 11:00-23:00; Sun closed` or `daily
+11:00-22:00`; ranges may wrap, one window per day, no AM/PM) only shortens the
+missing list: unreadable hours are a row warning and the row imports without
+them, a readable but partial week is stored with a `partial_hours` warning.
+`deactivate_incomplete_listings` (dry run by default, `"apply": true` to hide
+incomplete active listings with one audit row each, idempotent, optional
+`only_unclaimed`) cleans up listings already live; the human runs it.
+*Rejected: auto-activating complete rows (the user wants a deliberate
+activation step); dropping partial hours (loses the admin's data)*
+
+**Report categories are multi-select**
+2026-10-28 | Built in PR #275 (migration `0023_report_categories`). A reporter can
+tick several categories. `listing_report.categories` (nullable JSON) holds the
+canonical-ordered, de-duplicated list (1..8); `category` stays NOT NULL and
+holds the primary (first) so existing queries, exports and admin views keep
+working, and reads fall back to `[category]` when NULL (no backfill). The
+submit endpoint accepts `category` or `categories` (`categories` wins if both;
+neither is 422) so a cached old frontend keeps working. The admin queue shows
+all categories and gains a `?category=` filter matching any category (portable
+JSON-text LIKE, no index). Counts are per report, so a multi-category report
+counts once. CCPA export includes the field.
+*Rejected: one row per category (double counts and breaks triage); dropping the
+single `category` column (breaks existing consumers)*
+
+**Claims review records who/when and keeps an editable verification note**
+2026-10-28 | Built in PR #276, no migration. Reviewed claims show "Approved by
+<email> on <time>" / "Rejected by ..." (admin email resolved once per page via
+`admin_actor_service.resolve_emails`; on failure a short "admin <sub prefix>"
+label, never a failed request; admin emails are on the admin queue row only,
+never on `ClaimOut`). Approve offers "Verification notes (optional)"
+(trimmed, 2000 chars, blank stored as null); reject still requires a reason.
+After review an admin can add or edit the note via admin-only
+`PATCH /claim/{id}/notes`, which changes only `reviewer_notes` (status and
+review time untouched), 409 on a pending claim, and writes an `audit_log` row
+with old/new notes, which also drives "Note last edited by X on T".
+*Rejected: letting the note change the review outcome or time (loses the
+original decision record)*
+
+**Admin Work queue badges use a separate cheap endpoint; overdue = 2 business days**
+2026-10-28 | Built in PR #273, no migration. `GET /admin/queue-counts` (admin
+only) rather than extending `/admin/overview`, because it runs on every admin
+page render: one COUNT-subquery statement on the status indexes, plus a read of
+only claims submitted 2-4 days ago. Needs action = claims `pending_review`,
+open admin messages, new problem reports, pending reopen requests; `total` is
+the sum and `overdue` is part of the claims count. There is no `sla_due_at`
+column and the claim SLA is 2 business days, so overdue reuses
+`claim_service._add_business_days` and matches the date the claims page shows.
+The layout fetches once with a 1.5s timeout and renders the menu unchanged on
+failure; a Server Action refreshes the counts on client navigation (approving
+without navigating leaves the old count until the next navigation).
+*Rejected: extending /admin/overview (heavier); polling (needless load)*
+
+**Human verification on public submissions will use AWS WAF CAPTCHA**
+2026-10-28 | User decision, NOT built yet. Covers report a problem, contact us,
+sign-up, claim a listing, contact admin and the public `/track` counter
+endpoint. AWS WAF (CAPTCHA/Challenge action on those paths) keeps it all-AWS;
+design and a monthly cost estimate come first (the $50/mo approval rule), the
+human plans and applies the Terraform, and the frontend needs the AWS WAF
+CAPTCHA integration (token on submit, retry on challenge).
+*Rejected: Cloudflare Turnstile / reCAPTCHA (external vendors, against the
+all-AWS rule); free-only honeypot and timing checks as the sole control (user
+chose WAF CAPTCHA)*
+
 **Online ordering = redirect link model in Phase 4 (not on-platform checkout)**
 May 2026 | Platform links to restaurant's own ordering system (DoorDash, their own URL).
 Avoids food delivery logistics, payment processing liability, and fulfilment complexity.
