@@ -10,6 +10,7 @@ export interface OwnerStatusBreakdown {
   active: number;
   owner_deactivated: number;
   coming_soon: number;
+  import_review: number;
   closed_pending_reopen: number;
 }
 

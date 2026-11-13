@@ -88,11 +88,26 @@ test("registered users, owners, managers and listings chips", () => {
     locations: 12,
     active: 8,
     coming_soon: 2,
+    import_review: 3,
     owner_deactivated: 1,
     closed_pending_reopen: 1,
   });
   assert.equal(listings[0].label, "Restaurants");
   assert.equal(listings[1].tone, "neutral");
+  const importIssues = listings.find((c) => c.label === "Import issues");
+  assert.equal(importIssues?.value, "3");
+  assert.equal(importIssues?.tone, "warning"); // non-zero draws the eye
+  const quiet = listingsSummaryChips({
+    brands: 1,
+    unclaimed_brands: 0,
+    locations: 1,
+    active: 1,
+    coming_soon: 0,
+    import_review: 0,
+    owner_deactivated: 0,
+    closed_pending_reopen: 0,
+  });
+  assert.equal(quiet.find((c) => c.label === "Import issues")?.tone, "neutral");
 });
 
 test("summaryHint: headline figures for the collapsed Summary header", () => {
@@ -113,6 +128,7 @@ test("summaryHint: a non-zero warning figure is surfaced, a zero one is not", ()
       locations: 20,
       active: 18,
       coming_soon: 1,
+      import_review: 0,
       owner_deactivated: 1,
       closed_pending_reopen: 0,
     })

@@ -17,7 +17,8 @@
 import type { LocationStatus } from "@/types/location";
 
 export const SELF_SERVICE_STATUSES: ReadonlyArray<{
-  value: Exclude<LocationStatus, "closed_pending_reopen">;
+  // `import_review` is admin-flagged only (never an owner-selectable target).
+  value: Exclude<LocationStatus, "closed_pending_reopen" | "import_review">;
   label: string;
 }> = [
   { value: "active", label: "Active — visible to the public" },

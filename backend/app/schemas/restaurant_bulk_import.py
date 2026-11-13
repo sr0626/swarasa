@@ -54,7 +54,7 @@ class RestaurantBasicDetailIn(BaseModel):
     # Optional opening hours in the strict one-line format of
     # `app/core/bulk_import_hours.py` (e.g. "Mon-Fri 11:00-22:00; Sat
     # 11:00-23:00; Sun closed", or "daily 11:00-22:00"). Imported listings
-    # are always created hidden (`coming_soon`); complete hours just shorten
+    # are always created hidden (`import_review`); complete hours just shorten
     # the `missing` list. An unparseable value is ignored (no hours stored)
     # and reported as `hours_warning`, never a row error.
     hours: str | None = Field(default=None, max_length=300)
@@ -84,7 +84,7 @@ class BulkImportRowOut(BaseModel):
     brand_id: int | None = None
     location_id: int | None = None
     detail: str | None = None
-    # Created rows only: always "coming_soon" (hidden); `missing` lists what
+    # Created rows only: always "import_review" (hidden, "Import issues"); `missing` lists what
     # is still needed before an admin can activate it ([] = ready to activate).
     listing_status: str | None = None
     missing: list[str] = []

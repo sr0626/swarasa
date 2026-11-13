@@ -26,7 +26,12 @@ RestaurantSortValue = Literal["followers"]
 # added to `LocationStatusValue`, because that type also validates the
 # `POST /locations/{id}/status` body, where `deleted` must stay illegal.
 RestaurantListStatusValue = Literal[
-    "active", "owner_deactivated", "coming_soon", "closed_pending_reopen", "deleted"
+    "active",
+    "owner_deactivated",
+    "coming_soon",
+    "import_review",
+    "closed_pending_reopen",
+    "deleted",
 ]
 
 

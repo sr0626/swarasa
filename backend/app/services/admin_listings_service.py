@@ -43,7 +43,7 @@ from app.schemas.admin_listings import (
 )
 from app.schemas.admin_summary import AdminListingsSummary
 from app.schemas.cuisine import CuisineTagOut
-from app.services import admin_actor_service, cuisine_service
+from app.services import admin_actor_service, cuisine_service, hours_service, listing_readiness
 from app.services.restaurant_service import brand_level_filters
 
 
@@ -98,6 +98,7 @@ async def _listings_summary(db: AsyncSession) -> AdminListingsSummary:
         locations=sum(by_status.values()),
         active=by_status.get(RestaurantLocation.STATUS_ACTIVE, 0),
         coming_soon=by_status.get(RestaurantLocation.STATUS_COMING_SOON, 0),
+        import_review=by_status.get(RestaurantLocation.STATUS_IMPORT_REVIEW, 0),
         owner_deactivated=by_status.get(RestaurantLocation.STATUS_OWNER_DEACTIVATED, 0),
         closed_pending_reopen=by_status.get(RestaurantLocation.STATUS_CLOSED_PENDING_REOPEN, 0),
     )
@@ -197,6 +198,23 @@ async def get_admin_listings(
         db, brand_ids, only_active=False
     )
 
+    # Missing-info chips for setup-status locations (coming soon / import
+    # issues): ONE bulk hours query for the whole page, and none at all when
+    # the page has no such location. Everything else it needs is already loaded.
+    brand_names = {b.id: b.name for b in brands}
+    setup_missing: dict[int, list[str]] = {}
+    setup_locations = [
+        loc for loc in locations if loc.status in RestaurantLocation.SETUP_STATUSES
+    ]
+    if setup_locations:
+        hours_by_location = await hours_service.get_hours_map_for_locations(
+            db, [loc.id for loc in setup_locations]
+        )
+        for loc in setup_locations:
+            setup_missing[loc.id] = listing_readiness.missing_for_activation(
+                loc, brand_names[loc.brand_id], hours_by_location.get(loc.id, [])
+            )
+
     owner_ids = {b.owner_id for b in brands if b.owner_id is not None}
     owners: dict[int, OwnerAccount] = {}
     if owner_ids:
@@ -280,6 +298,7 @@ async def get_admin_listings(
                             CuisineTagOut.model_validate(t) for t in location_tags.get(loc.id, [])
                         ],
                         matches_filter=_location_matches(loc, location_status, is_paid, city),
+                        setup_missing=setup_missing.get(loc.id, []),
                         **location_creators[loc.id].model_dump(),
                     )
                     for loc in brand_locations

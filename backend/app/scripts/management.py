@@ -613,6 +613,47 @@ def _run_deactivate_incomplete_listings(event: dict) -> dict:
     }
 
 
+@_command("mark_imported_for_review")
+def _run_mark_imported_for_review(event: dict) -> dict:
+    """Flag existing bulk-IMPORTED hidden listings as `import_review`
+    ("Import issues"): only locations that are `coming_soon`, whose brand is
+    unclaimed, and whose audit 'create' row has provenance `bulk_import`.
+    DRY RUN BY DEFAULT -- only `"apply": true` writes. See
+    app/scripts/mark_imported_for_review.py.
+
+    Event payload shape:
+        {"_management_command": "mark_imported_for_review"}                 # report only
+        {"_management_command": "mark_imported_for_review", "apply": true}  # flag them
+    Optional: "location_ids": [67, 68] (only those locations).
+    """
+    from app.db.session import dispose_engine
+    from app.scripts.mark_imported_for_review import (
+        MarkImportedError,
+        parse_flag,
+        parse_location_ids,
+        run_mark_imported_for_review,
+    )
+
+    try:
+        apply = parse_flag(event, "apply")
+        location_ids = parse_location_ids(event)
+    except MarkImportedError as exc:
+        return {"ok": False, "command": "mark_imported_for_review", "error": str(exc)}
+
+    # Same same-loop-disposal reasoning as _run_seed_dev_data above.
+    async def _run_and_dispose() -> dict:
+        try:
+            return await run_mark_imported_for_review(apply=apply, location_ids=location_ids)
+        finally:
+            await dispose_engine()
+
+    return {
+        "ok": True,
+        "command": "mark_imported_for_review",
+        **asyncio.run(_run_and_dispose()),
+    }
+
+
 @_command("dev_clear_manager_assignments")
 def _run_dev_clear_manager_assignments(event: dict) -> dict:
     """DEV-ONLY: soft-remove one manager's active location_manager

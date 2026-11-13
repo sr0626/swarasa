@@ -223,7 +223,7 @@ export default function AdminImportPanel() {
         <p className="mt-2 text-sm text-brand-ink-muted">
           One restaurant per row. Imported listings are <strong>unclaimed</strong> and verified.{" "}
           <strong>
-            They are created hidden (coming soon). Open each one, complete what&apos;s missing and activate
+            They are created hidden and flagged &quot;Import issues&quot;. Open each one, complete what&apos;s missing and activate
             it.
           </strong>{" "}
           Up to {IMPORT_LIMITS.maxRows} rows and 1 MB, saved as CSV (UTF-8). Nothing is saved until you
@@ -432,7 +432,7 @@ export default function AdminImportPanel() {
             </label>
           )}
           <p className="mt-2 text-sm text-brand-ink-muted">
-            {toImport.length} listing(s) will be created <strong>hidden (coming soon)</strong>, not public
+            {toImport.length} listing(s) will be created <strong>hidden (Import issues)</strong>, not public
             anywhere until you open each one, complete what&apos;s missing and activate it. Errors and
             duplicates are skipped. Running this again with the same file creates nothing new.
           </p>
@@ -506,10 +506,10 @@ export default function AdminImportPanel() {
               None of the {resultSummary.created} created listing(s) are public yet. Open each one, complete
               what is missing and activate it.{" "}
               <Link
-                href="/admin/listings?status=coming_soon"
+                href="/admin/listings?status=import_review"
                 className="inline-flex min-h-[44px] items-center font-semibold text-brand-accent underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent"
               >
-                Find them in Admin &gt; Listings (Coming soon)
+                Find them in Admin &gt; Listings (Import issues)
               </Link>
             </p>
           )}

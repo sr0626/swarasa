@@ -317,3 +317,24 @@ restaurant's quote text cascade); quotes the caller authored on other people's
 requests keep their content but `quoted_by_user_sub` becomes `deleted-user`.
 Audit rows: `catering_request` (create / cancel) and
 `catering_request_recipient` (quote / decline changes).
+
+## restaurant_location.status — `import_review` (no migration)
+
+Added 2026-11-13 ("Import issues"). `restaurant_location.status` is a plain
+`String(24)` with **no CHECK constraint and no DB enum** (migration
+`0008_location_status_lifecycle`; verified against the whole Alembic history),
+so the fifth value `import_review` needed **no schema migration** — only the
+model constants (`STATUS_IMPORT_REVIEW`, `STATUSES`, `HIDDEN_STATUSES`,
+`SETUP_STATUSES`) and the `LocationStatusValue` API literals changed.
+
+Meaning: a bulk-IMPORTED listing nobody has reviewed yet. Hidden exactly like
+`coming_soon` (only `active` is ever public — every public query evaluates
+`status == 'active'`), same readiness gate to reach `active`
+(`listing_readiness.missing_for_activation`), but flagged so the admin Listings
+page can filter on it (`?status=import_review`) and show what is missing.
+Admins (and the import paths) set it; an owner/manager can move a listing out
+of it but never into it. Nothing flips it automatically — activation is always
+a deliberate `POST /locations/{id}/status`. Existing imported rows that are
+still `coming_soon` are moved with the one-off `mark_imported_for_review`
+management command (docs/SCRIPTS.md); `deactivate_incomplete_listings` still
+hides a live listing as `coming_soon`.

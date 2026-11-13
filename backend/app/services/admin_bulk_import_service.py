@@ -23,7 +23,8 @@ Written listings follow the data-seeding decision (docs/DECISIONS.md "Data
 seeding: admin-curated import ...") EXCEPT visibility (docs/DECISIONS.md "Bulk
 import is invisible by default"): UNCLAIMED (`owner_id` NULL,
 `is_claimed=false`), `is_verified=true`, free tier, but location
-`status='coming_soon'` ALWAYS -- hidden everywhere, even when complete. The
+`status='import_review'` ALWAYS ("Import issues") -- hidden everywhere, even when
+complete. The
 admin opens each one, completes what is missing and activates it through the
 normal server rule (`listing_readiness`). The optional `hours` column only
 shortens the per-row `missing` list. Audit rows for each created
@@ -452,7 +453,7 @@ async def commit_rows(
             "created",
             brand_id=brand_id,
             location_id=location_id,
-            listing_status=RestaurantLocation.STATUS_COMING_SOON,
+            listing_status=RestaurantLocation.STATUS_IMPORT_REVIEW,
             missing=verdict.missing,
         )
 

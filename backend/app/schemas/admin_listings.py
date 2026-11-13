@@ -64,6 +64,12 @@ class AdminListingLocationOut(CreatorOut):
     # request (`status`, `is_paid`, `city`); always true when none is set.
     # Lets the console highlight which location(s) made the brand match.
     matches_filter: bool = True
+    # What is still missing before this location can be activated (any of
+    # "name" | "address" | "phone" | "hours", `listing_readiness` keys). Only
+    # populated for locations in a setup status (`coming_soon` /
+    # `import_review`), where `[]` means "ready to activate"; always `[]` for
+    # every other status (so the console must key "ready" off `status`).
+    setup_missing: list[str] = []
 
 
 class AdminListingOut(CreatorOut):

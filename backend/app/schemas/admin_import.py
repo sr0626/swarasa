@@ -79,7 +79,7 @@ class ValidatedRowOut(BaseModel):
     needs_geocoding: bool
     matched_tag: str | None = None
     # Importable rows only (valid / warning): what is still needed before the
-    # created (always hidden, `coming_soon`) listing can be activated, as
+    # created (always hidden, `import_review`) listing can be activated, as
     # `listing_readiness` keys (name | address | phone | hours). [] = ready to
     # activate once the admin has reviewed it.
     missing: list[str] = []
@@ -117,7 +117,7 @@ class CommittedRowOut(BaseModel):
     brand_id: int | None = None
     location_id: int | None = None
     needs_geocoding: bool = False
-    # Created rows: always "coming_soon" (hidden) -- never auto-activated.
+    # Created rows: always "import_review" (hidden, "Import issues") -- never auto-activated.
     listing_status: str | None = None
     # Created rows: what is still needed before it can be activated
     # ([] = ready to activate).

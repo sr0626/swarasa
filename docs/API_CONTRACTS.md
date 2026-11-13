@@ -269,7 +269,7 @@ Query params:
 | owner_id | int, optional | **Admin only** — ignored (never applied) for an owner caller, who is always filtered to their own `owner_id` regardless of this param. Omitted for an admin caller returns all brands. |
 | owner_email | string, optional, max 255 | **Admin only.** Case-insensitive substring match against the brand owner's `owner_account.email`. A brand with no owner (unclaimed, `owner_id IS NULL`) never matches a non-empty `owner_email`. |
 | name | string, optional, max 255 | **Admin only.** Case-insensitive substring match against `restaurant_brand.name`. |
-| status | string, optional | **Admin only.** One of `active` / `owner_deactivated` / `coming_soon` / `closed_pending_reopen` (`restaurant_location.status`, see app/models/restaurant_location.py "Location status lifecycle") or the pseudo-value `deleted`; 422 on any other value. **Matches a brand if ANY of its locations currently has this status** — a brand with one `active` and one `coming_soon` location matches `status=coming_soon`. **`status=deleted`** (added 2026-09-23) returns ONLY soft-deleted brands (`restaurant_brand.deleted_at IS NOT NULL`); every other request — every owner request, and an admin request with any other/no `status` — **excludes** soft-deleted brands. |
+| status | string, optional | **Admin only.** One of `active` / `owner_deactivated` / `coming_soon` / `import_review` / `closed_pending_reopen` (`restaurant_location.status`, see app/models/restaurant_location.py "Location status lifecycle") or the pseudo-value `deleted`; 422 on any other value. **Matches a brand if ANY of its locations currently has this status** — a brand with one `active` and one `coming_soon` location matches `status=coming_soon`. **`status=deleted`** (added 2026-09-23) returns ONLY soft-deleted brands (`restaurant_brand.deleted_at IS NOT NULL`); every other request — every owner request, and an admin request with any other/no `status` — **excludes** soft-deleted brands. |
 | is_paid | bool, optional | **Admin only.** JUDGMENT CALL: **matches a brand if ANY of its locations has this `is_paid` value** — same "any location" rule as `status`/`city` here, chosen for consistency rather than requiring every location to match (a multi-location brand with one paid and one free location matches both `is_paid=true` and `is_paid=false`). |
 | city | string, optional, max 120 | **Admin only.** Case-insensitive **exact** match (not substring — deliberately stricter than `name`/`owner_email`, since city names are short, well-known values an admin types precisely, not a fuzzy search) against `restaurant_location.city`. JUDGMENT CALL: **matches a brand if ANY of its locations is in that city** — a brand can have locations in multiple cities (e.g. Plano and Dallas); filtering by `city=plano` returns it, and so does `city=dallas`, same as `status`/`is_paid` above. |
 | is_claimed | bool, optional | **Admin only.** Exact match against `restaurant_brand.is_claimed` (brand-level field, no "any location" ambiguity). |
@@ -750,14 +750,17 @@ Notes:
   model (is_paid)").
 - `status` (added 2026-09-22, `docs/DECISIONS.md` "Location status
   lifecycle") — one of `active` | `owner_deactivated` | `coming_soon` |
-  `closed_pending_reopen`. `is_active` is now a derived `true` only when
+  `import_review` | `closed_pending_reopen`. `import_review` ("Import
+  issues", added 2026-11-13) is an unreviewed bulk import: hidden exactly like
+  `coming_soon`, same readiness gate, but flagged for admin attention.
+  `is_active` is now a derived `true` only when
   `status == "active"` (a `hybrid_property` on the model, not a second
   stored column — see `app/models/restaurant_location.py`).
 - `setup_missing` (added 2026-09-24 — "New manual listings start in setup"):
   `string[]`, what is still missing before this listing can be moved from
-  `coming_soon` to `active` — any of `"name"` | `"address"` | `"phone"` |
+  `coming_soon` or `import_review` to `active` — any of `"name"` | `"address"` | `"phone"` |
   `"hours"`, in that order; `[]` when it's ready, and always `[]` for any
-  status other than `coming_soon` (a listing not in setup never advertises
+  status other than those two (a listing not in setup never advertises
   gaps). Always present, computed from data already loaded (no extra
   query). Display-only: the same rules
   are re-checked by `POST /locations/{id}/status` (below), which is the
@@ -901,7 +904,8 @@ New locations start `is_paid=false`, `is_verified=false` and — changed
 and Add-location UI flows only: bulk import (`POST
 /admin/restaurants/bulk-import`, the CSV command), the seed scripts and
 claim approval build `RestaurantLocation` rows directly. Bulk import (all
-three paths) now ALWAYS creates `coming_soon` too; the dev seed script
+three paths) ALWAYS creates the hidden `import_review` status ("Import
+issues", changed 2026-11-13 from `coming_soon`); the dev seed script
 (`seed_dev_data.py`, dev-only fixtures) and claim approval keep their own
 defaults (`active`). The owner/admin enters the required info (hours,
 phone, address) and then activates the listing with `POST
@@ -1311,9 +1315,11 @@ Body:
 ```json
 { "status": "coming_soon" }
 ```
-One of `active` | `owner_deactivated` | `coming_soon` |
+One of `active` | `owner_deactivated` | `coming_soon` | `import_review` |
 `closed_pending_reopen` (`docs/DECISIONS.md` "Location status
-lifecycle"). Response: `200`, same shape as `GET /locations/{id}`
+lifecycle"). **`import_review` can only be set by an admin** — an owner
+posting it gets `422` `code: "invalid_status"` (an owner can always move a
+listing OUT of `import_review`, which just clears the flag). Response: `200`, same shape as `GET /locations/{id}`
 (with the caller's own access, so a caller changing their own location
 into a hidden status still gets the real detail back, not a 404 from
 the visibility check above).
@@ -1329,8 +1335,8 @@ no-op (`200`, not `409`), checked before the asymmetric-transition rule
 so retrying an already-applied change never fails.
 
 **Setup gate (added 2026-09-24, `docs/DECISIONS.md` "New manual listings
-start in setup"):** moving a location from `coming_soon` to `active` — going
-live for the first time — is refused with `422`
+start in setup"):** moving a location from `coming_soon` **or `import_review`**
+to `active` — going live for the first time — is refused with `422`
 ```json
 {
   "detail": "This listing isn't ready to go live yet. Still needed: opening hours for all 7 days.",
@@ -1347,7 +1353,9 @@ reopen request are unchanged, so seeded / imported listings (which may have
 `is_closed = null` days) keep working.
 
 Audit: `audit_log` row (`action="update"`, `old_val`/`new_val` each
-`{"status": "..."}` — so the activation is `coming_soon` -> `active`).
+`{"status": "..."}` — so the activation is `coming_soon` / `import_review` -> `active`).
+Editing an `import_review` listing (phone, hours, ...) never changes its
+status: it stays `import_review` until someone activates it deliberately.
 
 ---
 
@@ -2897,7 +2905,7 @@ Restaurant & location / What changed / Previous / New / Updated by.
   `owner_account` query, then best-effort Cognito once per distinct sub.
 - What: `changes[]` — one entry per changed thing, `{ field, label, old,
   new }`, values already friendly (`status`: `active` -> "Live",
-  `owner_deactivated` -> "Hidden", `coming_soon` -> "Coming soon",
+  `owner_deactivated` -> "Hidden", `coming_soon` -> "Coming soon", `import_review` -> "Import issues",
   `closed_pending_reopen` -> "Closed"; booleans "Yes"/"No"; phones
   `(972) 555-0142`; lists comma-joined). Grouping: the address columns ->
   one "Address" change; latitude+longitude -> one "Map position"; hours ->
@@ -3353,7 +3361,7 @@ stat chips above each admin table. Rules common to all five:
 | `/admin/registered-users` | `total`; `active` / `inactive` as for users (Cognito `Enabled`); `unconfirmed`; `seen_last_30_days`; `truncated` (always false today) |
 | `/admin/owners` | `total` = every `owner_account` row; `active` = owners with >= 1 `active` location under a live brand; `inactive = total - active`; `without_locations` (subset of `inactive`) = no live location at all. Unclaimed brands have no owner and never count |
 | `/admin/managers` | `total` = everyone listed; `active` = >= 1 active assignment on a live brand's location; `inactive` = all assignments revoked; `seen_last_30_days` |
-| `/admin/listings` | `brands` (live, not soft-deleted), `unclaimed_brands`, `locations`, and `active` / `coming_soon` / `owner_deactivated` / `closed_pending_reopen` (location grain; the four sum to `locations`). Independent of every filter, including `status=deleted` |
+| `/admin/listings` | `brands` (live, not soft-deleted), `unclaimed_brands`, `locations`, and `active` / `coming_soon` / `import_review` / `owner_deactivated` / `closed_pending_reopen` (location grain; the five sum to `locations`; `import_review` = unreviewed bulk imports, its own bucket, NOT folded into `coming_soon`). Independent of every filter, including `status=deleted` |
 
 Tests: `tests/integration/test_admin_summary_counts.py`.
 
@@ -3489,6 +3497,7 @@ Response: `200`
         "active": 2,
         "owner_deactivated": 0,
         "coming_soon": 1,
+        "import_review": 0,
         "closed_pending_reopen": 0
       },
       "verified_location_count": 2,
@@ -3896,6 +3905,15 @@ the two endpoints' `total` always agree (so the Platform Overview tiles,
 which link to `GET /restaurants`-shaped queries, still match this page's
 count).
 
+**`setup_missing`** (added 2026-11-13, additive, per location): for a
+location in a setup status (`coming_soon` / `import_review`) the
+`listing_readiness` keys still missing (`name` | `address` | `phone` |
+`hours`, checklist order; `[]` = ready to activate); always `[]` for every
+other status, so a client must key "Ready to activate" off `status`. Computed
+server-side with ONE bulk hours query for the whole page (none when the page
+has no setup location) — no N+1. `status` also accepts `import_review`
+(`?status=import_review` = the "Import issues" filter).
+
 Every location of the brand is returned, in every status (not just
 `active`) — `location_count` keeps its existing meaning (ACTIVE-location
 count only, same as `RestaurantOut.location_count`); `locations` is the
@@ -3957,6 +3975,7 @@ Response: `200`
           "paid_until": null,
           "cuisine_tags": [],
           "matches_filter": true,
+          "setup_missing": ["hours"],
           "created_at": "2026-09-01T10:00:00Z",
           "created_by_role": "manager",
           "created_by_email": "mgr@example.com",
@@ -4062,6 +4081,7 @@ Response: `200`
       "active": 35,
       "owner_deactivated": 4,
       "coming_soon": 2,
+      "import_review": 0,
       "closed_pending_reopen": 1
     },
     "by_tier": { "paid": 9, "free": 36 }
@@ -4073,7 +4093,7 @@ Response: `200`
         "owner_id": 5,
         "email": "asha@example.com",
         "restaurant_count": 3,
-        "by_status": { "active": 2, "owner_deactivated": 0, "coming_soon": 1, "closed_pending_reopen": 0 }
+        "by_status": { "active": 2, "owner_deactivated": 0, "coming_soon": 1, "import_review": 0, "closed_pending_reopen": 0 }
       }
     ],
     "page": 1,
@@ -4198,7 +4218,7 @@ Response: `200`
   ]
 }
 ```
-Created rows also carry `listing_status` (always `"coming_soon"`: imported
+Created rows also carry `listing_status` (always `"import_review"`: imported
 listings are hidden until an admin activates them), `missing` (what is still
 needed before activation) and `hours_warning` (the optional `hours` cell was
 not understood). Optional per-row `hours` string: see "Admin bulk listing
@@ -4268,7 +4288,7 @@ reads, before it geocodes and adds `latitude`/`longitude` itself):
 | description | no | |
 | type | no | Free-text cuisine, e.g. "south indian" — matched case-insensitively against `cuisine_tag.name`/`display_name`; no match is reported per-row, not a failure |
 | latitude / longitude | no | Added by `scripts/bulk_import_restaurants_csv.py` after geocoding via Nominatim — left blank in the file a human authors by hand |
-| hours | no | LAST column. Strict one-line format (see "Admin bulk listing import" → Row); unreadable = ignored, reported as `hours_warning`. Rows created by this path (and the JSON path, which accepts the same string as `hours`) are also always created `coming_soon` (hidden); `listing_status` / `missing` / `hours_warning` are added to each created row of the response |
+| hours | no | LAST column. Strict one-line format (see "Admin bulk listing import" → Row); unreadable = ignored, reported as `hours_warning`. Rows created by this path (and the JSON path, which accepts the same string as `hours`) are also always created `import_review` (hidden, "Import issues"); `listing_status` / `missing` / `hours_warning` are added to each created row of the response |
 
 Effect: same idempotent create-or-skip brand/location logic as the JSON
 path (slug natural key for the brand, `(brand_id, address_line1)` for the
@@ -4356,7 +4376,7 @@ punctuation and unit designators `Ste/Suite/Unit/Apt/Bldg/Fl/Rm/#n` dropped, `St
 `North`->`n`, ...) + ZIP5; `phone` = E.164 `+1XXXXXXXXXX`. *Definite* (skipped): same
 `name_key` AND same `addr_key`, OR same `name_key` AND same phone. *Possible* (warning):
 same `addr_key` with a different name, OR same phone alone. Existing listings are matched
-in EVERY status (active, owner_deactivated, coming_soon, closed_pending_reopen) and
+in EVERY status (active, owner_deactivated, coming_soon, import_review, closed_pending_reopen) and
 including soft-deleted brands. Within a file the second occurrence is the one flagged and
 `duplicate_of_row` names the earlier row; against the database `duplicate_of_listing_id`
 names the listing.
@@ -4367,9 +4387,9 @@ re-evaluated with the same logic against the database as it stands (so rows crea
 chunks, or by an earlier upload of the same file, are duplicates). Response `{rows, summary}`;
 per row `result` is `created | skipped_duplicate | skipped_warning | failed`, with `reason`,
 `brand_id`, `location_id`, `needs_geocoding`, `listing_status` (created rows: always
-`"coming_soon"`), `missing` (created rows: what is still needed before activation; `[]` = ready to
+`"import_review"`), `missing` (created rows: what is still needed before activation; `[]` = ready to
 activate); `summary` also has `created_ready_to_activate` / `created_incomplete`. Created
-listings: brand `owner_id` NULL / `is_claimed=false`; location **`status='coming_soon'` ALWAYS**
+listings: brand `owner_id` NULL / `is_claimed=false`; location **`status='import_review'` ALWAYS**
 (hidden everywhere - never auto-activated, even when complete; DECISIONS.md "Bulk import is
 invisible by default" supersedes the "seeded rows are active" part of "Data seeding"),
 `is_verified=true`, free tier, `restaurant_hours` rows only for days given in `hours`. An admin

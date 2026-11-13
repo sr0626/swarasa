@@ -39,9 +39,13 @@ export function knownMissing(setupMissing: readonly string[]): SetupItemKey[] {
   return SETUP_ITEMS.map((item) => item.key).filter((key) => setupMissing.includes(key)) as SetupItemKey[];
 }
 
-/** The setup banner/checklist only applies to a listing that is in setup. */
+/**
+ * The setup banner/checklist only applies to a listing that is in setup:
+ * `coming_soon` (a new manual listing) or `import_review` (an unreviewed
+ * import) — both hidden, both gated by the same readiness rule.
+ */
 export function isInSetup(status: LocationStatus): boolean {
-  return status === "coming_soon";
+  return status === "coming_soon" || status === "import_review";
 }
 
 /** Whether the "Activate listing" action should be enabled. */

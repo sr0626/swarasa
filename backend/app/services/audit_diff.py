@@ -29,6 +29,7 @@ STATUS_LABELS = {
     "active": "Live",
     "owner_deactivated": "Hidden",
     "coming_soon": "Coming soon",
+    "import_review": "Import issues",
     "closed_pending_reopen": "Closed",
 }
 

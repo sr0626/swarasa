@@ -616,8 +616,8 @@ async def test_bulk_import_creates_hidden_listings(db_session):
     )
     assert result.created == 1
     location = (await db_session.execute(select(RestaurantLocation))).scalar_one()
-    assert location.status == "coming_soon"  # hidden even though the phone is valid
-    assert result.rows[0].listing_status == "coming_soon"
+    assert location.status == "import_review"  # hidden even though the phone is valid
+    assert result.rows[0].listing_status == "import_review"
     assert result.rows[0].missing == ["hours"]
     # Same US rule as every other phone field: stored canonical.
     assert location.phone == "+19725550101"

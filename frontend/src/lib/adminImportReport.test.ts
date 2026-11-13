@@ -41,7 +41,7 @@ function created(row_number: number, over: Partial<CommittedRow> = {}): Committe
     brand_id: 1,
     location_id: 1,
     needs_geocoding: false,
-    listing_status: "coming_soon",
+    listing_status: "import_review",
     missing: [],
     ...over,
   };

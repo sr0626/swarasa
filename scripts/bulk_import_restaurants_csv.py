@@ -49,7 +49,7 @@ Optional columns:
 (24-hour times, days Mon..Sun, `closed`; see backend/app/core/bulk_import_hours.py).
 A cell that cannot be understood is a warning and the row is imported without hours.
 
-EVERY imported listing is created HIDDEN (`coming_soon`), even when complete:
+EVERY imported listing is created HIDDEN as `import_review` ("Import issues"), even when complete:
 open it in the location editor, finish what is missing (hours, phone, ...) and
 activate it. The script reports what each created row still needs.
 
@@ -334,7 +334,7 @@ def main() -> None:
     )
     created = [r for r in result.get("rows", []) if r.get("status") == "created"]
     if created:
-        print(f"\n{len(created)} listing(s) were created HIDDEN (coming soon). Still needed before each can be activated:")
+        print(f"\n{len(created)} listing(s) were created HIDDEN (Import issues). Still needed before each can be activated:")
         for row in created:
             needs = ", ".join(row.get("missing") or []) or "nothing - ready to activate"
             print(f"  - {row['name']!r} (location {row.get('location_id')}): {needs}")

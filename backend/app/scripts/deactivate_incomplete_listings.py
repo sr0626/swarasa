@@ -4,8 +4,12 @@ imported with no opening hours).
 
 "Required info" is exactly `listing_readiness.missing_for_activation` (name,
 full address, valid US phone, all 7 days of hours) -- the same rule that gates
-`coming_soon` -> `active` for manual listings. docs/DECISIONS.md "Bulk import
+`coming_soon` / `import_review` -> `active`. docs/DECISIONS.md "Bulk import
 is invisible by default".
+
+A location this command hides from `active` goes to `coming_soon` (UNCHANGED --
+never `import_review`, which is reserved for unreviewed bulk imports; use
+`mark_imported_for_review` to flag those).
 
 DRY RUN BY DEFAULT: with no `apply` flag it only REPORTS (count + a capped list
 of what is missing) and changes nothing. With `"apply": true` it sets

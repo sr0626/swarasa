@@ -130,7 +130,7 @@ async def _location_to_out(
         # status so a live/hidden listing never advertises gaps to the public.
         setup_missing=(
             listing_readiness.missing_for_activation(location, brand.name, hours_rows)
-            if location.status == RestaurantLocation.STATUS_COMING_SOON
+            if location.status in RestaurantLocation.SETUP_STATUSES
             else []
         ),
         cuisine_tags=[CuisineTagOut.model_validate(t) for t in tags],
@@ -532,6 +532,17 @@ async def update_location_status(
     if new_status == location.status:
         return await get_location(db, location.id, current_user)
 
+    # `import_review` is the admin's "needs attention" flag on an unreviewed
+    # import: an owner/manager can never put a listing INTO it (they can move
+    # one OUT of it, which simply clears the flag).
+    if (
+        new_status == RestaurantLocation.STATUS_IMPORT_REVIEW
+        and current_user.role != "admin"
+    ):
+        raise AppError(
+            422, "That status can only be set by an administrator.", "invalid_status"
+        )
+
     if location.status == RestaurantLocation.STATUS_CLOSED_PENDING_REOPEN:
         raise AppError(
             409,
@@ -541,13 +552,13 @@ async def update_location_status(
         )
 
     # Setup gate (docs/DECISIONS.md "New manual listings start in setup"):
-    # leaving `coming_soon` for `active` — going live for the first time —
-    # requires the listing's required info. Only that transition is gated:
+    # leaving `coming_soon` or `import_review` for `active` — going live for
+    # the first time — requires the listing's required info. Only that transition is gated:
     # un-hiding an `owner_deactivated` listing (or a reopen approval) was
     # already live once, and seeded/imported listings must keep working.
     if (
         new_status == RestaurantLocation.STATUS_ACTIVE
-        and location.status == RestaurantLocation.STATUS_COMING_SOON
+        and location.status in RestaurantLocation.SETUP_STATUSES
     ):
         brand = await db.get(RestaurantBrand, location.brand_id)
         hours_rows = await hours_service.get_hours_for_location(db, location.id)
