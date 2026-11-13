@@ -23,7 +23,7 @@ import AccountMenu from "./AccountMenu";
 import AdminNotificationsBell from "./AdminNotificationsBell";
 import DealAlertsBell from "./DealAlertsBell";
 import { TopBarDesktopNav, TopBarMobileNav } from "./TopBarNav";
-import { topBarLinksFor } from "@/lib/nav/topBarLinks";
+import { topBarLinksFor, whyJoinLinkFor } from "@/lib/nav/topBarLinks";
 import type { AdminNotifications } from "@/types/adminNotifications";
 import type { NotificationList } from "@/types/notification";
 import type { UserRole } from "@/types/auth";
@@ -65,6 +65,8 @@ export default function TopBarShell({
   stickyOnMobile?: boolean;
 }) {
   const links = topBarLinksFor(greetingName ? role : null);
+  // Signed-out only: a quiet text link directly left of "Sign In" (not a pill).
+  const whyJoin = whyJoinLinkFor(greetingName ? role : null);
   return (
     // STICKY: stays visible on scroll. `sticky` (not `fixed`) keeps the bar
     // in normal flow so there is no layout shift and no spacer needed. Every
@@ -107,7 +109,9 @@ export default function TopBarShell({
             owner -> `/portal/brands/new`; manager/admin/registered_user never
             get it -- `POST /restaurants` is owner-only). It is reachable on
             mobile now too, via the menu. "Sign In" stays a single plain link on
-            the right, and there is still no separate "For Owners" link. */}
+            the right, and there is still no separate "For Owners" link. Signed-out
+            only, a quiet "Why join" text link sits immediately left of "Sign In"
+            (whyJoinLinkFor in topBarLinks.ts), in the right-hand cluster. */}
         <TopBarDesktopNav links={links} />
 
         <div className="flex items-center gap-1 sm:gap-2">
@@ -123,12 +127,22 @@ export default function TopBarShell({
               <AccountMenu greetingName={greetingName} role={role} />
             </>
           ) : (
-            <Link
-              href="/login"
-              className="flex min-h-[44px] items-center whitespace-nowrap px-1 text-sm font-medium text-brand-ink-muted transition hover:text-brand-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent"
-            >
-              Sign In
-            </Link>
+            <>
+              {whyJoin && (
+                <Link
+                  href={whyJoin.href}
+                  className="flex min-h-[44px] items-center whitespace-nowrap px-1 text-sm font-medium text-brand-ink-muted transition hover:text-brand-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent"
+                >
+                  {whyJoin.label}
+                </Link>
+              )}
+              <Link
+                href="/login"
+                className="flex min-h-[44px] items-center whitespace-nowrap px-1 text-sm font-medium text-brand-ink-muted transition hover:text-brand-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent"
+              >
+                Sign In
+              </Link>
+            </>
           )}
           <TopBarMobileNav links={links} />
         </div>

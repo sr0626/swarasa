@@ -234,45 +234,49 @@ export default function SignupPromptModal({ signedIn }: { signedIn: boolean }) {
         aria-labelledby="signup-prompt-title"
         aria-describedby="signup-prompt-desc"
         tabIndex={-1}
-        className="relative max-h-[85vh] w-full overflow-y-auto overscroll-contain rounded-t-brand-card bg-white px-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-6 shadow-brand-card-hover focus:outline-none supports-[height:100dvh]:max-h-[85dvh] sm:max-w-md sm:rounded-brand-card sm:p-7"
+        className="relative flex max-h-[85vh] w-full flex-col overflow-hidden rounded-t-brand-card bg-white shadow-brand-card-hover focus:outline-none supports-[height:100dvh]:max-h-[85dvh] sm:max-w-md sm:rounded-brand-card"
       >
         <button
           type="button"
           aria-label="Close"
           onClick={() => dismiss(true)}
-          className="absolute right-2 top-2 flex h-11 w-11 items-center justify-center rounded-brand-pill text-brand-ink-muted transition hover:bg-brand-chip hover:text-brand-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent"
+          className="absolute right-2 top-2 z-10 flex h-11 w-11 items-center justify-center rounded-brand-pill text-brand-ink-muted transition hover:bg-brand-chip hover:text-brand-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent"
         >
           <XIcon className="h-5 w-5" />
         </button>
 
-        <h2
-          id="signup-prompt-title"
-          className="pr-10 font-display text-2xl font-bold text-brand-ink"
-        >
-          {SIGNUP_TITLE}
-        </h2>
-        <p id="signup-prompt-desc" className="mt-1 text-sm text-brand-ink-muted">
-          {SIGNUP_SUBTITLE}
-        </p>
+        {/* Only the benefits scroll; the buttons below stay pinned so "Create
+            free account" is always reachable however short the phone. */}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-4 pt-6 sm:px-7 sm:pt-7">
+          <h2
+            id="signup-prompt-title"
+            className="pr-10 font-display text-2xl font-bold text-brand-ink"
+          >
+            {SIGNUP_TITLE}
+          </h2>
+          <p id="signup-prompt-desc" className="mt-1 text-sm text-brand-ink-muted">
+            {SIGNUP_SUBTITLE}
+          </p>
 
-        <ul className="mt-5 space-y-4">
-          {SIGNUP_BENEFITS.map(({ id, title, detail, icon }) => (
-            <li key={id} className="flex items-start gap-3">
-              <span
-                aria-hidden="true"
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-brand-pill bg-brand-chip text-brand-chip-ink"
-              >
-                <BenefitIcon name={icon} className="h-5 w-5" />
-              </span>
-              <span className="min-w-0">
-                <span className="block text-sm font-semibold text-brand-ink">{title}</span>
-                <span className="mt-0.5 block text-sm text-brand-ink-muted">{detail}</span>
-              </span>
-            </li>
-          ))}
-        </ul>
+          <ul className="mt-5 space-y-4">
+            {SIGNUP_BENEFITS.map(({ id, title, detail, icon }) => (
+              <li key={id} className="flex items-start gap-3">
+                <span
+                  aria-hidden="true"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-brand-pill bg-brand-chip text-brand-chip-ink"
+                >
+                  <BenefitIcon name={icon} className="h-5 w-5" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold text-brand-ink">{title}</span>
+                  <span className="mt-0.5 block text-sm text-brand-ink-muted">{detail}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
 
-        <div className="mt-6 flex flex-col gap-2">
+        <div className="flex shrink-0 flex-col gap-1 border-t border-brand-border px-5 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-3 sm:px-7 sm:pb-6">
           <Link
             href={SIGNUP_CTA_HREF}
             onClick={() => dismiss(false)}
@@ -280,25 +284,24 @@ export default function SignupPromptModal({ signedIn }: { signedIn: boolean }) {
           >
             {SIGNUP_CTA_LABEL}
           </Link>
-          <Link
-            href={SIGNIN_HREF}
-            onClick={() => dismiss(false)}
-            className="flex min-h-[44px] items-center justify-center rounded-brand-control px-6 text-sm font-semibold text-brand-accent transition hover:text-brand-accent-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent"
-          >
-            {SIGNIN_LABEL}
-          </Link>
-          <button
-            type="button"
-            onClick={() => dismiss(true)}
-            className="flex min-h-[44px] items-center justify-center rounded-brand-control px-6 text-sm font-medium text-brand-ink-muted transition hover:text-brand-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent"
-          >
-            Maybe later
-          </button>
+          <div className="grid grid-cols-2 gap-1">
+            <Link
+              href={SIGNIN_HREF}
+              onClick={() => dismiss(false)}
+              className="flex min-h-[44px] items-center justify-center rounded-brand-control px-3 text-sm font-semibold text-brand-accent transition hover:text-brand-accent-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent"
+            >
+              {SIGNIN_LABEL}
+            </Link>
+            <button
+              type="button"
+              onClick={() => dismiss(true)}
+              className="flex min-h-[44px] items-center justify-center rounded-brand-control px-3 text-sm font-medium text-brand-ink-muted transition hover:text-brand-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent"
+            >
+              Maybe later
+            </button>
+          </div>
+          <p className="text-center text-xs text-brand-ink-subtle">{SIGNUP_FOOTNOTE}</p>
         </div>
-
-        <p className="mt-2 text-center text-xs text-brand-ink-subtle">
-          {SIGNUP_FOOTNOTE}
-        </p>
       </div>
     </div>
   );

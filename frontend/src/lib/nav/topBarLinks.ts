@@ -31,10 +31,16 @@ const DEALS_TODAY_QUERY = "deals_today=true";
 /**
  * Signed-out only: permanent route back to the sign-up benefits the homepage
  * popup shows once (a signed-in account already has them; the footer link
- * stays for everyone). Sits in the middle link set, so it shows inline from
- * `lg` and in the mobile menu below it -- never crammed into the 375px bar.
+ * stays for everyone). NOT part of the middle link set: it renders as a quiet
+ * text link immediately left of "Sign in" (see TopBarShell.tsx), so the two
+ * read as one group. The label lives only here -- rename it in this one place.
  */
-const WHY_JOIN: TopBarLink = { key: "benefits", label: "Why join", href: "/benefits" };
+export const WHY_JOIN: TopBarLink = { key: "benefits", label: "Why join", href: "/benefits" };
+
+/** The "Why join" link for a session role: signed-out (`null`) only, else `null`. */
+export function whyJoinLinkFor(role: UserRole | null): TopBarLink | null {
+  return role === null ? WHY_JOIN : null;
+}
 
 /**
  * Every role: the city index (moved here from the footer). The active-state
@@ -93,7 +99,6 @@ export function topBarLinksFor(role: UserRole | null): TopBarLink[] {
         FIND_RESTAURANTS,
         BY_CITY,
         DEALS_TODAY,
-        WHY_JOIN,
         {
           key: "add",
           label: "Add your restaurant",
