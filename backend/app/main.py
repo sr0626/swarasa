@@ -20,6 +20,7 @@ from app.routers import (
     admin_taxonomy,
     analytics,
     auth,
+    catering,
     cities,
     claim,
     cuisine,
@@ -64,6 +65,7 @@ app.include_router(admin_owner_assignment.router)
 app.include_router(admin_taxonomy.router)
 app.include_router(location_reopen.router)
 app.include_router(notifications.router)
+app.include_router(catering.router)
 
 # package_type = "Image" Lambda functions have no separate "handler" config
 # — the Dockerfile's CMD *is* the handler, in "<module>.<callable>" form

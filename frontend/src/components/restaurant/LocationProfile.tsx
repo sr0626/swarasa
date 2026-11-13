@@ -19,6 +19,7 @@ import LocationTracker from "@/components/restaurant/LocationTracker";
 import RestaurantAbout from "@/components/restaurant/RestaurantAbout";
 import RestaurantBackLink from "@/components/restaurant/RestaurantBackLink";
 import RestaurantDeals from "@/components/restaurant/RestaurantDeals";
+import CateringQuoteEntry from "@/components/restaurant/CateringQuoteEntry";
 import RestaurantHero from "@/components/restaurant/RestaurantHero";
 import RestaurantInfoCard from "@/components/restaurant/RestaurantInfoCard";
 import RestaurantMenu from "@/components/restaurant/RestaurantMenu";
@@ -152,6 +153,12 @@ export default function LocationProfile({
                 upcomingDeals={location.upcoming_deals}
                 anchorId={location.has_deal_today ? undefined : "deals"}
               />
+            )}
+
+            {/* Only renders for an eligible location (subscribed + opted in), and
+                only for signed-out visitors or registered users. */}
+            {location && location.status === "active" && (
+              <CateringQuoteEntry locationId={location.id} session={session} />
             )}
 
             {restaurant.description && (

@@ -43,6 +43,7 @@ import {
   type ListingStatusFilter,
 } from "@/lib/adminListings";
 import AssignOwnerPanel from "@/components/admin/AssignOwnerPanel";
+import LocationSubscriptionControl from "@/components/admin/LocationSubscriptionControl";
 import { applyAssignment, assignBlockedReason, assignSummary, canAssignOwner } from "@/lib/adminOwnerAssignment";
 import type { AssignOwnerResponse } from "@/types/adminOwnerAssignment";
 import AdminPanelRow, { PANEL_IN_ROW } from "@/components/admin/AdminPanelRow";
@@ -818,6 +819,13 @@ function LocationRow({
           </span>
         </div>
         <CreatedLine creator={location} className="mt-1.5 text-xs text-brand-ink-subtle" />
+        {/* MANUAL paid flag (no payment taken) — what makes a location
+            selectable for catering quote requests until payments exist. */}
+        <LocationSubscriptionControl
+          locationId={location.id}
+          isPaid={location.is_paid}
+          paidUntil={location.paid_until}
+        />
         {error && <p className="mt-1 text-xs text-brand-closed">{error}</p>}
       </div>
 

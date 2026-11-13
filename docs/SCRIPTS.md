@@ -89,6 +89,7 @@ aws lambda invoke --function-name swarasa-api-dev --profile swarasa-dev --region
 | `list_ungeocoded_locations` / `set_location_coordinates` | Used by `geocode_missing_locations.py` |
 | `bulk_import_restaurants` | Used by `bulk_import_restaurants_csv.py` |
 | `delete_user_data` | Used by `delete_test_user.py` |
+| `set_platform_int` | Set an integer setting in `platform_config`. Payload `"key"` + `"value"` (whole number; omit `value` to just read it). Only known keys — today `catering_max_restaurants` (1..20, default 5: how many restaurants one catering quote request may go to), e.g. `--payload '{"_management_command": "set_platform_int", "key": "catering_max_restaurants", "value": 8}'` |
 | `set_platform_flag` | Flip a platform feature flag in `platform_config`. Payload `"key"` + `"value"` (true/false; omit `value` to just read it). Only known keys are accepted — today `menu_item_photos_enabled` (menu-item photos are built but **off** until paid tiers exist), e.g. `--payload '{"_management_command": "set_platform_flag", "key": "menu_item_photos_enabled", "value": true}'` |
 | `deactivate_incomplete_listings` | Hide (set `coming_soon`) every currently **active** listing missing required info (name, full address, valid US phone, all 7 days of hours - the same rule as activation). **Dry run by default**; see "Clean up incomplete live listings" below |
 | `set_user_name` | Admin changes a user's already-set (locked) name. Payload `"email"` (or `"cognito_sub"`) + `"full_name"`; audit-logged for owners; refuses a user with no name yet |

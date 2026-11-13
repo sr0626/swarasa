@@ -75,6 +75,7 @@ async def test_delete_user_data_removes_every_table_and_unclaims_brands(db_sessi
         "user_follow": 1,
         "user_activity_event": 1,
         "user_notification": 1,
+        "catering_request": 0,
         "user_profile": 1,
         "data_deletion_request": 1,
         "audit_log": 1,

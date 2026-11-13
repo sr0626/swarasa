@@ -50,6 +50,8 @@ FIELD_LABELS = {
     "is_claimed": "Claimed",
     "deals_hidden": "Deals hidden",
     "menu_hidden": "Menu hidden",
+    "accepts_catering": "Accepts catering requests",
+    "paid_until": "Paid until",
 }
 
 # Keys that are ids / bookkeeping, never a reader-facing "change".

@@ -21,13 +21,20 @@ export function bellLabel(unread: number): string {
   return `Deal alerts, ${n} unread`;
 }
 
-/** Where a tapped alert goes: the location page, scrolled to its deals section. */
-export function notificationHref(n: Pick<UserNotification, "brand_slug" | "location_slug">): string {
+/** Where a tapped alert goes: a catering quote opens "My catering requests";
+ * a deal alert opens the location page, scrolled to its deals section. */
+export function notificationHref(
+  n: Pick<UserNotification, "brand_slug" | "location_slug"> & { kind?: UserNotification["kind"] }
+): string {
+  if (n.kind === "catering_quote") return "/account/catering";
   return `/restaurant/${n.brand_slug}/${n.location_slug}#deals`;
 }
 
 /** Headline of an alert row. */
-export function notificationHeadline(n: Pick<UserNotification, "restaurant_name">): string {
+export function notificationHeadline(
+  n: Pick<UserNotification, "restaurant_name"> & { kind?: UserNotification["kind"] }
+): string {
+  if (n.kind === "catering_quote") return `${n.restaurant_name} sent a catering quote`;
   return `${n.restaurant_name} has a new deal`;
 }
 
