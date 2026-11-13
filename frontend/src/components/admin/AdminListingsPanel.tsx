@@ -22,6 +22,11 @@
 // matching location(s) are highlighted with a "Matches filter" tag — so
 // "Status: Coming soon" shows WHICH location is coming soon, not just a brand.
 //
+// Card layout (see `lib/adminListingLayout.ts`): a restaurant with exactly ONE
+// location (counting ALL its locations, not just filter matches) is a single
+// merged card; 2+ locations get the restaurant card with indented child
+// location rows; 0 locations shows "No locations yet".
+//
 // Provenance (admin-only, from the same endpoint): each brand shows its
 // owner ("Owner: <email>" / "Unclaimed") and each brand AND location shows
 // "Created <date> by <who> (<role>)".
@@ -33,8 +38,19 @@ import {
   restoreRestaurantAction,
 } from "@/app/admin/listings/actions";
 import {
+  DELETE_RESTAURANT_LABEL,
+  EDIT_LOCATION_LABEL,
+  NO_LOCATIONS_LABEL,
+  brandLayout,
+  brandMetaLine,
+  childLocationText,
+  locationsHeading,
+  locationsToggleLabel,
+  mergedLocationText,
+  sameProvenance,
+} from "@/lib/adminListingLayout";
+import {
   LOCATION_STATUS_LABELS,
-  addressLine,
   creatorText,
   deleteListingWarning,
   hasLocationFilter,
@@ -468,6 +484,8 @@ function CreatedLine({ creator, className }: { creator: ListingCreator; classNam
   );
 }
 
+const TAG = "inline-flex items-center rounded-brand-pill px-2 py-0.5 text-xs font-semibold";
+
 function BrandRow({
   entry,
   highlightMatches,
@@ -489,6 +507,11 @@ function BrandRow({
 }) {
   const brand = entry;
   const locations = entry.locations;
+  // The brand's TOTAL locations (any status, regardless of the active filter)
+  // decide the layout — see `lib/adminListingLayout.ts`.
+  const layout = brandLayout(locations.length);
+  const isMulti = layout === "multi";
+  const soleLocation = layout === "single" ? locations[0] : undefined;
   const isDeleted = Boolean(brand.deleted_at);
   // `brand.location_count` is the ACTIVE location count.
   const brandLink = ownerBrandPageLink(brand.slug, brand.location_count);
@@ -529,6 +552,11 @@ function BrandRow({
     <div className="rounded-brand-card border border-brand-border bg-white p-4 shadow-brand-card sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
+          {isMulti && (
+            <p className="text-xs font-semibold uppercase tracking-wide text-brand-ink-subtle">
+              Restaurant
+            </p>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="break-words font-display text-lg font-bold text-brand-ink">
               {brand.name}
@@ -569,12 +597,14 @@ function BrandRow({
             )}
           </p>
           <CreatedLine creator={brand} className="mt-0.5 text-xs text-brand-ink-subtle" />
-          <p className="mt-1 text-sm text-brand-ink-subtle">
-            /{brand.slug} &middot; {brand.location_count} active of {locations.length} location
-            {locations.length === 1 ? "" : "s"}
-            {/* Admin-only stat, also the number behind the "Most followed" sort. */}
-            {" "}
-            &middot; {brand.follower_count} follower{brand.follower_count === 1 ? "" : "s"}
+          <p className="mt-1 break-words text-sm text-brand-ink-subtle">
+            {/* Followers is an admin-only stat, also the number behind the "Most followed" sort. */}
+            {brandMetaLine({
+              slug: brand.slug,
+              follower_count: brand.follower_count,
+              location_count: brand.location_count,
+              totalLocations: locations.length,
+            })}
           </p>
           {brand.cuisine_tags.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1.5">
@@ -590,7 +620,12 @@ function BrandRow({
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        {/* Restaurant-level actions only; location actions live with each location. */}
+        <div
+          role="group"
+          aria-label={`Restaurant actions for ${brand.name}`}
+          className="flex flex-wrap items-center gap-2"
+        >
           {isDeleted ? (
             <button
               type="button"
@@ -621,7 +656,7 @@ function BrandRow({
                 Add location
               </Link>
               {/* Only for 2+ active locations (the brand URL is then a landing
-                  page); a single location has its own per-row link below. */}
+                  page); a single location has its own per-location link below. */}
               {brandLink && (
                 <a
                   href={brandLink.href}
@@ -639,7 +674,7 @@ function BrandRow({
                   className="flex min-h-[44px] items-center gap-1.5 rounded-brand-control border border-brand-closed px-3 text-xs font-semibold text-brand-closed transition hover:bg-brand-closed-bg"
                 >
                   <TrashIcon className="h-3.5 w-3.5" />
-                  Delete listing
+                  {DELETE_RESTAURANT_LABEL}
                 </button>
               )}
             </>
@@ -704,34 +739,54 @@ function BrandRow({
         <p className="mt-2 text-xs text-brand-ink-subtle">{assignBlocked}</p>
       )}
 
-      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1">
-        <button
-          type="button"
-          onClick={onToggleExpanded}
-          aria-expanded={expanded}
-          className="min-h-[44px] text-sm font-semibold text-brand-accent underline-offset-2 hover:underline"
-        >
-          {expanded ? "Hide locations" : `Show locations (${locations.length})`}
-        </button>
-        {highlightMatches && locations.length > 0 && (
-          <span className="text-xs font-medium text-brand-ink-muted">{matchSummary(locations)}</span>
-        )}
-      </div>
+      {layout === "empty" && (
+        <p className="mt-3 border-t border-brand-border pt-3 text-sm text-brand-ink-subtle">
+          {NO_LOCATIONS_LABEL}
+        </p>
+      )}
 
-      {expanded && (
-        <div className="mt-1 flex flex-col gap-2 border-t border-brand-border pt-3">
-          {locations.length === 0 && (
-            <p className="text-sm text-brand-ink-subtle">This restaurant has no locations.</p>
+      {layout === "single" && soleLocation && (
+        <div className="mt-4 border-t border-brand-border pt-3">
+          <LocationRow
+            variant="merged"
+            location={soleLocation}
+            brand={brand}
+            highlight={highlightMatches && soleLocation.matches_filter}
+            onDeactivated={() => onLocationDeactivated(soleLocation.id)}
+          />
+        </div>
+      )}
+
+      {isMulti && (
+        <div className="mt-4 border-t border-brand-border pt-3">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+            <h3 className="text-sm font-semibold text-brand-ink">{locationsHeading(locations.length)}</h3>
+            <button
+              type="button"
+              onClick={onToggleExpanded}
+              aria-expanded={expanded}
+              className="min-h-[44px] text-sm font-semibold text-brand-accent underline-offset-2 hover:underline"
+            >
+              {locationsToggleLabel(expanded, locations.length)}
+            </button>
+          </div>
+          {highlightMatches && (
+            <p className="text-xs font-medium text-brand-ink-muted">{matchSummary(locations)}</p>
           )}
-          {locations.map((location) => (
-            <LocationRow
-              key={location.id}
-              location={location}
-              brandSlug={brand.slug}
-              highlight={highlightMatches && location.matches_filter}
-              onDeactivated={() => onLocationDeactivated(location.id)}
-            />
-          ))}
+          {expanded && (
+            <div className="mt-2 ml-1 flex flex-col gap-2 sm:ml-4">
+              {locations.map((location) => (
+                <LocationRow
+                  key={location.id}
+                  variant="child"
+                  location={location}
+                  brand={brand}
+                  highlight={highlightMatches && location.matches_filter}
+                  onDeactivated={() => onLocationDeactivated(location.id)}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -746,22 +801,31 @@ const STATUS_TAG_CLASS: Record<AdminListingLocation["status"], string> = {
   closed_pending_reopen: "bg-brand-closed-bg text-brand-closed",
 };
 
+/**
+ * One location. `merged` = the only location of a single-location restaurant,
+ * rendered inside the restaurant's own card (no box, full address once);
+ * `child` = an indented row under a multi-location restaurant (street shown
+ * once, in the "Location · <street>" title).
+ */
 function LocationRow({
+  variant,
   location,
-  brandSlug,
+  brand,
   highlight,
   onDeactivated,
 }: {
+  variant: "merged" | "child";
   location: AdminListingLocation;
-  brandSlug: string;
+  brand: AdminListing;
   highlight: boolean;
   onDeactivated: () => void;
 }) {
-  const pageLink = ownerLocationPageLink(brandSlug, location);
+  const pageLink = ownerLocationPageLink(brand.slug, location);
   const [confirming, setConfirming] = useState(false);
   const [deactivating, setDeactivating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isActive = location.status === "active";
+  const isChild = variant === "child";
 
   async function handleDeactivate() {
     if (!confirming) {
@@ -780,102 +844,134 @@ function LocationRow({
     }
   }
 
-  const tag = "inline-flex items-center rounded-brand-pill px-2 py-0.5 text-xs font-semibold";
+  const child = isChild ? childLocationText(location) : null;
+  const merged = isChild ? null : mergedLocationText(location);
+  // A merged location's provenance is shown only when it differs from the restaurant's.
+  const showCreated = isChild || !sameProvenance(location, brand);
 
+  const facts = (
+    <div className="min-w-0 text-sm">
+      {child ? (
+        <>
+          <p className="break-words font-medium text-brand-ink">{child.title}</p>
+          {child.detail && <p className="break-words text-xs text-brand-ink-subtle">{child.detail}</p>}
+        </>
+      ) : (
+        merged && (
+          <>
+            <p className="text-xs font-semibold uppercase tracking-wide text-brand-ink-subtle">Location</p>
+            {merged.name && <p className="break-words font-medium text-brand-ink">{merged.name}</p>}
+            <p className="break-words text-brand-ink">{merged.address}</p>
+          </>
+        )
+      )}
+      {location.phone && <p className="text-xs text-brand-ink-subtle">{location.phone}</p>}
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+        {highlight && <span className={`${TAG} bg-brand-accent text-white`}>Matches filter</span>}
+        <span className={`${TAG} ${STATUS_TAG_CLASS[location.status]}`}>
+          {LOCATION_STATUS_LABELS[location.status]}
+        </span>
+        <span
+          className={
+            location.is_verified
+              ? `${TAG} bg-brand-success-bg text-brand-success`
+              : `${TAG} bg-brand-chip text-brand-chip-ink`
+          }
+        >
+          {location.is_verified ? "Verified" : "Unverified"}
+        </span>
+        <span
+          className={
+            location.is_paid
+              ? `${TAG} bg-brand-accent-gold/30 text-brand-chip-ink`
+              : `${TAG} bg-brand-bg text-brand-ink-subtle ring-1 ring-brand-border`
+          }
+        >
+          {location.is_paid ? "Paid" : "Free"}
+        </span>
+      </div>
+      <SetupMissingChips status={location.status} setupMissing={location.setup_missing} />
+      {showCreated && <CreatedLine creator={location} className="mt-1.5 text-xs text-brand-ink-subtle" />}
+      {/* MANUAL paid flag (no payment taken) — what makes a location
+          selectable for catering quote requests until payments exist. */}
+      <LocationSubscriptionControl
+        locationId={location.id}
+        isPaid={location.is_paid}
+        paidUntil={location.paid_until}
+      />
+      {error && <p className="mt-1 text-xs text-brand-closed">{error}</p>}
+    </div>
+  );
+
+  const actions = (
+    <div
+      role="group"
+      aria-label={`Location actions for ${isChild && child ? child.title : brand.name}`}
+      className="flex flex-wrap items-center gap-2"
+    >
+      <Link
+        href={`/portal/locations/${location.id}`}
+        className="flex min-h-[44px] items-center gap-1.5 rounded-brand-control border border-brand-border px-3 text-xs font-semibold text-brand-ink transition hover:bg-brand-chip"
+      >
+        <PencilIcon className="h-3.5 w-3.5" />
+        {EDIT_LOCATION_LABEL}
+      </Link>
+      <a
+        href={pageLink.href}
+        target="_blank"
+        rel="noreferrer"
+        className="flex min-h-[44px] items-center justify-center rounded-brand-control border border-brand-border px-3 text-xs font-semibold text-brand-ink-muted transition hover:bg-brand-chip"
+      >
+        {pageLink.label}
+      </a>
+      {/* Deactivating only makes sense for a live location; the others are
+          already hidden (their status tag says why). */}
+      {isActive && (
+        <button
+          type="button"
+          onClick={handleDeactivate}
+          disabled={deactivating}
+          className={
+            confirming
+              ? "flex min-h-[44px] items-center justify-center rounded-brand-control bg-brand-closed px-3 text-xs font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              : "flex min-h-[44px] items-center justify-center rounded-brand-control border border-brand-closed px-3 text-xs font-semibold text-brand-closed transition hover:bg-brand-closed-bg disabled:cursor-not-allowed disabled:opacity-60"
+          }
+        >
+          {deactivating ? "Deactivating..." : confirming ? "Confirm deactivate" : "Deactivate"}
+        </button>
+      )}
+      {isActive && confirming && (
+        <button
+          type="button"
+          onClick={() => setConfirming(false)}
+          className="min-h-[44px] px-1 text-xs font-medium text-brand-ink-subtle underline"
+        >
+          Cancel
+        </button>
+      )}
+    </div>
+  );
+
+  if (!isChild) {
+    return (
+      <div data-matches-filter={highlight ? "true" : undefined} className="flex flex-col gap-3">
+        {facts}
+        {actions}
+      </div>
+    );
+  }
+
+  // Child row: left rule (accent when it matches the filter), lighter background.
   return (
     <div
       data-matches-filter={highlight ? "true" : undefined}
       className={
-        "flex flex-col gap-2 rounded-brand-control p-3 sm:flex-row sm:items-start sm:justify-between " +
-        (highlight ? "bg-white ring-2 ring-brand-accent" : "bg-brand-bg")
+        "flex flex-col gap-2 rounded-r-brand-control bg-brand-bg/50 py-2.5 pl-3 pr-3 sm:flex-row sm:items-start sm:justify-between " +
+        (highlight ? "border-l-4 border-brand-accent" : "border-l-2 border-brand-border")
       }
     >
-      <div className="min-w-0 text-sm">
-        <p className="break-words font-medium text-brand-ink">
-          {location.location_name ?? location.address_line1}
-        </p>
-        <p className="break-words text-brand-ink-subtle">{addressLine(location)}</p>
-        {location.phone && <p className="text-xs text-brand-ink-subtle">{location.phone}</p>}
-        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-          {highlight && (
-            <span className={`${tag} bg-brand-accent text-white`}>Matches filter</span>
-          )}
-          <span className={`${tag} ${STATUS_TAG_CLASS[location.status]}`}>
-            {LOCATION_STATUS_LABELS[location.status]}
-          </span>
-          <span
-            className={
-              location.is_verified
-                ? `${tag} bg-brand-success-bg text-brand-success`
-                : `${tag} bg-brand-chip text-brand-chip-ink`
-            }
-          >
-            {location.is_verified ? "Verified" : "Unverified"}
-          </span>
-          <span
-            className={
-              location.is_paid
-                ? `${tag} bg-brand-accent-gold/30 text-brand-chip-ink`
-                : `${tag} bg-brand-bg text-brand-ink-subtle ring-1 ring-brand-border`
-            }
-          >
-            {location.is_paid ? "Paid" : "Free"}
-          </span>
-        </div>
-        <SetupMissingChips status={location.status} setupMissing={location.setup_missing} />
-        <CreatedLine creator={location} className="mt-1.5 text-xs text-brand-ink-subtle" />
-        {/* MANUAL paid flag (no payment taken) — what makes a location
-            selectable for catering quote requests until payments exist. */}
-        <LocationSubscriptionControl
-          locationId={location.id}
-          isPaid={location.is_paid}
-          paidUntil={location.paid_until}
-        />
-        {error && <p className="mt-1 text-xs text-brand-closed">{error}</p>}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <Link
-          href={`/portal/locations/${location.id}`}
-          className="flex min-h-[44px] items-center gap-1.5 rounded-brand-control border border-brand-border px-3 text-xs font-semibold text-brand-ink transition hover:bg-brand-chip"
-        >
-          <PencilIcon className="h-3.5 w-3.5" />
-          Edit
-        </Link>
-        <a
-          href={pageLink.href}
-          target="_blank"
-          rel="noreferrer"
-          className="flex min-h-[44px] items-center justify-center rounded-brand-control border border-brand-border px-3 text-xs font-semibold text-brand-ink-muted transition hover:bg-brand-chip"
-        >
-          {pageLink.label}
-        </a>
-        {/* Deactivating only makes sense for a live location; the others are
-            already hidden (their status tag says why). */}
-        {isActive && (
-          <button
-            type="button"
-            onClick={handleDeactivate}
-            disabled={deactivating}
-            className={
-              confirming
-                ? "flex min-h-[44px] items-center justify-center rounded-brand-control bg-brand-closed px-3 text-xs font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-                : "flex min-h-[44px] items-center justify-center rounded-brand-control border border-brand-closed px-3 text-xs font-semibold text-brand-closed transition hover:bg-brand-closed-bg disabled:cursor-not-allowed disabled:opacity-60"
-            }
-          >
-            {deactivating ? "Deactivating..." : confirming ? "Confirm deactivate" : "Deactivate"}
-          </button>
-        )}
-        {isActive && confirming && (
-          <button
-            type="button"
-            onClick={() => setConfirming(false)}
-            className="min-h-[44px] px-1 text-xs font-medium text-brand-ink-subtle underline"
-          >
-            Cancel
-          </button>
-        )}
-      </div>
+      {facts}
+      {actions}
     </div>
   );
 }
