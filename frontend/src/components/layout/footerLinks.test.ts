@@ -10,10 +10,8 @@ test("footer links include a Your Data link to /privacy", () => {
   assert.equal(link.label, "Your Data");
 });
 
-test("footer links include a crawlable link to the city index", () => {
-  const link = FOOTER_LINKS.find((l) => l.href === "/indian-restaurants");
-  assert.ok(link);
-  assert.equal(link.label, "Restaurants by City");
+test("the city index link moved to the top bar, not the footer", () => {
+  assert.ok(!FOOTER_LINKS.some((l) => l.href === "/indian-restaurants"));
 });
 
 test("footer links include a Why Join link to /benefits, shown to everyone", () => {
