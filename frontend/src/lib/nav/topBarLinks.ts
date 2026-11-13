@@ -28,6 +28,24 @@ export interface TopBarLink {
 /** Query param the search page reads for the "Deals today" toggle (lib/search/filters.ts DEALS_TODAY_PARAM). */
 const DEALS_TODAY_QUERY = "deals_today=true";
 
+/**
+ * Signed-out only: permanent route back to the sign-up benefits the homepage
+ * popup shows once (a signed-in account already has them; the footer link
+ * stays for everyone). Sits in the middle link set, so it shows inline from
+ * `lg` and in the mobile menu below it -- never crammed into the 375px bar.
+ */
+const WHY_JOIN: TopBarLink = { key: "benefits", label: "Why join", href: "/benefits" };
+
+/**
+ * Every role: the city index (moved here from the footer). The active-state
+ * rule below also lights it on /indian-restaurants/<city> pages.
+ */
+const BY_CITY: TopBarLink = {
+  key: "cities",
+  label: "Restaurants by city",
+  href: "/indian-restaurants",
+};
+
 const FIND_RESTAURANTS: TopBarLink = { key: "find", label: "Find restaurants", href: "/search" };
 const DEALS_TODAY: TopBarLink = {
   key: "deals",
@@ -48,21 +66,34 @@ export function topBarLinksFor(role: UserRole | null): TopBarLink[] {
         { key: "reports", label: "Reports", href: "/admin/reports" },
         { key: "listings", label: "Listings", href: "/admin/listings" },
         { key: "owners", label: "Owners", href: "/admin/owners" },
+        BY_CITY,
       ];
     case "owner":
       return [
         { key: "mine", label: "My restaurants", href: "/account" },
         FIND_RESTAURANTS,
+        BY_CITY,
         { key: "add", label: "Add a restaurant", href: "/portal/brands/new", cta: true },
       ];
     case "manager":
-      return [{ key: "mine", label: "My locations", href: "/account" }, FIND_RESTAURANTS];
+      return [
+        { key: "mine", label: "My locations", href: "/account" },
+        FIND_RESTAURANTS,
+        BY_CITY,
+      ];
     case "registered_user":
-      return [FIND_RESTAURANTS, DEALS_TODAY, { key: "mine", label: "My favorites", href: "/account" }];
+      return [
+        FIND_RESTAURANTS,
+        BY_CITY,
+        DEALS_TODAY,
+        { key: "mine", label: "My favorites", href: "/account" },
+      ];
     default:
       return [
         FIND_RESTAURANTS,
+        BY_CITY,
         DEALS_TODAY,
+        WHY_JOIN,
         {
           key: "add",
           label: "Add your restaurant",

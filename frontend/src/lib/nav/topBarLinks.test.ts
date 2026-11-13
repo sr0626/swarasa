@@ -29,29 +29,48 @@ test("signed-out set: browse links plus the add-your-restaurant CTA routed via l
   const links = topBarLinksFor(null);
   assert.deepEqual(
     links.map((l) => l.label),
-    ["Find restaurants", "Deals today", "Add your restaurant"],
+    ["Find restaurants", "Restaurants by city", "Deals today", "Why join", "Add your restaurant"],
   );
   assert.equal(links.find((l) => l.cta)?.href, "/login?next=/portal/brands/new");
   // No second "sign in" style link in the middle: Sign in lives on the right.
   assert.ok(!links.some((l) => /sign in/i.test(l.label)));
 });
 
+test("only signed-out visitors get the Why join link in the top bar", () => {
+  assert.equal(link(null, "benefits").href, "/benefits");
+  for (const role of ROLES) {
+    if (role === null) continue;
+    assert.ok(!topBarLinksFor(role).some((l) => l.href === "/benefits"), String(role));
+  }
+});
+
+test("every role gets the Restaurants by city link, active on city pages too", () => {
+  for (const role of ROLES) {
+    const cities = link(role, "cities");
+    assert.equal(cities.href, "/indian-restaurants", String(role));
+    assert.equal(cities.label, "Restaurants by city");
+    assert.equal(isTopBarLinkActive(cities, "/indian-restaurants", null), true);
+    assert.equal(isTopBarLinkActive(cities, "/indian-restaurants/irving-tx", null), true);
+    assert.equal(isTopBarLinkActive(cities, "/search", null), false);
+  }
+});
+
 test("signed-in role sets", () => {
   assert.deepEqual(
     topBarLinksFor("registered_user").map((l) => l.href),
-    ["/search", "/search?deals_today=true", "/account"],
+    ["/search", "/indian-restaurants", "/search?deals_today=true", "/account"],
   );
   assert.deepEqual(
     topBarLinksFor("owner").map((l) => l.href),
-    ["/account", "/search", "/portal/brands/new"],
+    ["/account", "/search", "/indian-restaurants", "/portal/brands/new"],
   );
   assert.deepEqual(
     topBarLinksFor("manager").map((l) => l.href),
-    ["/account", "/search"],
+    ["/account", "/search", "/indian-restaurants"],
   );
   assert.deepEqual(
     topBarLinksFor("admin").map((l) => l.href),
-    ["/admin/overview", "/admin/claims", "/admin/reports", "/admin/listings", "/admin/owners"],
+    ["/admin/overview", "/admin/claims", "/admin/reports", "/admin/listings", "/admin/owners", "/indian-restaurants"],
   );
 });
 
