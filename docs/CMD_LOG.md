@@ -688,4 +688,19 @@ git push -u origin feature/report-multi-category   # claude
 git push -u origin feature/claims-reviewer-notes   # claude
 aws lambda invoke --function-name swarasa-api-dev --payload '{"_management_command": "alembic_upgrade"}' --profile swarasa-dev --region us-east-1 ...   # user  (after the #275 deploy, applying 0023_report_categories)
 git push -u origin fix/import-respects-readiness   # claude
+git push -u origin docs/wave-275-277   # claude
+git push -u origin docs/decisions-wave-18   # claude
+aws sso login --profile swarasa-dev   # user  (expired session)
+aws lambda invoke --function-name swarasa-api-dev --payload '{"_management_command":"deactivate_incomplete_listings"}' --profile swarasa-dev --region us-east-1 ...   # user  (dry run: 30 active, 26 incomplete)
+git push -u origin fix/cleanup-command-location-ids   # claude
+aws lambda invoke --function-name swarasa-api-dev --payload '{"_management_command":"deactivate_incomplete_listings","location_ids":[67,68,69,70,71]}' --profile swarasa-dev --region us-east-1 ...   # user  (dry run)
+aws lambda invoke --function-name swarasa-api-dev --payload '{"_management_command":"deactivate_incomplete_listings","apply":true,"location_ids":[67,68,69,70,71]}' --profile swarasa-dev --region us-east-1 ...   # user  (changed 5; second run changed 0)
+git push -u origin feature/import-issues-status   # claude
+git push -u origin feature/catering-quotes   # claude
+aws lambda invoke --function-name swarasa-api-dev --payload '{"_management_command": "alembic_upgrade"}' --profile swarasa-dev --region us-east-1 ...   # user  (after the #282 deploy, applying 0024_catering_requests)
+aws lambda invoke --function-name swarasa-api-dev --payload '{"_management_command":"mark_imported_for_review","location_ids":[67,68,69,70,71]}' --profile swarasa-dev --region us-east-1 ...   # user  (dry run: matched 4)
+aws lambda invoke --function-name swarasa-api-dev --payload '{"_management_command":"mark_imported_for_review","apply":true,"location_ids":[67,68,69,71]}' --profile swarasa-dev --region us-east-1 ...   # user  (changed 4)
+git push -u origin feature/signup-benefits-popup   # claude
+git push -u origin feature/admin-listings-single-card   # claude
+git push -u origin feature/signup-benefits-page   # claude
 ```

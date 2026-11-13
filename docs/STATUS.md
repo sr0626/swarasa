@@ -28,20 +28,24 @@ fully satisfied and asked to stop iterating for now, with an explicit intent
 to revisit later, not a final sign-off.
 
 ## Open PRs
-- Only in-flight docs PRs as of 2026-10-28: this wave-18 tracker/status/
-  cmd-log batch and the DECISIONS.md wave-18 entries. No code PRs open.
+- Only in-flight docs PRs as of 2026-10-28: this wave-19 tracker/status/
+  cmd-log batch and the DECISIONS.md wave-19 entries. No code PRs open.
 
 ## Live state (2026-11)
-- Migrations on main through `0023_report_categories`, all applied to dev.
+- Migrations on main through `0024_catering_requests`, all applied to dev.
 - Terraform applied by the human 2026-10-28: admin Cognito IAM statement
   (#249) and the post-confirmation Lambda update (#254).
 - Frontend (Amplify) is a separate deploy from the backend workflow. The
   #262 build failed once on a transient Google Fonts fetch in `next/font`
   and succeeded on retry; if it recurs, self-host the fonts.
-- Human follow-up: run `deactivate_incomplete_listings` (dry run first, then
-  `"apply": true`) to hide existing live listings that are missing required
-  info, e.g. the test import rows.
-- Deferred: Amplify GitHub-app migration; admin MFA (lowest priority).
+- Data clean-up done 2026-11-13: the 5 imported test rows were hidden; 4 are
+  now `import_review` ("Import issues"), id 70 stays `coming_soon` (claimed).
+  21 real Irving restaurants are live without a phone number (readiness
+  rule would hide them; left live deliberately, phones still to add).
+- Open design items: readiness-gate bypass via `owner_deactivated`, AWS WAF
+  CAPTCHA on public forms (decided, not built), Amplify GitHub-app migration.
+- Deferred: admin MFA (lowest priority); payments (catering uses a manual
+  paid flag in the meantime).
 
 ## Live state (2026-09-25, earlier)
 - Migrations through `0016_location_cuisine` applied to dev via
@@ -57,6 +61,15 @@ to revisit later, not a final sign-off.
   the `set_platform_flag` management command when paid tiers exist.
 - Repo now has "Automatically delete head branches" enabled; the 200+
   merged branches were cleaned up by the user on 2026-09-23.
+
+## Landed 2026-11-13, wave 19 (#280-#285)
+- **Cleanup command** `location_ids` option (#280) and **Import issues**
+  status with missing-info chips on admin Listings (#281).
+- **Catering quote requests** (#282, migration `0024`): manual paid flag as
+  "subscribed", requester wizard, restaurant inbox, admin list.
+- **Sign-up popup** (#283) and **/benefits page** with "Why join" links;
+  "Restaurants by city" moved to the top bar (#285).
+- **Admin listings single card** for single-location restaurants (#284).
 
 ## Landed 2026-10-28, wave 18 (#275-#277)
 - **Report a problem: multi-select categories** (#275, migration `0023`).
