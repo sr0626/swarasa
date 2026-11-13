@@ -439,7 +439,7 @@ async def test_bulk_import_csv_is_idempotent_on_rerun(db_session):
 
 # ---------------------------------------------------------------------------
 # Readiness + optional `hours` column (docs/DECISIONS.md "Bulk import is
-# invisible by default"): every created location is `coming_soon`.
+# invisible by default"): every created location is `import_review`.
 # ---------------------------------------------------------------------------
 
 
@@ -466,9 +466,9 @@ async def test_bulk_import_csv_hours_column_is_stored_but_listing_stays_hidden(d
 
     assert result.created == 2 and result.errors == 0
     complete, unreadable = result.rows
-    assert complete.listing_status == "coming_soon" and complete.missing == []
-    assert unreadable.listing_status == "coming_soon" and unreadable.missing == ["hours"]
+    assert complete.listing_status == "import_review" and complete.missing == []
+    assert unreadable.listing_status == "import_review" and unreadable.missing == ["hours"]
     assert unreadable.hours_warning is not None
     assert await _count(db_session, RestaurantHours) == 7
     statuses = (await db_session.execute(select(RestaurantLocation.status))).scalars().all()
-    assert statuses == ["coming_soon", "coming_soon"]
+    assert statuses == ["import_review", "import_review"]

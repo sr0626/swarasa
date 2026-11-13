@@ -28,6 +28,7 @@ def test_every_status_maps_to_a_friendly_word():
         "active": "Live",
         "owner_deactivated": "Hidden",
         "coming_soon": "Coming soon",
+        "import_review": "Import issues",
         "closed_pending_reopen": "Closed",
     }
     for raw, friendly in audit_diff.STATUS_LABELS.items():

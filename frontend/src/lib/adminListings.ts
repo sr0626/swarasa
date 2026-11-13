@@ -9,6 +9,7 @@ const LOCATION_STATUS_VALUES = [
   "active",
   "owner_deactivated",
   "coming_soon",
+  "import_review",
   "closed_pending_reopen",
 ] as const;
 
@@ -56,6 +57,7 @@ export const LOCATION_STATUS_LABELS: Record<ListingLocationStatus, string> = {
   active: "Active",
   owner_deactivated: "Hidden (owner)",
   coming_soon: "Coming soon",
+  import_review: "Import issues",
   closed_pending_reopen: "Closed (reopen pending)",
 };
 

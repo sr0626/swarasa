@@ -21,12 +21,12 @@ All run from the repo root, against **dev**. Refresh SSO first if needed:
 **Preferred path: Admin > Import (`/admin/import`)** — upload a CSV in the browser, get
 a per-row check (errors, warnings, duplicates, rows with no coordinates), confirm, and
 download the per-row result. Listings it creates are **unclaimed** (no `owner_email`
-column; it is ignored if present) and verified, but **always created hidden (`coming_soon`)**,
+column; it is ignored if present) and verified, but **always created hidden as `import_review` ("Import issues")**,
 even when complete: you open each one in the location editor, finish what is missing and
 activate it (the server refuses activation until name, full address, valid US phone and opening
 hours for all 7 days exist). The check and the results (and the downloadable CSVs) show a
 `missing` list per row; empty = ready to activate. Find them in Admin > Listings with the
-"Coming soon" filter. Re-uploading the same file creates nothing. It geocodes rows without coordinates itself. See docs/API_CONTRACTS.md "Admin bulk
+"Import issues" filter (`/admin/listings?status=import_review`; each row shows what is missing). Re-uploading the same file creates nothing. It geocodes rows without coordinates itself. See docs/API_CONTRACTS.md "Admin bulk
 listing import". The script below is the older **owner-assigned** path (every row needs an
 existing `owner_email`) and the way to import without the browser.
 
@@ -46,7 +46,7 @@ The page's own template (header only) has no `owner_email` column.
 | `hours` | optional, **last column** | One line, 24-hour times, days `Mon`..`Sun`: `Mon-Fri 11:00-22:00; Sat 11:00-23:00; Sun closed`, or `daily 11:00-22:00`. Ranges may wrap (`Sat-Mon`); a close earlier than the open means after midnight (`Fri 17:00-02:00`); `closed` for a closed day. One window per day, no AM/PM, no day listed twice. Anything not understood = a **warning** and the row imports **without hours** (never partial hours, never a row error). Covering all 7 days removes "hours" from the row's missing list |
 
 Not supported: several tags per row, split-shift hours, timezone (always America/Chicago).
-Every imported listing is **coming soon (hidden) + verified**, free tier, slug auto-generated,
+Every imported listing is **Import issues / `import_review` (hidden) + verified**, free tier, slug auto-generated,
 **even when nothing is missing** - activate it in the location editor. The script prints what each
 created row still needs. Max 500 rows.
 Re-running is safe: same restaurant name + address is skipped (name owned by a different owner = row error).
@@ -91,6 +91,7 @@ aws lambda invoke --function-name swarasa-api-dev --profile swarasa-dev --region
 | `delete_user_data` | Used by `delete_test_user.py` |
 | `set_platform_flag` | Flip a platform feature flag in `platform_config`. Payload `"key"` + `"value"` (true/false; omit `value` to just read it). Only known keys are accepted — today `menu_item_photos_enabled` (menu-item photos are built but **off** until paid tiers exist), e.g. `--payload '{"_management_command": "set_platform_flag", "key": "menu_item_photos_enabled", "value": true}'` |
 | `deactivate_incomplete_listings` | Hide (set `coming_soon`) every currently **active** listing missing required info (name, full address, valid US phone, all 7 days of hours - the same rule as activation). **Dry run by default**; see "Clean up incomplete live listings" below |
+| `mark_imported_for_review` | Move EXISTING imported hidden listings from `coming_soon` to `import_review` ("Import issues") - only unclaimed brands whose creation audit row says `bulk_import`. **Dry run by default**; see "Flag already-imported listings" below |
 | `set_user_name` | Admin changes a user's already-set (locked) name. Payload `"email"` (or `"cognito_sub"`) + `"full_name"`; audit-logged for owners; refuses a user with no name yet |
 
 ### Clean up incomplete live listings (`deactivate_incomplete_listings`)
@@ -128,6 +129,40 @@ naming a complete, hidden or deleted location is a harmless no-op. Output: `mode
 `changed`, `missing_counts`, `listings[]` (`location_id`, `name`, `city`, `missing`),
 `listings_truncated`. **Undo:** set a listing back to Active in the location editor once it is complete
 (the editor lists exactly what is still needed).
+
+### Flag already-imported listings (`mark_imported_for_review`)
+
+Bulk imports now create `import_review` ("Import issues"); listings imported earlier are still
+`coming_soon`. This moves exactly those into `import_review` so `/admin/listings?status=import_review`
+finds them. **You run these** (an agent never does). A location changes only if it is currently
+`coming_soon` AND its restaurant is unclaimed (no owner) AND its creation audit row has
+`provenance: "bulk_import"` (so manually added listings are never touched).
+
+```bash
+# 1. DRY RUN (default): what would change. Changes nothing.
+aws lambda invoke --function-name swarasa-api-dev --profile swarasa-dev --region us-east-1 \
+  --cli-binary-format raw-in-base64-out \
+  --payload '{"_management_command":"mark_imported_for_review"}' /dev/stdout
+
+# 2. APPLY for the five Zztest rows (ids 67-71); one audit_log row each,
+#    actor system:mark_imported_for_review, {"status":"coming_soon"} -> {"status":"import_review"}.
+aws lambda invoke --function-name swarasa-api-dev --profile swarasa-dev --region us-east-1 \
+  --cli-binary-format raw-in-base64-out \
+  --payload '{"_management_command":"mark_imported_for_review","apply":true,"location_ids":[67,68,69,70,71]}' /dev/stdout
+
+# Or apply to every eligible imported listing (omit location_ids)
+aws lambda invoke --function-name swarasa-api-dev --profile swarasa-dev --region us-east-1 \
+  --cli-binary-format raw-in-base64-out \
+  --payload '{"_management_command":"mark_imported_for_review","apply":true}' /dev/stdout
+```
+
+Idempotent (a second run finds nothing). `apply` must be a real JSON boolean (`"apply":"true"` is
+rejected); `location_ids` a non-empty list of positive integers (max 1000); naming a manual,
+claimed, active or deleted-brand location is a harmless no-op. Output: `mode`, `location_ids`,
+`checked_coming_soon_unclaimed`, `matched`, `changed`, `listings[]` (`location_id`, `name`, `city`),
+`listings_truncated`. **Undo:** set the listing to Coming soon in the location editor (or activate it
+once complete). `deactivate_incomplete_listings` is unchanged: it still hides a live listing as
+`coming_soon`, never `import_review`.
 
 ## Infra (Terraform, from `infra/`)
 

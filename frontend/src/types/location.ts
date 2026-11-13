@@ -10,14 +10,18 @@ export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 /**
  * Product-state lifecycle — see backend/app/models/restaurant_location.py
  * "Location status lifecycle". `active` is the only publicly visible
- * state; the other three are self-service (owner/admin) except that a
+ * state; the others are self-service (owner/admin) except that a
  * `closed_pending_reopen` location can only get back to `active` through
  * an admin-approved reopen request (see `@/types/locationReopen.ts`).
+ * `import_review` ("Import issues") is an unreviewed bulk import: hidden like
+ * `coming_soon`, same readiness gate, but flagged for admin attention; only an
+ * admin can set it.
  */
 export type LocationStatus =
   | "active"
   | "owner_deactivated"
   | "coming_soon"
+  | "import_review"
   | "closed_pending_reopen";
 
 export interface LocationHour {
@@ -106,7 +110,8 @@ export interface LocationWithManagers {
   managersError: string | null;
   todayStatus: ConsoleTodayStatus;
   /**
-   * What's still missing before a listing in setup (`coming_soon`) can go live
+   * What's still missing before a listing in setup (`coming_soon` /
+   * `import_review`) can go live
    * (`LocationDetail.setup_missing`), for the "Finish setup" call to action on
    * the console row. `null` when unknown (not in setup, or the detail read
    * failed) — the CTA then just omits the count.

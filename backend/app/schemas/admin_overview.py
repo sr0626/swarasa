@@ -10,12 +10,14 @@ from pydantic import BaseModel
 
 
 class StatusBreakdown(BaseModel):
-    """Counts keyed by the 4-value `restaurant_location.status` lifecycle
-    (app/models/restaurant_location.py "Location status lifecycle")."""
+    """Counts keyed by the 5-value `restaurant_location.status` lifecycle
+    (app/models/restaurant_location.py "Location status lifecycle").
+    `import_review` is additive (defaults to 0)."""
 
     active: int
     owner_deactivated: int
     coming_soon: int
+    import_review: int = 0
     closed_pending_reopen: int
 
 

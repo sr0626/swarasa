@@ -1,5 +1,5 @@
 """Integration tests: the admin bulk import creates EVERY listing hidden
-(`coming_soon`), reports what is still missing per row, accepts the optional
+(`import_review`), reports what is still missing per row, accepts the optional
 `hours` column, and leaves activation to the normal readiness rule
 (docs/DECISIONS.md "Bulk import is invisible by default")."""
 from __future__ import annotations
@@ -99,7 +99,7 @@ async def test_commit_always_creates_hidden_even_when_complete(client, db_sessio
     as_user("admin")
     result = await commit(client, [row(2, hours=FULL_WEEK), row(3), row(4, phone=None, hours=FULL_WEEK)])
     by_row = {r["row_number"]: r for r in result["rows"]}
-    assert all(r["result"] == "created" and r["listing_status"] == "coming_soon" for r in by_row.values())
+    assert all(r["result"] == "created" and r["listing_status"] == "import_review" for r in by_row.values())
     assert by_row[2]["missing"] == []  # complete: ready to activate, but NOT active
     assert by_row[3]["missing"] == ["hours"]
     assert by_row[4]["missing"] == ["phone"]
@@ -107,7 +107,7 @@ async def test_commit_always_creates_hidden_even_when_complete(client, db_sessio
     assert result["summary"]["created_ready_to_activate"] == 1
     assert result["summary"]["created_incomplete"] == 2
     statuses = (await db_session.execute(select(RestaurantLocation.status))).scalars().all()
-    assert statuses == ["coming_soon"] * 3
+    assert statuses == ["import_review"] * 3
 
 
 @pytest.mark.asyncio
@@ -136,7 +136,7 @@ async def test_imported_listing_activates_only_through_the_readiness_rule(client
 
     # The editor checklist (setup_missing) shows imported listings like manual ones, to the admin.
     detail = (await client.get(f"/locations/{incomplete_id}")).json()
-    assert detail["status"] == "coming_soon" and detail["setup_missing"] == ["hours"]
+    assert detail["status"] == "import_review" and detail["setup_missing"] == ["hours"]
     assert (await client.get(f"/locations/{complete_id}")).json()["setup_missing"] == []
 
     refused = await client.post(f"/locations/{incomplete_id}/status", json={"status": "active"})

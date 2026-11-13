@@ -272,6 +272,7 @@ async def test_listings_summary(client, db_session, as_user, listing_cognito):
     unclaimed = await create_brand(db_session, owner_id=None, is_claimed=False)
     await create_location(db_session, brand_id=unclaimed.id, status="owner_deactivated")
     await create_location(db_session, brand_id=unclaimed.id, status="closed_pending_reopen")
+    await create_location(db_session, brand_id=unclaimed.id, status="import_review")
     gone = await create_brand(db_session, owner_id=owner.id, is_claimed=True, deleted_at=NOW)
     await create_location(db_session, brand_id=gone.id, status="active")  # not counted
     await db_session.commit()
@@ -282,14 +283,18 @@ async def test_listings_summary(client, db_session, as_user, listing_cognito):
     assert s == {
         "brands": 2,
         "unclaimed_brands": 1,
-        "locations": 4,
+        "locations": 5,
         "active": 1,
         "coming_soon": 1,
+        "import_review": 1,
         "owner_deactivated": 1,
         "closed_pending_reopen": 1,
     }
     assert s["brands"] == full["total"]
-    assert s["active"] + s["coming_soon"] + s["owner_deactivated"] + s["closed_pending_reopen"] == s["locations"]
+    assert (
+        s["active"] + s["coming_soon"] + s["import_review"] + s["owner_deactivated"] + s["closed_pending_reopen"]
+        == s["locations"]
+    )
 
     filtered = (await client.get("/admin/listings", params={"status": "coming_soon"})).json()
     assert filtered["total"] == 1

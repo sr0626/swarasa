@@ -38,7 +38,7 @@ def test_deleted_brand_does_not():
 
 
 def test_non_active_location_status_does_not():
-    for status in ("owner_deactivated", "coming_soon", "closed_pending_reopen"):
+    for status in ("owner_deactivated", "coming_soon", "import_review", "closed_pending_reopen"):
         assert not should_notify_for_deal(
             _deal(), _location(status=status), brand_deleted=False, now=NOW
         )

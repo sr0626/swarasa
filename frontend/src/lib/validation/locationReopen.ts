@@ -8,6 +8,7 @@ export const locationStatusSchema = z.enum([
   "active",
   "owner_deactivated",
   "coming_soon",
+  "import_review",
   "closed_pending_reopen",
 ]);
 

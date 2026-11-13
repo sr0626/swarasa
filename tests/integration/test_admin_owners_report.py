@@ -114,6 +114,7 @@ async def test_counts_across_multiple_brands_and_statuses(client, db_session, as
         "active": 2,
         "owner_deactivated": 1,
         "coming_soon": 1,
+        "import_review": 0,
         "closed_pending_reopen": 1,
     }
     assert sum(row["by_status"].values()) == row["location_count"]
@@ -159,6 +160,7 @@ async def test_owner_with_no_brands_is_listed_with_zero_counts(client, db_sessio
         "active": 0,
         "owner_deactivated": 0,
         "coming_soon": 0,
+        "import_review": 0,
         "closed_pending_reopen": 0,
     }
     assert row["verified_location_count"] == 0

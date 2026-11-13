@@ -10,7 +10,8 @@ PostGIS"). Tier is NOT a stored enum — `is_paid` + `paid_until` only.
 ## Location status lifecycle (added migration 0008, docs/DECISIONS.md
 "Location status lifecycle")
 
-`status` replaces the old plain `is_active` boolean with four values:
+`status` replaces the old plain `is_active` boolean with these values (a fifth,
+`import_review`, was added later — see below):
 
   - `active` — normal, publicly visible everywhere (search, direct URL,
     tiles). The only visible state.
@@ -20,6 +21,14 @@ PostGIS"). Tier is NOT a stored enum — `is_paid` + `paid_until` only.
     `owner_deactivated`, but surfaced distinctly in the owner console so a
     new listing being finished isn't confused with a deliberately hidden
     one. Owner flips it to `active` themselves once ready.
+  - `import_review` — a bulk-IMPORTED listing that has not been reviewed yet
+    (docs/DECISIONS.md "Bulk import creates `import_review`"). Hidden and
+    non-public exactly like `coming_soon`, and goes through the SAME
+    readiness gate to reach `active`, but flagged "Import issues" so an admin
+    can find the rows that need attention (admin Listings filter + the
+    missing-info chips). Nothing flips it automatically: it stays
+    `import_review` until someone deliberately activates it (or moves it to
+    another status). Admins create/set it; owners cannot pick it as a target.
   - `closed_pending_reopen` — owner-initiated "temporarily closed"
     (self-service, immediate), but the owner CANNOT self-reopen it: only an
     admin-approved `location_reopen_request` (see that model) can move it
@@ -99,24 +108,42 @@ class RestaurantLocation(TimestampMixin, Base):
     STATUS_ACTIVE = "active"
     STATUS_OWNER_DEACTIVATED = "owner_deactivated"
     STATUS_COMING_SOON = "coming_soon"
+    STATUS_IMPORT_REVIEW = "import_review"
     STATUS_CLOSED_PENDING_REOPEN = "closed_pending_reopen"
     STATUSES = (
         STATUS_ACTIVE,
         STATUS_OWNER_DEACTIVATED,
         STATUS_COMING_SOON,
+        STATUS_IMPORT_REVIEW,
         STATUS_CLOSED_PENDING_REOPEN,
     )
     # Statuses a caller with no special access to this location can never
     # see (search, `GET /restaurants/{id}/locations`, `GET /locations/{id}`
     # direct fetch) — every non-`active` status, deliberately: there is no
     # partially-visible hidden state in this model.
-    HIDDEN_STATUSES = (STATUS_OWNER_DEACTIVATED, STATUS_COMING_SOON, STATUS_CLOSED_PENDING_REOPEN)
+    HIDDEN_STATUSES = (
+        STATUS_OWNER_DEACTIVATED,
+        STATUS_COMING_SOON,
+        STATUS_IMPORT_REVIEW,
+        STATUS_CLOSED_PENDING_REOPEN,
+    )
+    # "In setup" statuses: hidden listings that still have to pass the
+    # readiness gate (`listing_readiness`) before going `active`. Both show
+    # the setup checklist / `setup_missing`; they differ only in WHY they are
+    # hidden (a new manual listing vs. an unreviewed import).
+    SETUP_STATUSES = (STATUS_COMING_SOON, STATUS_IMPORT_REVIEW)
     # Statuses an owner/admin can move a location into or out of themselves,
     # with no admin review — everything except the one-way trip out of
     # `closed_pending_reopen` (see `update_location_status` in
     # `location_service.py`, which enforces the asymmetric part; this tuple
-    # only names the four legal target values for the self-service endpoint).
-    SELF_SERVICE_STATUSES = STATUSES
+    # only names the four legal target values for the self-service endpoint —
+    # `import_review` is admin-only as a target).
+    SELF_SERVICE_STATUSES = (
+        STATUS_ACTIVE,
+        STATUS_OWNER_DEACTIVATED,
+        STATUS_COMING_SOON,
+        STATUS_CLOSED_PENDING_REOPEN,
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
 

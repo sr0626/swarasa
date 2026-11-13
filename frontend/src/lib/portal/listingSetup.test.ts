@@ -13,8 +13,9 @@ import {
   setupSummary,
 } from "./listingSetup.ts";
 
-test("only a coming_soon listing is 'in setup'", () => {
+test("only coming_soon and import_review listings are 'in setup'", () => {
   assert.equal(isInSetup("coming_soon"), true);
+  assert.equal(isInSetup("import_review"), true);
   for (const status of ["active", "owner_deactivated", "closed_pending_reopen"] as const) {
     assert.equal(isInSetup(status), false, status);
   }

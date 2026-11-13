@@ -81,10 +81,13 @@ class AdminListingsSummary(BaseModel):
     brands: int = 0
     # Live brands with `is_claimed = false` (no owner yet).
     unclaimed_brands: int = 0
-    # Locations of live brands, and the same by the 4-value status lifecycle
-    # (the four status counts sum to `locations`).
+    # Locations of live brands, and the same by the 5-value status lifecycle
+    # (the five status counts sum to `locations`). `import_review` = unreviewed
+    # bulk imports ("Import issues"); it is its own bucket, NOT folded into
+    # `coming_soon`.
     locations: int = 0
     active: int = 0
     coming_soon: int = 0
+    import_review: int = 0
     owner_deactivated: int = 0
     closed_pending_reopen: int = 0
