@@ -683,4 +683,9 @@ git push -u origin docs/decisions-wave-16   # claude
 aws lambda invoke --function-name swarasa-api-dev --payload '{"_management_command": "alembic_upgrade"}' --profile swarasa-dev --region us-east-1 ...   # user  (after the #269 deploy, applying 0022_location_daily_stat)
 git push -u origin feature/admin-panels-row-menu-order   # claude
 git push -u origin feature/admin-menu-action-badges   # claude
+git push -u origin docs/wave-272-273   # claude
+git push -u origin feature/report-multi-category   # claude
+git push -u origin feature/claims-reviewer-notes   # claude
+aws lambda invoke --function-name swarasa-api-dev --payload '{"_management_command": "alembic_upgrade"}' --profile swarasa-dev --region us-east-1 ...   # user  (after the #275 deploy, applying 0023_report_categories)
+git push -u origin fix/import-respects-readiness   # claude
 ```

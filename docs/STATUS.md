@@ -28,20 +28,20 @@ fully satisfied and asked to stop iterating for now, with an explicit intent
 to revisit later, not a final sign-off.
 
 ## Open PRs
-- Only in-flight docs PRs as of 2026-10-28: this wave-17 tracker/status/
-  cmd-log batch. No code PRs open.
+- Only in-flight docs PRs as of 2026-10-28: this wave-18 tracker/status/
+  cmd-log batch and the DECISIONS.md wave-18 entries. No code PRs open.
 
-## Live state (2026-10-28)
-- Migrations on main through `0022_location_daily_stat`. 0001-0021 applied to
-  dev; `0022` needs `alembic_upgrade` after the #269 deploy (the tracking
-  endpoint and Insights error until it runs).
+## Live state (2026-11)
+- Migrations on main through `0023_report_categories`, all applied to dev.
 - Terraform applied by the human 2026-10-28: admin Cognito IAM statement
   (#249) and the post-confirmation Lambda update (#254).
 - Frontend (Amplify) is a separate deploy from the backend workflow. The
   #262 build failed once on a transient Google Fonts fetch in `next/font`
   and succeeded on retry; if it recurs, self-host the fonts.
-- Deferred: migrate Amplify from OAuth/PAT to the GitHub App (needs a
-  planned Terraform sequence, see backlog).
+- Human follow-up: run `deactivate_incomplete_listings` (dry run first, then
+  `"apply": true`) to hide existing live listings that are missing required
+  info, e.g. the test import rows.
+- Deferred: Amplify GitHub-app migration; admin MFA (lowest priority).
 
 ## Live state (2026-09-25, earlier)
 - Migrations through `0016_location_cuisine` applied to dev via
@@ -57,6 +57,13 @@ to revisit later, not a final sign-off.
   the `set_platform_flag` management command when paid tiers exist.
 - Repo now has "Automatically delete head branches" enabled; the 200+
   merged branches were cleaned up by the user on 2026-09-23.
+
+## Landed 2026-10-28, wave 18 (#275-#277)
+- **Report a problem: multi-select categories** (#275, migration `0023`).
+- **Claims review**: who/when approved + editable verification notes (#276).
+- **Bulk import is invisible by default** (#277): every imported listing is
+  created `coming_soon`; reports list what is missing; optional `hours`
+  column; `deactivate_incomplete_listings` cleanup command.
 
 ## Landed 2026-10-28, wave 17 (#272-#273)
 - **Admin layout** (#272): Summary and Search & filters side by side on web;
