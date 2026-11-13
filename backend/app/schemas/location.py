@@ -23,7 +23,7 @@ SPECIALTY_MAX_LENGTH = 40
 # (this schema only validates that the value is one of the four known
 # statuses, same as ClaimStatus/ReportStatus elsewhere in this codebase).
 LocationStatusValue = Literal[
-    "active", "owner_deactivated", "coming_soon", "closed_pending_reopen"
+    "active", "owner_deactivated", "coming_soon", "import_review", "closed_pending_reopen"
 ]
 
 # Phone: one shared US rule (app/core/phone.py, mirrored by
@@ -99,9 +99,9 @@ class LocationOut(BaseModel):
     # property of the same name on the model.
     is_active: bool
     # What is still missing before this listing can be activated (moved out of
-    # `coming_soon`): any of "name", "address", "phone", "hours" (see
-    # app/services/listing_readiness.py). Empty when the listing is ready AND
-    # for every status other than `coming_soon` (not in setup).
+    # `coming_soon` / `import_review`): any of "name", "address", "phone",
+    # "hours" (see app/services/listing_readiness.py). Empty when the listing
+    # is ready AND for every status other than those two (not in setup).
     # Computed on every read from data already loaded there (no extra query);
     # the SERVER re-checks on the transition itself, so this is display-only.
     setup_missing: list[str]

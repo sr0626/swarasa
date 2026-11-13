@@ -125,6 +125,7 @@ async def get_admin_owners(
             _status_count(RestaurantLocation.STATUS_ACTIVE).label("active"),
             _status_count(RestaurantLocation.STATUS_OWNER_DEACTIVATED).label("owner_deactivated"),
             _status_count(RestaurantLocation.STATUS_COMING_SOON).label("coming_soon"),
+            _status_count(RestaurantLocation.STATUS_IMPORT_REVIEW).label("import_review"),
             _status_count(RestaurantLocation.STATUS_CLOSED_PENDING_REOPEN).label(
                 "closed_pending_reopen"
             ),
@@ -188,6 +189,7 @@ async def get_admin_owners(
             _n(location_sq.c.active).label("active"),
             _n(location_sq.c.owner_deactivated).label("owner_deactivated"),
             _n(location_sq.c.coming_soon).label("coming_soon"),
+            _n(location_sq.c.import_review).label("import_review"),
             _n(location_sq.c.closed_pending_reopen).label("closed_pending_reopen"),
             _n(location_sq.c.verified).label("verified"),
             _n(follow_sq.c.follower_count).label("follower_count"),
@@ -235,6 +237,7 @@ async def get_admin_owners(
                     active=row.active,
                     owner_deactivated=row.owner_deactivated,
                     coming_soon=row.coming_soon,
+                    import_review=row.import_review,
                     closed_pending_reopen=row.closed_pending_reopen,
                 ),
                 verified_location_count=row.verified,

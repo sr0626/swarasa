@@ -466,7 +466,7 @@ async def test_location_page_404_for_unknown_and_wrong_brand_pairing(client, db_
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("status", ["owner_deactivated", "coming_soon", "closed_pending_reopen"])
+@pytest.mark.parametrize("status", ["owner_deactivated", "coming_soon", "import_review", "closed_pending_reopen"])
 async def test_hidden_location_page_404s_for_the_public_but_not_its_owner(
     client, db_session, as_user, status
 ):

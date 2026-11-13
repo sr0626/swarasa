@@ -136,7 +136,7 @@ class RowResult:
     cuisine_type_input: str | None = None
     cuisine_match: str | None = None  # matched cuisine_tag.name, or None
     # Readiness outcome of a CREATED row (docs/DECISIONS.md "Bulk import is
-    # invisible by default"): the location's status (always "coming_soon") and
+    # invisible by default"): the location's status (always "import_review") and
     # everything still needed before it can be activated (`listing_readiness`
     # keys; [] = ready to activate). `hours_warning` = the optional `hours`
     # cell could not be understood (row imported without hours).
@@ -291,7 +291,8 @@ async def _find_or_create_location(
     hours: Sequence[HoursDay] | None = None,
 ) -> tuple[RestaurantLocation, bool]:
     """Create-or-skip a location. A NEW imported location is ALWAYS created
-    `coming_soon` (hidden everywhere), even when nothing is missing: an admin
+    `import_review` (hidden everywhere, flagged "Import issues"), even when
+    nothing is missing: an admin
     opens it, completes what is missing and activates it deliberately, through
     the normal server rule (`listing_readiness.missing_for_activation`, same as
     a manually added listing). `missing` (name, full address, valid US phone,
@@ -329,7 +330,7 @@ async def _find_or_create_location(
     )
     hour_days: Sequence[HoursDay] = hours if hours is not None else parse_hours(row.hours).days
     missing = missing_for_new_listing(location, row.name, hour_days)
-    location.status = RestaurantLocation.STATUS_COMING_SOON
+    location.status = RestaurantLocation.STATUS_IMPORT_REVIEW
     db.add(location)
     await db.flush()
     for hours_row in hours_models(hour_days):

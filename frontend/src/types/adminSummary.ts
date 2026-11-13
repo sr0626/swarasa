@@ -55,6 +55,8 @@ export interface AdminListingsSummary {
   locations: number;
   active: number;
   coming_soon: number;
+  /** Unreviewed bulk imports ("Import issues"); its own bucket, not part of `coming_soon`. */
+  import_review: number;
   owner_deactivated: number;
   closed_pending_reopen: number;
 }

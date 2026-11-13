@@ -37,6 +37,13 @@ export interface AdminListingLocation extends ListingCreator {
   cuisine_tags: CuisineTag[];
   /** True when this location satisfies every location-level filter in effect (always true with none). */
   matches_filter: boolean;
+  /**
+   * What's still missing before this location can be activated ("name" |
+   * "address" | "phone" | "hours"). Only filled for a location in a setup status
+   * (`coming_soon` / `import_review`); `[]` there means ready to activate, and it
+   * is always `[]` for every other status.
+   */
+  setup_missing?: string[];
 }
 
 export interface AdminListing extends ListingCreator {

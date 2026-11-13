@@ -12,6 +12,7 @@ const LABELS: Record<LocationStatus, string> = {
   active: "Active",
   owner_deactivated: "Hidden",
   coming_soon: "Coming soon",
+  import_review: "Import issues",
   closed_pending_reopen: "Closed — pending reopen",
 };
 
@@ -30,6 +31,19 @@ export default function LocationStatusBadge({ status }: { status: LocationStatus
       <span className="inline-flex items-center gap-1.5 rounded-brand-pill bg-brand-accent-gold/40 px-2.5 py-1 text-xs font-bold text-brand-ink ring-1 ring-inset ring-brand-accent-gold">
         <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-brand-accent-warm" />
         {LABELS.coming_soon}
+      </span>
+    );
+  }
+  if (status === "import_review") {
+    // Amber + a "!" marker (not colour alone) and the words "Import issues":
+    // an unreviewed import needs attention, so it must stand apart from the
+    // gold "Coming soon" pill.
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-brand-pill bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-900 ring-1 ring-inset ring-amber-500">
+        <span aria-hidden="true" className="font-black">
+          !
+        </span>
+        {LABELS.import_review}
       </span>
     );
   }

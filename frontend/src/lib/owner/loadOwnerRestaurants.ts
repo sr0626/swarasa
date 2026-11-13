@@ -92,7 +92,7 @@ async function loadTodayStatusForLocation(
   location: LocationSummary,
   accessToken: string
 ): Promise<{ todayStatus: ConsoleTodayStatus; setupMissing: string[] | null }> {
-  const inSetup = location.status === "coming_soon";
+  const inSetup = location.status === "coming_soon" || location.status === "import_review";
   // A listing in setup also needs its checklist (`setup_missing`, only on the
   // detail read) for the "Finish setup" call to action, so it always reads it.
   if (location.is_open_now === true && !inSetup) {

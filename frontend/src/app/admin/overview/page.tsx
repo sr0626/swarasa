@@ -43,6 +43,7 @@ const STATUS_LABELS: Record<LocationStatus, string> = {
   active: "Active",
   owner_deactivated: "Hidden — owner deactivated",
   coming_soon: "Coming soon",
+  import_review: "Import issues",
   closed_pending_reopen: "Closed — pending reopen",
 };
 
@@ -50,6 +51,7 @@ const STATUS_ORDER: readonly LocationStatus[] = [
   "active",
   "owner_deactivated",
   "coming_soon",
+  "import_review",
   "closed_pending_reopen",
 ];
 

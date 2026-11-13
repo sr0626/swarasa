@@ -34,7 +34,7 @@ from app.dependencies.auth import CurrentUser, get_current_user_optional
 from app.models.restaurant_location import RestaurantLocation
 from factories import create_brand, create_location, create_location_manager, create_owner
 
-HIDDEN_STATUSES = ("owner_deactivated", "coming_soon", "closed_pending_reopen")
+HIDDEN_STATUSES = ("owner_deactivated", "coming_soon", "import_review", "closed_pending_reopen")
 
 
 def _as_optional_user(role: str, *, sub: str | None = None) -> CurrentUser:

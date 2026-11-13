@@ -41,6 +41,7 @@ async def test_empty_state(client, db_session, as_user):
         "active": 0,
         "owner_deactivated": 0,
         "coming_soon": 0,
+        "import_review": 0,
         "closed_pending_reopen": 0,
     }
     assert body["restaurants"]["by_tier"] == {"paid": 0, "free": 0}

@@ -45,6 +45,7 @@ import {
 import AssignOwnerPanel from "@/components/admin/AssignOwnerPanel";
 import { applyAssignment, assignBlockedReason, assignSummary, canAssignOwner } from "@/lib/adminOwnerAssignment";
 import type { AssignOwnerResponse } from "@/types/adminOwnerAssignment";
+import SetupMissingChips from "@/components/admin/SetupMissingChips";
 import AdminPanelRow, { PANEL_IN_ROW } from "@/components/admin/AdminPanelRow";
 import CollapsiblePanel from "@/components/ui/CollapsiblePanel";
 import LocalDateTime from "@/components/ui/LocalDateTime";
@@ -83,6 +84,7 @@ const STATUS_OPTIONS: ReadonlyArray<{ value: ListingStatusFilter; label: string 
   { value: "active", label: "Active" },
   { value: "owner_deactivated", label: "Hidden — owner deactivated" },
   { value: "coming_soon", label: "Coming soon" },
+  { value: "import_review", label: "Import issues" },
   { value: "closed_pending_reopen", label: "Closed — pending reopen" },
   { value: "deleted", label: "Deleted listings" },
 ];
@@ -91,6 +93,7 @@ const STATUS_LABELS: Record<ListingStatusFilter, string> = {
   active: "Active",
   owner_deactivated: "Hidden — owner deactivated",
   coming_soon: "Coming soon",
+  import_review: "Import issues",
   closed_pending_reopen: "Closed — pending reopen",
   deleted: "Deleted listings",
 };
@@ -738,6 +741,7 @@ const STATUS_TAG_CLASS: Record<AdminListingLocation["status"], string> = {
   active: "bg-brand-success-bg text-brand-success",
   owner_deactivated: "bg-brand-closed-bg text-brand-closed",
   coming_soon: "bg-brand-accent-gold/30 text-brand-chip-ink",
+  import_review: "bg-amber-100 text-amber-900 ring-1 ring-inset ring-amber-500",
   closed_pending_reopen: "bg-brand-closed-bg text-brand-closed",
 };
 
@@ -817,6 +821,7 @@ function LocationRow({
             {location.is_paid ? "Paid" : "Free"}
           </span>
         </div>
+        <SetupMissingChips status={location.status} setupMissing={location.setup_missing} />
         <CreatedLine creator={location} className="mt-1.5 text-xs text-brand-ink-subtle" />
         {error && <p className="mt-1 text-xs text-brand-closed">{error}</p>}
       </div>

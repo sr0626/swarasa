@@ -161,7 +161,7 @@ async def test_duplicate_of_existing_active_listing(client, db_session, as_user,
     assert await count(db_session, RestaurantLocation) == 1
 
 
-@pytest.mark.parametrize("status", ["owner_deactivated", "coming_soon", "closed_pending_reopen"])
+@pytest.mark.parametrize("status", ["owner_deactivated", "coming_soon", "import_review", "closed_pending_reopen"])
 @pytest.mark.asyncio
 async def test_duplicate_of_existing_inactive_listing(client, db_session, as_user, tag, status):
     brand = await create_brand(db_session, name="Spice Hut 2", slug="spice-hut-2")
@@ -219,7 +219,7 @@ async def test_commit_writes_unclaimed_verified_audited_listings(client, db_sess
     assert all(b.owner_id is None and b.is_claimed is False and b.claimed_at is None for b in brands)
     locations = (await db_session.execute(select(RestaurantLocation))).scalars().all()
     # Imported listings are ALWAYS hidden until an admin activates them.
-    assert all(loc.is_verified and loc.status == "coming_soon" and not loc.is_paid for loc in locations)
+    assert all(loc.is_verified and loc.status == "import_review" and not loc.is_paid for loc in locations)
     phones = {loc.phone for loc in locations}
     assert phones == {"+12145550002", "+12145550003"}
     assert await count(db_session, LocationCuisine) == 2
@@ -232,7 +232,7 @@ async def test_commit_writes_unclaimed_verified_audited_listings(client, db_sess
         assert entry.actor_id == admin.cognito_sub and entry.actor_role == "admin"
         assert entry.new_val["provenance"] == "bulk_import"
     assert all(
-        a.new_val["status"] == "coming_soon" and a.new_val["missing"] == ["hours"]
+        a.new_val["status"] == "import_review" and a.new_val["missing"] == ["hours"]
         for a in by_table["restaurant_location"]
     )
 

@@ -76,7 +76,7 @@ export interface CommittedRow {
   brand_id: number | null;
   location_id: number | null;
   needs_geocoding: boolean;
-  /** Created rows: always "coming_soon" (hidden). Null for rows that were not created. */
+  /** Created rows: always "import_review" (hidden, "Import issues"). Null for rows that were not created. */
   listing_status: string | null;
   /** Created rows: what is still needed before activation (empty = ready to activate). */
   missing: string[];

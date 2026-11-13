@@ -31,6 +31,10 @@ test("parseListingStatusFilter accepts location statuses and the deleted pseudo-
   assert.equal(parseListingStatusFilter("closed_pending_reopen"), "closed_pending_reopen");
 });
 
+test("parseListingStatusFilter accepts import_review (the Import issues filter)", () => {
+  assert.equal(parseListingStatusFilter("import_review"), "import_review");
+});
+
 test("parseListingStatusFilter treats anything else as no filter", () => {
   assert.equal(parseListingStatusFilter(undefined), undefined);
   assert.equal(parseListingStatusFilter(""), undefined);
@@ -114,5 +118,6 @@ test("addressLine skips empty parts without stray commas", () => {
 
 test("every location status has a label, including Coming soon", () => {
   assert.equal(LOCATION_STATUS_LABELS.coming_soon, "Coming soon");
-  assert.equal(Object.keys(LOCATION_STATUS_LABELS).length, 4);
+  assert.equal(LOCATION_STATUS_LABELS.import_review, "Import issues");
+  assert.equal(Object.keys(LOCATION_STATUS_LABELS).length, 5);
 });
