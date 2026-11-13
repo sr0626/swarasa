@@ -18,6 +18,7 @@ import { getPublicLocationIndex } from "@/lib/api/sitemap";
 import { CITY_INDEX_PATH, cityPath } from "@/lib/city/paths";
 import { canonicalPathsForRow } from "@/lib/restaurant/sitemapPaths";
 import { SITE_URL } from "@/lib/site";
+import { BENEFITS_PATH } from "@/lib/ui/signupBenefits";
 import type { PublicLocationIndexItem } from "@/types/restaurant";
 
 const INDEX_PAGE_SIZE = 100;
@@ -44,6 +45,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: new Date(),
       changeFrequency: "daily",
       priority: 1,
+    },
+    {
+      url: `${SITE_URL}${BENEFITS_PATH}`,
+      lastModified: new Date(),
+      changeFrequency: "monthly",
+      priority: 0.5,
     },
   ];
 

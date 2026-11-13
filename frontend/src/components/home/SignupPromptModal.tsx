@@ -27,16 +27,19 @@
 // restored on close, Tab is trapped, no required animation (so nothing to gate
 // on prefers-reduced-motion), icons are aria-hidden.
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState, type ComponentType } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import BenefitIcon from "@/components/home/BenefitIcon";
+import { XIcon } from "@/components/ui/icons";
 import {
-  BellIcon,
-  HeartIcon,
-  LocationPinIcon,
-  MailIcon,
-  TagIcon,
-  XIcon,
-  type IconProps,
-} from "@/components/ui/icons";
+  SIGNIN_HREF,
+  SIGNIN_LABEL,
+  SIGNUP_BENEFITS,
+  SIGNUP_CTA_HREF,
+  SIGNUP_CTA_LABEL,
+  SIGNUP_FOOTNOTE,
+  SIGNUP_SUBTITLE,
+  SIGNUP_TITLE,
+} from "@/lib/ui/signupBenefits";
 import {
   SIGNUP_PROMPT_DELAY_MS,
   SIGNUP_PROMPT_STORAGE_KEY,
@@ -47,43 +50,7 @@ import {
   shouldShowSignupPrompt,
 } from "@/lib/ui/signupPrompt";
 
-interface Benefit {
-  title: string;
-  detail: string;
-  Icon: ComponentType<IconProps>;
-}
-
-// Copy approved by the user. "favorites" (US spelling) matches the account
-// menu's "My Favorites". The catering line says "several restaurants" rather
-// than a number: the cap is an admin-configurable setting (default 5) that is
-// only readable from the sign-in-only GET /catering/config.
-const BENEFITS: readonly Benefit[] = [
-  {
-    title: "Follow your favorite restaurants",
-    detail: "Get a bell alert the moment they post a new deal.",
-    Icon: BellIcon,
-  },
-  {
-    title: "See every deal in full",
-    detail: "Titles, days and dates. Visitors only see that a deal is available.",
-    Icon: TagIcon,
-  },
-  {
-    title: "Save favorites",
-    detail: "Keep the places you love one tap away.",
-    Icon: HeartIcon,
-  },
-  {
-    title: "Request catering quotes",
-    detail: "Send one request to several restaurants and compare their quotes.",
-    Icon: MailIcon,
-  },
-  {
-    title: "Search near you automatically",
-    detail: "Save your city and ZIP and we start there.",
-    Icon: LocationPinIcon,
-  },
-];
+// The benefit copy lives in lib/ui/signupBenefits.ts, shared with the /benefits page.
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -282,20 +249,20 @@ export default function SignupPromptModal({ signedIn }: { signedIn: boolean }) {
           id="signup-prompt-title"
           className="pr-10 font-display text-2xl font-bold text-brand-ink"
         >
-          Get more from Swarasa
+          {SIGNUP_TITLE}
         </h2>
         <p id="signup-prompt-desc" className="mt-1 text-sm text-brand-ink-muted">
-          Create a free account to unlock:
+          {SIGNUP_SUBTITLE}
         </p>
 
         <ul className="mt-5 space-y-4">
-          {BENEFITS.map(({ title, detail, Icon }) => (
-            <li key={title} className="flex items-start gap-3">
+          {SIGNUP_BENEFITS.map(({ id, title, detail, icon }) => (
+            <li key={id} className="flex items-start gap-3">
               <span
                 aria-hidden="true"
                 className="flex h-10 w-10 shrink-0 items-center justify-center rounded-brand-pill bg-brand-chip text-brand-chip-ink"
               >
-                <Icon className="h-5 w-5" />
+                <BenefitIcon name={icon} className="h-5 w-5" />
               </span>
               <span className="min-w-0">
                 <span className="block text-sm font-semibold text-brand-ink">{title}</span>
@@ -307,18 +274,18 @@ export default function SignupPromptModal({ signedIn }: { signedIn: boolean }) {
 
         <div className="mt-6 flex flex-col gap-2">
           <Link
-            href="/signup"
+            href={SIGNUP_CTA_HREF}
             onClick={() => dismiss(false)}
             className="flex min-h-[44px] items-center justify-center rounded-brand-control bg-brand-accent px-6 text-sm font-semibold text-white transition hover:bg-brand-accent-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent focus-visible:ring-offset-2"
           >
-            Create free account
+            {SIGNUP_CTA_LABEL}
           </Link>
           <Link
-            href="/login"
+            href={SIGNIN_HREF}
             onClick={() => dismiss(false)}
             className="flex min-h-[44px] items-center justify-center rounded-brand-control px-6 text-sm font-semibold text-brand-accent transition hover:text-brand-accent-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent"
           >
-            Sign in
+            {SIGNIN_LABEL}
           </Link>
           <button
             type="button"
@@ -330,7 +297,7 @@ export default function SignupPromptModal({ signedIn }: { signedIn: boolean }) {
         </div>
 
         <p className="mt-2 text-center text-xs text-brand-ink-subtle">
-          Free to join. No payment needed.
+          {SIGNUP_FOOTNOTE}
         </p>
       </div>
     </div>

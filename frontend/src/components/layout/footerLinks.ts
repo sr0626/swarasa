@@ -4,6 +4,7 @@
 export const FOOTER_LINKS = [
   { href: "/indian-restaurants", label: "Restaurants by City" },
   { href: "/about", label: "About Us" },
+  { href: "/benefits", label: "Why Join" },
   { href: "/contact", label: "Contact Us" },
   { href: "/terms", label: "Terms & Privacy" },
   { href: "/privacy", label: "Your Data" },

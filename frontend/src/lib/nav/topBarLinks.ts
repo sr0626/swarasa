@@ -28,6 +28,14 @@ export interface TopBarLink {
 /** Query param the search page reads for the "Deals today" toggle (lib/search/filters.ts DEALS_TODAY_PARAM). */
 const DEALS_TODAY_QUERY = "deals_today=true";
 
+/**
+ * Signed-out only: permanent route back to the sign-up benefits the homepage
+ * popup shows once (a signed-in account already has them; the footer link
+ * stays for everyone). Sits in the middle link set, so it shows inline from
+ * `lg` and in the mobile menu below it -- never crammed into the 375px bar.
+ */
+const WHY_JOIN: TopBarLink = { key: "benefits", label: "Why join", href: "/benefits" };
+
 const FIND_RESTAURANTS: TopBarLink = { key: "find", label: "Find restaurants", href: "/search" };
 const DEALS_TODAY: TopBarLink = {
   key: "deals",
@@ -63,6 +71,7 @@ export function topBarLinksFor(role: UserRole | null): TopBarLink[] {
       return [
         FIND_RESTAURANTS,
         DEALS_TODAY,
+        WHY_JOIN,
         {
           key: "add",
           label: "Add your restaurant",

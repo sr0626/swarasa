@@ -16,6 +16,12 @@ test("footer links include a crawlable link to the city index", () => {
   assert.equal(link.label, "Restaurants by City");
 });
 
+test("footer links include a Why Join link to /benefits, shown to everyone", () => {
+  const link = FOOTER_LINKS.find((l) => l.href === "/benefits");
+  assert.ok(link);
+  assert.equal(link.label, "Why Join");
+});
+
 test("footer hrefs and labels are unique", () => {
   assert.equal(new Set(FOOTER_LINKS.map((l) => l.href)).size, FOOTER_LINKS.length);
   assert.equal(new Set(FOOTER_LINKS.map((l) => l.label)).size, FOOTER_LINKS.length);

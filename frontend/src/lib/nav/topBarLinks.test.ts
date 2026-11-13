@@ -29,11 +29,19 @@ test("signed-out set: browse links plus the add-your-restaurant CTA routed via l
   const links = topBarLinksFor(null);
   assert.deepEqual(
     links.map((l) => l.label),
-    ["Find restaurants", "Deals today", "Add your restaurant"],
+    ["Find restaurants", "Deals today", "Why join", "Add your restaurant"],
   );
   assert.equal(links.find((l) => l.cta)?.href, "/login?next=/portal/brands/new");
   // No second "sign in" style link in the middle: Sign in lives on the right.
   assert.ok(!links.some((l) => /sign in/i.test(l.label)));
+});
+
+test("only signed-out visitors get the Why join link in the top bar", () => {
+  assert.equal(link(null, "benefits").href, "/benefits");
+  for (const role of ROLES) {
+    if (role === null) continue;
+    assert.ok(!topBarLinksFor(role).some((l) => l.href === "/benefits"), String(role));
+  }
 });
 
 test("signed-in role sets", () => {
