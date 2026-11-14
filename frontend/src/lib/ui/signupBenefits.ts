@@ -31,24 +31,30 @@ export const BENEFITS_PATH = "/benefits";
 // menu's "My Favorites". The catering line says "several restaurants" rather
 // than a number: the cap is an admin-configurable setting (default 5) that is
 // only readable from the sign-in-only GET /catering/config.
+// Every claim is checked against the real app: the bell is in-app only (no
+// email or push), "Deals today" is the public search toggle (`deals_today=true`)
+// and signed-out visitors only get the content-free "deal available" signal.
 export const SIGNUP_BENEFITS: readonly SignupBenefit[] = [
   {
-    id: "follow-alerts",
+    // "Follow" and "favorite" are ONE feature: the heart on a restaurant is the
+    // follow toggle, and the account page's "My Favorites" lists the follows.
+    id: "follow-favorites",
     title: "Follow your favorite restaurants",
-    detail: "Get a bell alert the moment they post a new deal.",
+    detail: "Tap the heart to keep them one tap away in My Favorites.",
+    icon: "heart",
+  },
+  {
+    id: "deal-alerts",
+    title: "Get notified about new deals",
+    detail: "A bell alert the moment a restaurant you follow posts a new deal.",
     icon: "bell",
   },
   {
-    id: "deals-in-full",
-    title: "See every deal in full",
-    detail: "Titles, days and dates. Visitors only see that a deal is available.",
+    id: "search-deals-today",
+    title: "Search today's deals",
+    detail:
+      "Use the Deals today filter to see who has a deal running right now, and open every deal in full: titles, days and dates. Visitors only see that a deal is available.",
     icon: "tag",
-  },
-  {
-    id: "save-favorites",
-    title: "Save favorites",
-    detail: "Keep the places you love one tap away.",
-    icon: "heart",
   },
   {
     id: "catering-quotes",

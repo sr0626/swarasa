@@ -2,7 +2,7 @@
 //   cd frontend && npm run test:unit
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isTopBarLinkActive, topBarLinksFor } from "./topBarLinks.ts";
+import { isTopBarLinkActive, topBarLinksFor, whyJoinLinkFor } from "./topBarLinks.ts";
 import type { TopBarLink } from "./topBarLinks.ts";
 
 const ROLES = ["owner", "manager", "admin", "registered_user", null] as const;
@@ -29,18 +29,28 @@ test("signed-out set: browse links plus the add-your-restaurant CTA routed via l
   const links = topBarLinksFor(null);
   assert.deepEqual(
     links.map((l) => l.label),
-    ["Find restaurants", "Restaurants by city", "Deals today", "Why join", "Add your restaurant"],
+    ["Find restaurants", "Restaurants by city", "Deals today", "Add your restaurant"],
   );
   assert.equal(links.find((l) => l.cta)?.href, "/login?next=/portal/brands/new");
   // No second "sign in" style link in the middle: Sign in lives on the right.
   assert.ok(!links.some((l) => /sign in/i.test(l.label)));
 });
 
-test("only signed-out visitors get the Why join link in the top bar", () => {
-  assert.equal(link(null, "benefits").href, "/benefits");
+test("Why join is not in any middle link set; it sits beside Sign in (whyJoinLinkFor)", () => {
+  for (const role of ROLES) {
+    assert.ok(!topBarLinksFor(role).some((l) => l.href === "/benefits"), String(role));
+  }
+});
+
+test("only signed-out visitors get the Why join link beside Sign in", () => {
+  const whyJoin = whyJoinLinkFor(null);
+  assert.ok(whyJoin);
+  assert.equal(whyJoin.href, "/benefits");
+  assert.equal(whyJoin.label, "Why join");
+  assert.ok(!whyJoin.cta, "a quiet text link, not the CTA pill");
   for (const role of ROLES) {
     if (role === null) continue;
-    assert.ok(!topBarLinksFor(role).some((l) => l.href === "/benefits"), String(role));
+    assert.equal(whyJoinLinkFor(role), null, String(role));
   }
 });
 

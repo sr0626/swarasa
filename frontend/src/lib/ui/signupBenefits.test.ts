@@ -31,6 +31,20 @@ test("every benefit has non-empty copy and a known icon key", () => {
   }
 });
 
+test("benefits cover follow, deal alerts, today's deals, catering and near-you, with no duplicates", () => {
+  assert.deepEqual(
+    SIGNUP_BENEFITS.map((b) => b.id),
+    ["follow-favorites", "deal-alerts", "search-deals-today", "catering-quotes", "search-near-you"],
+  );
+});
+
+test("copy makes no promise the app can't keep (bell alerts are in-app only)", () => {
+  const text = SIGNUP_BENEFITS.map((b) => `${b.title} ${b.detail}`).join(" ");
+  assert.ok(!/e-?mail alert|push|sms|text message/i.test(text));
+  assert.ok(/bell alert/i.test(text));
+  assert.ok(/Deals today/.test(text));
+});
+
 test("call-to-action and page hrefs are internal paths", () => {
   assert.equal(SIGNUP_CTA_HREF, "/signup");
   assert.equal(SIGNIN_HREF, "/login");

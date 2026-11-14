@@ -26,7 +26,7 @@ export const metadata: Metadata = {
   // `absolute` skips the "%s | Swarasa" template, which would repeat the brand.
   title: { absolute: "Why join Swarasa: free account benefits" },
   description:
-    "A free Swarasa account lets you follow restaurants for new-deal alerts, see every deal in full, save favorites, request catering quotes and search near you automatically.",
+    "A free Swarasa account lets you follow your favorite restaurants, get notified about new deals, search today's deals in full, request catering quotes and search near you automatically.",
   alternates: { canonical: BENEFITS_PATH },
   robots: { index: true, follow: true },
 };
