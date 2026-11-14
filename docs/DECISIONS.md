@@ -3064,6 +3064,72 @@ CAPTCHA integration (token on submit, retry on challenge).
 all-AWS rule); free-only honeypot and timing checks as the sole control (user
 chose WAF CAPTCHA)*
 
+**Bulk import creates `import_review` ("Import issues"), superseding `coming_soon` for imports**
+2026-11-13 | Built in PR #281, no migration (`status` is a plain `String(24)` with no
+CHECK or enum). Bulk imports (admin `/admin/import`, the CSV/JSON management
+commands, the helper script) now create `import_review`: hidden everywhere like
+`coming_soon` (every public path filters `status == 'active'`; anonymous read is
+404; sitemap and city pages exclude it), same readiness gate for activation
+(422 `listing_incomplete` naming everything missing), but flagged so an admin can
+find imports needing attention. Only an admin can set it (owners get 422
+`invalid_status` and can move a listing out of it); editing never flips it;
+activation stays deliberate. `GET /admin/listings` returns `setup_missing` per
+`coming_soon`/`import_review` location from one bulk hours query, shown as
+"Missing name/address/phone/hours" chips or "Ready to activate"; the summary strip
+counts "Import issues" separately. `mark_imported_for_review` (dry run by default,
+`"apply": true`, optional `location_ids`) moves existing UNCLAIMED `coming_soon`
+locations that have a `bulk_import` creation audit row; a claimed listing stays
+`coming_soon` because its owner finishes it. `deactivate_incomplete_listings` still
+hides live listings as `coming_soon` and now takes `location_ids` (#280); a
+dry run on 2026-11-13 showed 26 incomplete live listings, 21 of them real restaurants
+missing only a phone, so only the 5 test rows were hidden.
+*Rejected: hiding all 26 (would drop the public site from 30 to 4 listings);
+folding imports into `coming_soon` (no way to tell them apart)*
+
+**Catering quotes use a manual paid flag as "subscribed" until payments exist**
+2026-11-13 | Built in PR #282 (migration `0024_catering_requests`). User decision:
+real billing stays parked, so "subscribed" = the LOCATION has `is_paid` AND
+(`paid_until` NULL or in the future), defined once in
+`subscription_service.is_location_subscribed` (plus its SQL twin) so the later Stripe
+work changes one place. Admins set it with `PUT /admin/locations/{id}/subscription`
+(audited, labelled manual, no payment taken); it does not gate menus or deals.
+Registered users only may request quotes (owners, managers, admins get 403); a request
+lists items with sizes (full tray, medium tray, flat tray, other), quantity, headcount,
+date and delivery/pickup, and goes to up to `catering_max_restaurants` restaurants
+(`platform_config`, seed 5, clamped 1..20, changed with `set_platform_int`). A
+restaurant is selectable only if active, brand not deleted, opted in
+(`accepts_catering`, default false) and subscribed; any ineligible choice rejects the
+whole request with one generic 422. 5 requests per user per 24h (429); requests expire
+after 14 days, lazily on read. Restaurants answer from an in-app inbox (no email; SES
+deferred); the restaurant sees the requester's first name and event details, and email
+and phone only after THAT restaurant submits a quote; a quote creates a bell
+notification. New tables are in the data export and approved-deletion hard delete.
+*Rejected: real billing first (parked); revealing contact details up front (privacy);
+itemising why a restaurant is ineligible (would leak its subscription state)*
+
+**Public sign-up promotion: one-time popup plus a permanent /benefits page**
+2026-11-13 | Built in PRs #283 and #285, frontend-only. A client-only popup on the home
+page for signed-out visitors (10 seconds or 60% scroll, postponed while a field has
+focus, never for `navigator.webdriver`, dismissal remembered 14 days in localStorage)
+lists five real benefits: follow with a bell alert on new deals, full deal details,
+favorites, catering quotes, saved city/ZIP search. The same copy (one shared module)
+powers a server-rendered `/benefits` page (indexable, in the sitemap) linked from the
+footer ("Why Join") and the signed-out top bar. There is no "like" feature, so none is
+promised. The catering line says "several restaurants" because the cap is an admin
+setting visitors cannot read. "Restaurants by city" moved from the footer to the top
+bar for every role.
+*Rejected: a server-rendered or immediate popup (SEO and Lighthouse risk); promising
+features that do not exist*
+
+**Admin Listings: one card per single-location restaurant**
+2026-11-13 | Built in PR #284, frontend-only, user request. The layout follows the
+brand's TOTAL location count (not the active-only count or the filter matches): 1
+location = one merged card with restaurant-level and location-level actions grouped
+separately; 2+ = a "Restaurant" parent with a "Locations (N)" heading and indented
+child rows (address shown once, filter match shown as an accent plus chip); 0 = "No
+locations yet". Buttons are scoped: "Delete restaurant", "Edit location".
+*Rejected: always nesting a child card (hard to tell restaurant from location)*
+
 **Online ordering = redirect link model in Phase 4 (not on-platform checkout)**
 May 2026 | Platform links to restaurant's own ordering system (DoorDash, their own URL).
 Avoids food delivery logistics, payment processing liability, and fulfilment complexity.
