@@ -35,15 +35,16 @@ to revisit later, not a final sign-off.
 - Migrations on main through `0024_catering_requests`, all applied to dev.
 - Terraform applied by the human 2026-10-28: admin Cognito IAM statement
   (#249) and the post-confirmation Lambda update (#254).
-- Frontend (Amplify) is a separate deploy from the backend workflow. The
-  #262 build failed once on a transient Google Fonts fetch in `next/font`
-  and succeeded on retry; if it recurs, self-host the fonts.
+- Fonts are now self-hosted (#290), so the Amplify build no longer depends on
+  Google Fonts; the two earlier failed builds were that flake.
 - Data clean-up done 2026-11-13: the 5 imported test rows were hidden; 4 are
-  now `import_review` ("Import issues"), id 70 stays `coming_soon` (claimed).
-  21 real Irving restaurants are live without a phone number (readiness
-  rule would hide them; left live deliberately, phones still to add).
-- Open design items: readiness-gate bypass via `owner_deactivated`, AWS WAF
-  CAPTCHA on public forms (decided, not built), Amplify GitHub-app migration.
+  `import_review` ("Import issues"), id 70 stays `coming_soon` (claimed).
+  21 real Irving restaurants are live without a phone number (the readiness
+  rule only blocks RE-activation now, #292); phones still to add.
+- Catering testing needs a restaurant that is subscribed (admin "Manage
+  subscription" on Listings) AND opted in (location editor "Catering").
+- Open items: free in-app form checks then AWS WAF CAPTCHA (decided, not
+  built), Amplify GitHub-app migration, phone numbers for the 21 listings.
 - Deferred: admin MFA (lowest priority); payments (catering uses a manual
   paid flag in the meantime).
 
@@ -61,6 +62,14 @@ to revisit later, not a final sign-off.
   the `set_platform_flag` management command when paid tiers exist.
 - Repo now has "Automatically delete head branches" enabled; the 200+
   merged branches were cleaned up by the user on 2026-09-23.
+
+## Landed 2026-11-15, wave 20 (#288-#292)
+- **Benefits link** beside Sign In, new deal-alert and today's-deals benefits
+  (#288), renamed "Sign up benefits" (#289).
+- **Self-hosted fonts** (#290).
+- **Catering picker messages** for found-but-not-accepting vs not-found (#291).
+- **Readiness gate on every activation** (#292), closing the owner_deactivated
+  bypass.
 
 ## Landed 2026-11-13, wave 19 (#280-#285)
 - **Cleanup command** `location_ids` option (#280) and **Import issues**

@@ -703,4 +703,12 @@ aws lambda invoke --function-name swarasa-api-dev --payload '{"_management_comma
 git push -u origin feature/signup-benefits-popup   # claude
 git push -u origin feature/admin-listings-single-card   # claude
 git push -u origin feature/signup-benefits-page   # claude
+git push -u origin docs/wave-281-285   # claude
+git push -u origin docs/decisions-wave-19   # claude
+aws amplify list-jobs --app-id d104yxa4ivcmdu --branch-name main --max-results 4 --profile swarasa-dev --region us-east-1 ...   # user  (build 219 for #285 had failed; later build succeeded)
+git push -u origin feature/benefits-link-and-deal-copy   # claude
+git push -u origin fix/sign-up-benefits-label   # claude
+git push -u origin fix/self-host-fonts   # claude
+git push -u origin feature/catering-search-messages   # claude
+git push -u origin fix/readiness-gate-all-activations   # claude
 ```
