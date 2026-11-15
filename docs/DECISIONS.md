@@ -3130,6 +3130,62 @@ child rows (address shown once, filter match shown as an accent plus chip); 0 = 
 locations yet". Buttons are scoped: "Delete restaurant", "Edit location".
 *Rejected: always nesting a child card (hard to tell restaurant from location)*
 
+**Readiness gate applies to every transition into `active` (amends "New manual listings start in setup")**
+2026-11-15 | Fixed in PR #292, no migration. User rule: "if any critical info is
+missing dont activate it". `listing_readiness.ensure_ready_for_activation` (name, full
+address, valid US phone, hours for all 7 days; 422 `listing_incomplete` naming ALL
+missing items; writes nothing on refusal) now runs on EVERY API transition into
+`active` whatever the previous status, so `coming_soon` -> `owner_deactivated` ->
+`active` can no longer skip it. That includes the admin reopen approval (a listing
+closed while still in setup must not go public through an approval: on a 422 the
+request stays `pending_review` and the admin completes the listing and re-approves,
+or rejects with notes) and brand restore then re-enable. Already-live listings are
+never re-checked, so only RE-activation is gated (the 21 real restaurants live
+without a phone stay live). The operator-only `dev_set_location_status` script is
+exempt. The owner status menu keeps Active selectable and shows the 422 "Still
+needed: ..." text in the chip's error popover.
+*Rejected: re-checking already-live listings (would hide the 21 real restaurants);
+exempting reopen approvals (lets an unfinished listing go public)*
+
+**Catering picker explains empty results without revealing why a restaurant is ineligible**
+2026-11-15 | Built in PR #291, no migration. When the eligible search is empty and a
+name or city was typed, `GET /catering/restaurants` also returns `unavailable_matches`
+(max 5, `{name, city}` only) for PUBLIC listings (status `active`, brand not deleted)
+that match but are not eligible, so the UI can say "<Name> (<City>) isn't accepting
+catering requests." Opted-out, unsubscribed and lapsed restaurants are
+indistinguishable; hidden, coming-soon, import-issues, closed and deleted-brand
+listings never appear and look like "not found" ("We couldn't find a restaurant
+matching that. Check the name and city and try again."). No search text and no
+results says nobody is accepting requests yet. Matching reuses the eligible search's
+name/city rules and LIKE escaping; one extra bounded query on the empty path only.
+*Rejected: saying why a restaurant is ineligible (would leak subscription state);
+listing non-public restaurants (would confirm hidden listings exist)*
+
+**Fonts are self-hosted via `next/font/local`**
+2026-11-15 | Done in PR #290, frontend-only. Amplify builds failed twice (jobs 196 and
+219) when `next/font/google` fetched fonts from Google at build time and got an
+unusable response. Space Grotesk and Manrope are now committed as latin variable
+WOFF2 under `frontend/src/app/fonts/` (47 KB, SIL OFL 1.1 license text beside each,
+files taken from `@fontsource-variable` via `npm pack`, not a dependency). The
+`--font-display` / `--font-body` variables, `display: swap`, fallbacks and Tailwind
+tokens are unchanged and `adjustFontFallback: "Arial"` is on.
+*Rejected: leaving the Google fetch and retrying failed builds (a flaky external
+dependency in the build path)*
+
+**Sign-up benefits link and copy**
+2026-11-15 | Built in PRs #288 and #289, frontend-only. For signed-out visitors a quiet
+text link sits directly left of "Sign In" in the top bar ("Sign up benefits", name
+chosen by the user) and in the footer ("Sign Up Benefits"), pointing at `/benefits`.
+The shared copy (one module for the popup and the page) now lists five benefits,
+each verified against the app: follow favorites (the heart is the follow toggle and
+"My Favorites" lists follows, so they are one feature), get notified about new deals
+(in-app bell only, no email or push), search today's deals (the Deals today filter;
+visitors only see that a deal exists, signed-in users see every deal in full),
+request catering quotes from several restaurants, and search near you from the saved
+city and ZIP.
+*Rejected: promising email or push alerts (not built); listing "like" (no such
+feature)*
+
 **Online ordering = redirect link model in Phase 4 (not on-platform checkout)**
 May 2026 | Platform links to restaurant's own ordering system (DoorDash, their own URL).
 Avoids food delivery logistics, payment processing liability, and fulfilment complexity.
