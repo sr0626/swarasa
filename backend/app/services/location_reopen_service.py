@@ -24,7 +24,7 @@ from app.schemas.location_reopen import (
     ReopenRequestOut,
     ReopenRequestQueueItem,
 )
-from app.services import audit_service
+from app.services import audit_service, listing_readiness
 
 _LOAD_OPTIONS = (
     selectinload(LocationReopenRequest.location).selectinload(RestaurantLocation.brand),
@@ -169,6 +169,14 @@ async def approve_reopen_request(
     location = await db.get(RestaurantLocation, request.location_id)
     if location is None:
         raise AppError(404, "Location not found", "not_found")
+
+    # Same readiness gate as `POST /locations/{id}/status` (docs/DECISIONS.md
+    # "New manual listings start in setup"): a listing closed while still in
+    # setup (coming_soon -> closed_pending_reopen) must not go public through
+    # an approval. On refusal (422 `listing_incomplete`) nothing is written and
+    # the request stays `pending_review`: the admin can complete the missing
+    # info in the listing editor and approve again, or reject with notes.
+    await listing_readiness.ensure_ready_for_activation(db, location)
 
     old_val = {"status": location.status}
     location.status = RestaurantLocation.STATUS_ACTIVE

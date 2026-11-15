@@ -52,9 +52,9 @@ async def _setup_owned_location(db_session, **location_overrides):
 )
 async def test_owner_self_service_transition_succeeds(db_session, client, as_user, from_status, to_status):
     owner, _brand, location = await _setup_owned_location(db_session, status=from_status)
-    if from_status == "coming_soon" and to_status == "active":
-        # First go-live is gated on the listing's required info
-        # (test_listing_setup_flow.py covers the gate itself).
+    if to_status == "active":
+        # Every transition into `active` is gated on the listing's required
+        # info (test_listing_setup_flow.py covers the gate itself).
         await add_full_week_hours(db_session, location.id)
         await db_session.commit()
     as_user("owner", sub=owner.cognito_sub)

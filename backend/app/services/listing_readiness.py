@@ -16,16 +16,30 @@ required info exists:
 
 Photos / about text / menu are deliberately NOT required.
 
-Pure functions over already-loaded data so `LocationOut.setup_missing` costs
-no extra query and the unit tests need no DB.
+The gate applies to EVERY transition into `active` made through the API
+(`ensure_ready_for_activation` below), whatever the previous status: a
+`coming_soon` listing cannot be published by detouring through
+`owner_deactivated`, and an admin-approved reopen of a `closed_pending_reopen`
+listing is gated the same way. Listings that are ALREADY live are never
+re-checked (only a re-activation is) — see docs/DECISIONS.md "New manual
+listings start in setup".
+
+The rule functions are pure over already-loaded data so
+`LocationOut.setup_missing` costs no extra query and the unit tests need no DB;
+only `ensure_ready_for_activation` touches the session.
 """
 from __future__ import annotations
 
 from collections.abc import Iterable
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.errors import AppError
 from app.core.phone import normalize_us_phone
+from app.models.restaurant_brand import RestaurantBrand
 from app.models.restaurant_hours import RestaurantHours
 from app.models.restaurant_location import RestaurantLocation
+from app.services import hours_service
 
 MISSING_NAME = "name"
 MISSING_ADDRESS = "address"
@@ -76,3 +90,24 @@ def incomplete_detail(missing: list[str]) -> str:
     """Generic, human-readable 422 message (no internals)."""
     items = ", ".join(MISSING_LABELS[key] for key in missing if key in MISSING_LABELS)
     return f"This listing isn't ready to go live yet. Still needed: {items}."
+
+
+async def ensure_ready_for_activation(db: AsyncSession, location: RestaurantLocation) -> None:
+    """Raise 422 `listing_incomplete` (with `extra={"missing": [...]}` naming
+    ALL gaps) unless `location` has the required info to be made `active`.
+
+    Call this before writing `status = 'active'` on ANY path where the previous
+    status is not `active` (user-facing status change, admin reopen approval).
+    Does not write anything, so a refusal leaves the location and the audit
+    log untouched.
+    """
+    brand = await db.get(RestaurantBrand, location.brand_id)
+    hours_rows = await hours_service.get_hours_for_location(db, location.id)
+    missing = missing_for_activation(location, brand.name if brand else None, hours_rows)
+    if missing:
+        raise AppError(
+            422,
+            incomplete_detail(missing),
+            "listing_incomplete",
+            extra={"missing": missing},
+        )

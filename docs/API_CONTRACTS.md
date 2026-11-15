@@ -1334,9 +1334,10 @@ below). Re-posting the location's current status is always a harmless
 no-op (`200`, not `409`), checked before the asymmetric-transition rule
 so retrying an already-applied change never fails.
 
-**Setup gate (added 2026-09-24, `docs/DECISIONS.md` "New manual listings
-start in setup"):** moving a location from `coming_soon` **or `import_review`**
-to `active` — going live for the first time — is refused with `422`
+**Readiness gate (added 2026-09-24, widened 2026-11-15 to every activation;
+`docs/DECISIONS.md` "New manual listings start in setup"):** moving a location
+to `active` from ANY other status — `coming_soon`, `import_review` **or
+`owner_deactivated`** — is refused with `422`
 ```json
 {
   "detail": "This listing isn't ready to go live yet. Still needed: opening hours for all 7 days.",
@@ -1347,10 +1348,14 @@ to `active` — going live for the first time — is refused with `422`
 until the required info exists (`missing` uses the same keys/rules as
 `setup_missing` on `GET /locations/{id}`: `name`, `address`, `phone`,
 `hours`). Nothing is changed and no audit row is written on a refusal. Applies
-to owner and admin alike. Only that transition is gated: un-hiding an
-`owner_deactivated` listing, moving to any hidden status, and approving a
-reopen request are unchanged, so seeded / imported listings (which may have
-`is_closed = null` days) keep working.
+to owner and admin alike (a manager has no status route at all). `missing`
+always lists ALL gaps. Only a transition INTO `active` is gated: moving to any
+hidden status, editing, and deactivating are unchanged, and a listing that is
+already `active` is never re-checked (re-posting `active` is the idempotent
+no-op), so seeded listings that are live without a phone / with unknown hours
+(`is_closed = null` days) stay live. If such a listing is later hidden,
+re-activating it needs the missing info first. Approving a reopen request is
+gated the same way (see `POST /location-reopen-requests/{id}/approve`).
 
 Audit: `audit_log` row (`action="update"`, `old_val`/`new_val` each
 `{"status": "..."}` — so the activation is `coming_soon` / `import_review` -> `active`).
@@ -1894,6 +1899,11 @@ Real side effect: flips the location's `status` back to `active`
 (audit-logged, `table_name="restaurant_location"`), same "commit the
 effect, then the review record" ordering as `POST /claim/{id}/approve`.
 `409 request_not_pending` if the request has already been reviewed.
+**Readiness gate (2026-11-15):** the approval is a transition into `active`, so
+the listing must have its required info (same rule and `422
+listing_incomplete` + `missing` body as `POST /locations/{id}/status`). On
+refusal nothing is written and the request stays `pending_review`: the admin
+completes the listing and approves again, or rejects with notes.
 Response: `200`, same shape as the submission response, `status:
 "approved"`.
 

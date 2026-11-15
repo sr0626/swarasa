@@ -26,7 +26,13 @@ from sqlalchemy import select
 
 from app.models.audit_log import AuditLog
 from app.models.restaurant_location import RestaurantLocation
-from factories import create_brand, create_location, create_location_manager, create_owner
+from factories import (
+    add_full_week_hours,
+    create_brand,
+    create_location,
+    create_location_manager,
+    create_owner,
+)
 
 
 async def _setup_closed_location(db_session, **overrides):
@@ -105,6 +111,8 @@ async def test_non_owning_owner_cannot_submit_reopen_request(db_session, client,
 @pytest.mark.asyncio
 async def test_admin_approve_reopens_location_and_audits(db_session, client, as_user):
     owner, _brand, location = await _setup_closed_location(db_session)
+    await add_full_week_hours(db_session, location.id)  # approval is readiness-gated
+    await db_session.commit()
     as_user("owner", sub=owner.cognito_sub)
     submit = await client.post(f"/locations/{location.id}/reopen-requests", json={})
     request_id = submit.json()["request_id"]
@@ -133,6 +141,73 @@ async def test_admin_approve_reopens_location_and_audits(db_session, client, as_
     assert audit.old_val == {"status": "closed_pending_reopen"}
     assert audit.new_val == {"status": "active"}
     assert audit.actor_role == "admin"
+
+
+@pytest.mark.asyncio
+async def test_admin_approve_is_readiness_gated_and_leaves_request_pending(
+    db_session, client, as_user
+):
+    """Decision: reopen approval is a transition into `active`, so it goes
+    through the same readiness gate as POST /locations/{id}/status (a listing
+    closed while still in setup must not go public through an approval). A
+    refusal writes nothing and the request stays `pending_review`; once the
+    info exists the same approval succeeds."""
+    owner, _brand, location = await _setup_closed_location(db_session, phone=None)
+    as_user("owner", sub=owner.cognito_sub)
+    submit = await client.post(f"/locations/{location.id}/reopen-requests", json={})
+    request_id = submit.json()["request_id"]
+
+    as_user("admin")
+    refused = await client.post(f"/location-reopen-requests/{request_id}/approve", json={})
+    assert refused.status_code == 422, refused.text
+    body = refused.json()
+    assert body["code"] == "listing_incomplete"
+    assert body["missing"] == ["phone", "hours"]
+
+    row = (
+        await db_session.execute(
+            select(RestaurantLocation)
+            .where(RestaurantLocation.id == location.id)
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one()
+    assert row.status == "closed_pending_reopen"
+    audits = (
+        await db_session.execute(
+            select(AuditLog).where(
+                AuditLog.table_name == "restaurant_location", AuditLog.record_id == location.id
+            )
+        )
+    ).scalars().all()
+    assert audits == []
+    still_pending = await client.get(f"/location-reopen-requests/{request_id}")
+    assert still_pending.json()["status"] == "pending_review"
+
+    # Admin completes the listing, approves again.
+    row.phone = "+12145550142"
+    await add_full_week_hours(db_session, location.id)
+    await db_session.commit()
+    ok = await client.post(f"/location-reopen-requests/{request_id}/approve", json={})
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["status"] == "approved"
+    await db_session.refresh(row)
+    assert row.status == "active"
+
+
+@pytest.mark.asyncio
+async def test_admin_reject_still_works_for_an_incomplete_listing(db_session, client, as_user):
+    owner, _brand, location = await _setup_closed_location(db_session, phone=None)
+    as_user("owner", sub=owner.cognito_sub)
+    request_id = (
+        await client.post(f"/locations/{location.id}/reopen-requests", json={})
+    ).json()["request_id"]
+
+    as_user("admin")
+    response = await client.post(
+        f"/location-reopen-requests/{request_id}/reject", json={"reviewer_notes": "add a phone first"}
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "rejected"
 
 
 @pytest.mark.asyncio

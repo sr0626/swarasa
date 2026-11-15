@@ -8,6 +8,13 @@
 //   - only owner/admin can change status at all (a manager gets a plain label);
 //   - active / owner_deactivated / coming_soon are freely switchable while the
 //     location is not closed_pending_reopen;
+//   - EVERY switch to "Active" is readiness-gated server-side (422
+//     `listing_incomplete`), including un-hiding an `owner_deactivated`
+//     listing. For a listing in setup the menu pre-blocks "Active" with the
+//     checklist (`activationBlockedReason`); for a hidden one `setup_missing`
+//     is empty, so the choice stays enabled and the server's refusal text
+//     ("Still needed: a valid US phone number, ...") is shown in the chip's
+//     error popover (LocationStatusMenu `error`) rather than failing silently;
 //   - "Mark permanently closed" is a one-way, confirmed trip into
 //     closed_pending_reopen; from there no self-service change is possible;
 //   - reopen requests are owner-only (the server action rejects anyone else,
