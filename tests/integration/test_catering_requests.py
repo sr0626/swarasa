@@ -153,6 +153,165 @@ async def test_eligible_list_filters_by_city_and_name_and_paginates(client, db_s
     assert page.json()["total"] == 3
 
 
+# --- "found but not accepting" vs "not found" (unavailable_matches) ---------
+async def _named_location(db_session, name, **overrides):
+    """A catering location whose brand is called `name` (eligible unless overridden)."""
+    from app.models.restaurant_brand import RestaurantBrand
+
+    loc = await create_catering_location(db_session, **overrides)
+    brand = await db_session.get(RestaurantBrand, loc.brand_id)
+    brand.name = name
+    return loc
+
+
+@pytest.mark.asyncio
+async def test_unavailable_matches_for_opted_out_unsubscribed_and_lapsed(client, db_session, as_user):
+    past = datetime.now(timezone.utc) - timedelta(days=1)
+    await _named_location(db_session, "Quokka Opted Out", accepts_catering=False, city="Irving")
+    await _named_location(db_session, "Quokka Free Tier", is_paid=False, city="Irving")
+    await _named_location(db_session, "Quokka Lapsed", paid_until=past, city="Irving")
+    await db_session.commit()
+    as_user("registered_user")
+
+    body = (await client.get("/catering/restaurants", params={"q": "quokka"})).json()
+    assert body["results"] == []
+    assert body["total"] == 0
+    # All three listed, ordered by name, with NO hint as to why.
+    assert body["unavailable_matches"] == [
+        {"name": "Quokka Free Tier", "city": "Irving"},
+        {"name": "Quokka Lapsed", "city": "Irving"},
+        {"name": "Quokka Opted Out", "city": "Irving"},
+    ]
+    for entry in body["unavailable_matches"]:
+        assert set(entry) == {"name", "city"}
+
+
+@pytest.mark.asyncio
+async def test_unavailable_matches_never_lists_non_public_listings(client, db_session, as_user):
+    for status in ("owner_deactivated", "coming_soon", "import_review", "closed_pending_reopen"):
+        await _named_location(db_session, f"Wombat {status}", status=status, accepts_catering=False)
+    deleted_owner = await create_owner(db_session)
+    deleted_brand = await create_brand(
+        db_session,
+        owner_id=deleted_owner.id,
+        name="Wombat Deleted Brand",
+        deleted_at=datetime.now(timezone.utc),
+    )
+    await create_location(db_session, brand_id=deleted_brand.id, accepts_catering=False)
+    await db_session.commit()
+    as_user("registered_user")
+
+    body = (await client.get("/catering/restaurants", params={"q": "wombat"})).json()
+    # Indistinguishable from "not found".
+    assert body["results"] == []
+    assert body["unavailable_matches"] == []
+
+
+@pytest.mark.asyncio
+async def test_unavailable_matches_empty_when_nothing_matches_or_no_search(client, db_session, as_user):
+    await _named_location(db_session, "Real Place", accepts_catering=False)
+    await db_session.commit()
+    as_user("registered_user")
+
+    nothing = (await client.get("/catering/restaurants", params={"q": "zzzznomatch"})).json()
+    assert nothing["results"] == [] and nothing["unavailable_matches"] == []
+
+    # No q / city at all: never enumerate non-accepting restaurants.
+    unfiltered = (await client.get("/catering/restaurants")).json()
+    assert unfiltered["results"] == [] and unfiltered["unavailable_matches"] == []
+    blank = (await client.get("/catering/restaurants", params={"q": "  ", "city": ""})).json()
+    assert blank["unavailable_matches"] == []
+
+
+@pytest.mark.asyncio
+async def test_unavailable_matches_empty_when_an_eligible_match_exists(client, db_session, as_user):
+    eligible = await _named_location(db_session, "Dingo Kitchen North")
+    await _named_location(db_session, "Dingo Kitchen South", accepts_catering=False)
+    await db_session.commit()
+    as_user("registered_user")
+
+    body = (await client.get("/catering/restaurants", params={"q": "dingo"})).json()
+    assert [r["location_id"] for r in body["results"]] == [eligible.id]
+    assert body["unavailable_matches"] == []
+
+
+@pytest.mark.asyncio
+async def test_unavailable_matches_city_only_search(client, db_session, as_user):
+    await _named_location(db_session, "Echidna Eats", accepts_catering=False, city="Frisco")
+    await _named_location(db_session, "Echidna Elsewhere", accepts_catering=False, city="Plano")
+    await db_session.commit()
+    as_user("registered_user")
+
+    body = (await client.get("/catering/restaurants", params={"city": "FRISCO"})).json()
+    assert body["results"] == []
+    assert body["unavailable_matches"] == [{"name": "Echidna Eats", "city": "Frisco"}]
+
+
+@pytest.mark.asyncio
+async def test_unavailable_matches_combined_name_and_city(client, db_session, as_user):
+    await _named_location(db_session, "Numbat Grill", accepts_catering=False, city="Frisco")
+    await _named_location(db_session, "Numbat Grill", accepts_catering=False, city="Plano")
+    await db_session.commit()
+    as_user("registered_user")
+
+    body = (
+        await client.get("/catering/restaurants", params={"q": "numbat", "city": "plano"})
+    ).json()
+    assert body["unavailable_matches"] == [{"name": "Numbat Grill", "city": "Plano"}]
+
+
+@pytest.mark.asyncio
+async def test_unavailable_matches_escapes_like_wildcards(client, db_session, as_user):
+    await _named_location(db_session, "Plain Name", accepts_catering=False)
+    await _named_location(db_session, "100% Real_Deal", accepts_catering=False)
+    await db_session.commit()
+    as_user("registered_user")
+
+    for wildcard in ("%", "_"):
+        body = (await client.get("/catering/restaurants", params={"q": wildcard})).json()
+        names = [m["name"] for m in body["unavailable_matches"]]
+        assert names == ["100% Real_Deal"], (wildcard, names)  # literal match only
+
+    body = (await client.get("/catering/restaurants", params={"q": "z%"})).json()
+    assert body["unavailable_matches"] == []
+
+
+@pytest.mark.asyncio
+async def test_unavailable_matches_capped_at_five(client, db_session, as_user):
+    for i in range(7):
+        await _named_location(db_session, f"Bandicoot {i}", accepts_catering=False)
+    await db_session.commit()
+    as_user("registered_user")
+
+    body = (await client.get("/catering/restaurants", params={"q": "bandicoot"})).json()
+    assert [m["name"] for m in body["unavailable_matches"]] == [f"Bandicoot {i}" for i in range(5)]
+
+
+@pytest.mark.asyncio
+async def test_unavailable_matches_uses_location_name_when_set(client, db_session, as_user):
+    await _named_location(
+        db_session, "Chain Brand", accepts_catering=False, location_name="Chain Brand Plano"
+    )
+    await db_session.commit()
+    as_user("registered_user")
+
+    body = (await client.get("/catering/restaurants", params={"q": "chain brand plano"})).json()
+    assert [m["name"] for m in body["unavailable_matches"]] == ["Chain Brand Plano"]
+
+
+@pytest.mark.asyncio
+async def test_unavailable_matches_still_requires_registered_user(client, db_session, as_user, as_anonymous):
+    await _named_location(db_session, "Tapir Table", accepts_catering=False)
+    await db_session.commit()
+    params = {"q": "tapir"}
+    assert (await client.get("/catering/restaurants", params=params)).status_code == 401
+    for role in ("owner", "manager", "admin"):
+        as_user(role)
+        resp = await client.get("/catering/restaurants", params=params)
+        assert resp.status_code == 403, role
+        assert "Tapir" not in resp.text
+
+
 @pytest.mark.asyncio
 async def test_eligibility_endpoint(client, db_session, as_user):
     ok = await create_catering_location(db_session)

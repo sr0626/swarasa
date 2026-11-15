@@ -32,8 +32,16 @@ export interface EligibleRestaurant {
   location_slug: string;
 }
 
+/** A public restaurant that matched the search but is not accepting catering requests. Name + city only. */
+export interface UnavailableMatch {
+  name: string;
+  city: string;
+}
+
 export interface EligibleRestaurantList extends PaginatedResponse<EligibleRestaurant> {
   max_restaurants: number;
+  /** Only populated when there are zero eligible results AND a name/city was searched. */
+  unavailable_matches?: UnavailableMatch[];
 }
 
 export interface CateringItemInput {

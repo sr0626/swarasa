@@ -4693,6 +4693,15 @@ requesting is a diner action, like follows).
   location_slug}], page, page_size, total, max_restaurants}`. ONLY eligible
   locations. `city` exact (case-insensitive), `q` substring of brand/location
   name. No other fields.
+  Plus `unavailable_matches: [{name, city}]` (<= 5, ordered by name): only when
+  `total == 0` AND a non-blank `q` and/or `city` was supplied (else always
+  `[]`). Lists PUBLIC (active location, brand not deleted) restaurants matching
+  the SAME `q`/`city` filter that are not eligible, so the UI can say "X isn't
+  accepting catering requests" vs "not found - check the name/city". Name +
+  city ONLY: no ids, address or reason (opted out vs not subscribed vs lapsed
+  is never disclosed). Hidden / coming-soon / import-review / closed / deleted
+  listings never appear (indistinguishable from not found). One extra bounded
+  query on the empty path only. Additive; no migration.
 - `GET /catering/eligibility/{location_id}` — **PUBLIC (no auth)**.
   `{location_id, eligible, restaurant}`; `restaurant` (the same public picker
   fields) only when `eligible`, else `null`. Unknown / hidden / free / lapsed /

@@ -47,7 +47,9 @@ import {
   CATERING_NOTES_MAX,
   type CateringConfig,
   type EligibleRestaurant,
+  type UnavailableMatch,
 } from "@/types/catering";
+import { emptySearchMessage, type SearchEmptyMessage } from "@/lib/catering/searchMessage";
 
 type Step = 1 | 2 | 3;
 
@@ -114,6 +116,31 @@ function Stepper({ step }: { step: Step }) {
   );
 }
 
+function EmptySearchState({ message }: { message: SearchEmptyMessage }) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="rounded-brand-control border border-dashed border-brand-border px-4 py-6 text-center text-sm text-brand-ink-muted"
+    >
+      <p className="break-words font-semibold text-brand-ink">{message.headline}</p>
+      {message.kind === "several" && (
+        <ul className="mx-auto mt-3 flex max-w-sm flex-col gap-1.5 text-left">
+          {message.matches.map((m, i) => (
+            <li key={`${m.name}-${m.city}-${i}`} className="break-words">
+              <span className="font-semibold text-brand-ink">{m.name}</span>
+              <span className="text-brand-ink-subtle"> ({m.city})</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {(message.kind === "single" || message.kind === "several") && (
+        <p className="mt-2">{message.hint}</p>
+      )}
+    </div>
+  );
+}
+
 export default function CateringRequestWizard({
   config,
   initialRestaurant,
@@ -140,6 +167,9 @@ export default function CateringRequestWizard({
   const [page, setPage] = useState(1);
   const [results, setResults] = useState<EligibleRestaurant[]>([]);
   const [total, setTotal] = useState(0);
+  const [unavailable, setUnavailable] = useState<UnavailableMatch[]>([]);
+  // The q/city the shown results were fetched with (not the live input values).
+  const [searched, setSearched] = useState({ q: "", city: "" });
   const [loading, setLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
 
@@ -164,6 +194,8 @@ export default function CateringRequestWizard({
       if (result.ok) {
         setResults(result.data.results);
         setTotal(result.data.total);
+        setUnavailable(result.data.unavailable_matches ?? []);
+        setSearched({ q: nextQ, city: nextCity });
         setPage(nextPage);
       } else {
         setSearchError(result.error);
@@ -600,10 +632,9 @@ export default function CateringRequestWizard({
               ))}
             </ul>
           ) : results.length === 0 && !searchError ? (
-            <p className="rounded-brand-control border border-dashed border-brand-border px-4 py-8 text-center text-sm text-brand-ink-muted">
-              No restaurants match. Try a different name or city. Restaurants appear here once
-              they accept catering requests.
-            </p>
+            <EmptySearchState
+              message={emptySearchMessage({ ...searched, unavailable })}
+            />
           ) : (
             <ul className="flex flex-col gap-2">
               {results.map((r) => {
