@@ -16,8 +16,8 @@ import type { Config } from "tailwindcss";
  *     `accent-gold`, `chip` (+ `-ink`), `success` (+ `-bg`), `closed`
  *     (+ `-bg`), `border`. Components use e.g. `bg-brand-accent`,
  *     `text-brand-ink`, `border-brand-border` — never a raw hex code.
- *   - fontFamily.display / .body — the two Google Fonts for this direction
- *     (Space Grotesk / Manrope), loaded via `next/font/google` in
+ *   - fontFamily.display / .body — the two typefaces for this direction
+ *     (Space Grotesk / Manrope), self-hosted via `next/font/local` in
  *     `src/app/layout.tsx` as CSS custom properties (`--font-display`,
  *     `--font-body`) and referenced here. Components use `font-display` /
  *     `font-body` — never a literal font-family string.
