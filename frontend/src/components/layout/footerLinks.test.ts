@@ -14,10 +14,10 @@ test("the city index link moved to the top bar, not the footer", () => {
   assert.ok(!FOOTER_LINKS.some((l) => l.href === "/indian-restaurants"));
 });
 
-test("footer links include a Why Join link to /benefits, shown to everyone", () => {
+test("footer links include a Sign Up Benefits link to /benefits, shown to everyone", () => {
   const link = FOOTER_LINKS.find((l) => l.href === "/benefits");
   assert.ok(link);
-  assert.equal(link.label, "Why Join");
+  assert.equal(link.label, "Sign Up Benefits");
 });
 
 test("footer hrefs and labels are unique", () => {

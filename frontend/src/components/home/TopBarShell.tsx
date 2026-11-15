@@ -110,7 +110,7 @@ export default function TopBarShell({
             get it -- `POST /restaurants` is owner-only). It is reachable on
             mobile now too, via the menu. "Sign In" stays a single plain link on
             the right, and there is still no separate "For Owners" link. Signed-out
-            only, a quiet "Why join" text link sits immediately left of "Sign In"
+            only, a quiet "Sign up benefits" text link sits immediately left of "Sign In"
             (whyJoinLinkFor in topBarLinks.ts), in the right-hand cluster. */}
         <TopBarDesktopNav links={links} />
 

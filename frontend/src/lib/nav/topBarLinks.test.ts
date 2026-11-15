@@ -36,17 +36,17 @@ test("signed-out set: browse links plus the add-your-restaurant CTA routed via l
   assert.ok(!links.some((l) => /sign in/i.test(l.label)));
 });
 
-test("Why join is not in any middle link set; it sits beside Sign in (whyJoinLinkFor)", () => {
+test("Sign up benefits is not in any middle link set; it sits beside Sign in (whyJoinLinkFor)", () => {
   for (const role of ROLES) {
     assert.ok(!topBarLinksFor(role).some((l) => l.href === "/benefits"), String(role));
   }
 });
 
-test("only signed-out visitors get the Why join link beside Sign in", () => {
+test("only signed-out visitors get the Sign up benefits link beside Sign in", () => {
   const whyJoin = whyJoinLinkFor(null);
   assert.ok(whyJoin);
   assert.equal(whyJoin.href, "/benefits");
-  assert.equal(whyJoin.label, "Why join");
+  assert.equal(whyJoin.label, "Sign up benefits");
   assert.ok(!whyJoin.cta, "a quiet text link, not the CTA pill");
   for (const role of ROLES) {
     if (role === null) continue;

@@ -35,9 +35,9 @@ const DEALS_TODAY_QUERY = "deals_today=true";
  * text link immediately left of "Sign in" (see TopBarShell.tsx), so the two
  * read as one group. The label lives only here -- rename it in this one place.
  */
-export const WHY_JOIN: TopBarLink = { key: "benefits", label: "Why join", href: "/benefits" };
+export const WHY_JOIN: TopBarLink = { key: "benefits", label: "Sign up benefits", href: "/benefits" };
 
-/** The "Why join" link for a session role: signed-out (`null`) only, else `null`. */
+/** The "Sign up benefits" link for a session role: signed-out (`null`) only, else `null`. */
 export function whyJoinLinkFor(role: UserRole | null): TopBarLink | null {
   return role === null ? WHY_JOIN : null;
 }
