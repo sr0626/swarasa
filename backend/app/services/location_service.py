@@ -551,27 +551,19 @@ async def update_location_status(
             "reopen_requires_admin",
         )
 
-    # Setup gate (docs/DECISIONS.md "New manual listings start in setup"):
-    # leaving `coming_soon` or `import_review` for `active` — going live for
-    # the first time — requires the listing's required info. Only that transition is gated:
-    # un-hiding an `owner_deactivated` listing (or a reopen approval) was
-    # already live once, and seeded/imported listings must keep working.
-    if (
-        new_status == RestaurantLocation.STATUS_ACTIVE
-        and location.status in RestaurantLocation.SETUP_STATUSES
-    ):
-        brand = await db.get(RestaurantBrand, location.brand_id)
-        hours_rows = await hours_service.get_hours_for_location(db, location.id)
-        missing = listing_readiness.missing_for_activation(
-            location, brand.name if brand else None, hours_rows
-        )
-        if missing:
-            raise AppError(
-                422,
-                listing_readiness.incomplete_detail(missing),
-                "listing_incomplete",
-                extra={"missing": missing},
-            )
+    # Readiness gate (docs/DECISIONS.md "New manual listings start in setup"):
+    # EVERY transition into `active` needs the listing's required info,
+    # whatever the previous status. `new_status == location.status` already
+    # returned above, so `active` here means the listing is not live yet:
+    # coming_soon / import_review (first go-live) AND owner_deactivated
+    # (otherwise coming_soon -> owner_deactivated -> active would bypass the
+    # gate). Only a re-ACTIVATION is checked: an already-live incomplete
+    # listing (e.g. a seeded one without a phone) keeps working and can still
+    # be edited or deactivated. closed_pending_reopen can't reach this point
+    # (409 above); its admin reopen approval is gated in
+    # location_reopen_service.approve_reopen_request.
+    if new_status == RestaurantLocation.STATUS_ACTIVE:
+        await listing_readiness.ensure_ready_for_activation(db, location)
 
     old_val = {"status": location.status}
     location.status = new_status

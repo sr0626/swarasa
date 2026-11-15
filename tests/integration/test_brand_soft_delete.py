@@ -37,6 +37,7 @@ from app.models.restaurant_location import RestaurantLocation
 from app.schemas.restaurant_bulk_import import RestaurantBasicDetailIn
 from app.services.restaurant_bulk_import_service import bulk_import_restaurants
 from factories import (
+    add_full_week_hours,
     create_brand,
     create_follow,
     create_location,
@@ -463,8 +464,15 @@ async def test_restore_clears_flag_keeps_locations_deactivated_and_is_idempotent
     ]
     assert len(again) == 1
 
-    # Owner can re-enable a location through the normal path.
+    # Owner can re-enable a location through the normal path — once it has the
+    # required info (every transition into `active` is readiness-gated, so a
+    # location with unknown hours is refused until they are entered).
     as_user("owner", sub=owner.cognito_sub)
+    refused = await client.post(f"/locations/{active_a.id}/status", json={"status": "active"})
+    assert refused.status_code == 422, refused.text
+    assert refused.json()["code"] == "listing_incomplete"
+    await add_full_week_hours(db_session, active_a.id)
+    await db_session.commit()
     reenable = await client.post(f"/locations/{active_a.id}/status", json={"status": "active"})
     assert reenable.status_code == 200, reenable.text
     assert reenable.json()["status"] == "active"

@@ -15,8 +15,11 @@ PostGIS"). Tier is NOT a stored enum — `is_paid` + `paid_until` only.
 
   - `active` — normal, publicly visible everywhere (search, direct URL,
     tiles). The only visible state.
-  - `owner_deactivated` — owner (or admin) self-service hide, freely
-    reversible in both directions by the owner themselves.
+  - `owner_deactivated` — owner (or admin) self-service hide, reversible by
+    the owner themselves in both directions — but coming back to `active`
+    goes through the same readiness gate as any other activation
+    (`listing_readiness.ensure_ready_for_activation`), so a listing missing
+    required info can't be published by detouring through this status.
   - `coming_soon` — a new, not-yet-open location. Self-service like
     `owner_deactivated`, but surfaced distinctly in the owner console so a
     new listing being finished isn't confused with a deliberately hidden

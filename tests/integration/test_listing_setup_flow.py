@@ -15,8 +15,10 @@ Covers:
     all 7 days of hours (closed or open+close, no unknown day), a valid US
     phone, and the name/address fields; it succeeds once complete, and is
     audit-logged.
-  - Only the first go-live is gated: un-hiding an `owner_deactivated` listing
-    is unchanged (seeded/imported listings keep working).
+  - EVERY transition into `active` is gated, whatever the previous status
+    (coming_soon -> owner_deactivated -> active can't bypass it); an
+    already-live incomplete listing stays live/editable/deactivatable and only
+    its RE-activation is gated; managers have no status path at all.
   - Admin (and only owner-of-brand / admin) can add a location; a manager or
     another owner cannot.
   - Bulk import is the opposite default: every imported listing is created
@@ -469,18 +471,186 @@ async def test_admin_activation_is_gated_too(client, db_session, as_user):
     assert (await _activate(client, location.id)).status_code == 200
 
 
+async def _set_status(client, location_id: int, status: str):
+    return await client.post(f"/locations/{location_id}/status", json={"status": status})
+
+
+async def _audit_status_updates(db_session, location_id: int) -> list[AuditLog]:
+    return list(
+        (
+            await db_session.execute(
+                select(AuditLog).where(
+                    AuditLog.table_name == "restaurant_location",
+                    AuditLog.record_id == location_id,
+                    AuditLog.action == "update",
+                )
+            )
+        ).scalars()
+    )
+
+
 @pytest.mark.asyncio
-async def test_only_the_first_go_live_is_gated(client, db_session, as_user):
-    """A previously-live listing hidden by its owner can be un-hidden without
-    hours (seeded/imported listings have `is_closed = NULL` days) — unchanged."""
+@pytest.mark.parametrize("setup_status", ["coming_soon", "import_review"])
+async def test_detour_through_hidden_cannot_bypass_the_gate(
+    client, db_session, as_user, setup_status
+):
+    """setup -> owner_deactivated -> active used to skip the readiness check.
+    Now EVERY transition into `active` is gated, whatever the previous status."""
     owner, brand = await _owned_brand(db_session)
-    location = await create_location(db_session, brand_id=brand.id, status="owner_deactivated")
+    location = await create_location(
+        db_session, brand_id=brand.id, status=setup_status, phone=None
+    )
     await db_session.commit()
     as_user("owner", sub=owner.cognito_sub)
 
-    response = await _activate(client, location.id)
-    assert response.status_code == 200, response.text
-    assert response.json()["status"] == "active"
+    # Moving to hidden is allowed (and needs nothing)...
+    assert (await _set_status(client, location.id, "owner_deactivated")).status_code == 200
+    # ...but coming back is refused, naming every gap.
+    refused = await _activate(client, location.id)
+    assert refused.status_code == 422, refused.text
+    body = refused.json()
+    assert body["code"] == "listing_incomplete"
+    assert body["missing"] == ["phone", "hours"]
+    assert "phone number" in body["detail"] and "opening hours" in body["detail"]
+
+    row = await db_session.get(RestaurantLocation, location.id)
+    await db_session.refresh(row)
+    assert row.status == "owner_deactivated"
+    # Only the (allowed) deactivation was audited; the refusal wrote nothing.
+    updates = await _audit_status_updates(db_session, location.id)
+    assert [a.new_val for a in updates] == [{"status": "owner_deactivated"}]
+
+    # Complete the listing -> the same call now succeeds.
+    location.phone = "+12145550142"
+    await add_full_week_hours(db_session, location.id)
+    await db_session.commit()
+    ok = await _activate(client, location.id)
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["status"] == "active"
+
+
+@pytest.mark.asyncio
+async def test_direct_setup_to_active_is_still_gated(client, db_session, as_user):
+    owner, brand = await _owned_brand(db_session)
+    location = await create_location(db_session, brand_id=brand.id, status="coming_soon")
+    await db_session.commit()
+    as_user("owner", sub=owner.cognito_sub)
+
+    refused = await _activate(client, location.id)
+    assert refused.status_code == 422
+    assert refused.json()["missing"] == ["hours"]
+
+
+@pytest.mark.asyncio
+async def test_complete_listing_can_be_hidden_and_reactivated(client, db_session, as_user):
+    owner, brand = await _owned_brand(db_session)
+    location = await create_location(db_session, brand_id=brand.id, status="active")
+    await add_full_week_hours(db_session, location.id)
+    await db_session.commit()
+    as_user("owner", sub=owner.cognito_sub)
+
+    assert (await _set_status(client, location.id, "owner_deactivated")).status_code == 200
+    again = await _activate(client, location.id)
+    assert again.status_code == 200, again.text
+    assert again.json()["status"] == "active"
+
+
+@pytest.mark.asyncio
+async def test_live_incomplete_listing_keeps_working_only_reactivation_is_gated(
+    client, db_session, as_user
+):
+    """A seeded, already-live listing with no phone and unknown hours stays
+    live and editable, and can be deactivated; only putting it back to
+    `active` after that needs the missing info (the intended consequence)."""
+    owner, brand = await _owned_brand(db_session)
+    location = await create_location(db_session, brand_id=brand.id, status="active", phone=None)
+    await db_session.commit()
+    as_user("owner", sub=owner.cognito_sub)
+
+    # Viewable and editable while live.
+    _as_optional("owner", owner.cognito_sub)
+    detail = await client.get(f"/locations/{location.id}")
+    assert detail.status_code == 200
+    assert detail.json()["status"] == "active"
+    assert detail.json()["setup_missing"] == []
+    patched = await client.patch(f"/locations/{location.id}", json={"city": "Frisco"})
+    assert patched.status_code == 200, patched.text
+    # Re-posting `active` on a live listing is the idempotent no-op, not a gate.
+    noop = await _activate(client, location.id)
+    assert noop.status_code == 200 and noop.json()["status"] == "active"
+
+    # Deactivating needs nothing.
+    assert (await _set_status(client, location.id, "owner_deactivated")).status_code == 200
+    # Re-activating is blocked until the phone (and hours) exist.
+    refused = await _activate(client, location.id)
+    assert refused.status_code == 422
+    assert refused.json()["missing"] == ["phone", "hours"]
+    # DELETE (the soft-hide) also stays allowed for a live incomplete listing.
+    live2 = await create_location(
+        db_session, brand_id=brand.id, status="active", phone=None, address_line1="2 Live St"
+    )
+    await db_session.commit()
+    assert (await client.delete(f"/locations/{live2.id}")).status_code in (200, 204)
+
+    # Fix the phone + hours -> reactivation works.
+    put = await client.put(f"/locations/{location.id}/hours", json=_hours_payload())
+    assert put.status_code == 200, put.text
+    fix = await client.patch(f"/locations/{location.id}", json={"phone": "(214) 555-0142"})
+    assert fix.status_code == 200, fix.text
+    ok = await _activate(client, location.id)
+    assert ok.status_code == 200 and ok.json()["status"] == "active"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["owner", "admin"])
+async def test_every_role_that_can_change_status_is_gated_equally(
+    client, db_session, as_user, role
+):
+    owner, brand = await _owned_brand(db_session)
+    location = await create_location(
+        db_session, brand_id=brand.id, status="owner_deactivated", phone=None
+    )
+    await db_session.commit()
+    as_user(role, sub=owner.cognito_sub if role == "owner" else None)
+
+    refused = await _activate(client, location.id)
+    assert refused.status_code == 422, refused.text
+    assert refused.json()["code"] == "listing_incomplete"
+    assert refused.json()["missing"] == ["phone", "hours"]
+
+
+@pytest.mark.asyncio
+async def test_assigned_manager_cannot_change_status_at_all(client, db_session, as_user):
+    """Managers have no status path (owner/admin only), so there is no manager
+    route around the gate either — still 403 for both a complete and an
+    incomplete hidden listing."""
+    _owner, brand = await _owned_brand(db_session)
+    location = await create_location(db_session, brand_id=brand.id, status="owner_deactivated")
+    manager = await create_location_manager(db_session, location_id=location.id, is_active=True)
+    await db_session.commit()
+    as_user("manager", sub=manager.user_id)
+    assert (await _activate(client, location.id)).status_code == 403
+
+    await add_full_week_hours(db_session, location.id)
+    await db_session.commit()
+    assert (await _activate(client, location.id)).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_transitions_that_do_not_end_in_active_are_ungated(client, db_session, as_user):
+    """A listing missing everything can still move between every non-active
+    status that is self-service (and into closed_pending_reopen)."""
+    owner, brand = await _owned_brand(db_session)
+    location = await create_location(
+        db_session, brand_id=brand.id, status="owner_deactivated", phone=None
+    )
+    await db_session.commit()
+    as_user("owner", sub=owner.cognito_sub)
+
+    for target in ("coming_soon", "owner_deactivated", "coming_soon", "closed_pending_reopen"):
+        response = await _set_status(client, location.id, target)
+        assert response.status_code == 200, (target, response.text)
+        assert response.json()["status"] == target
 
 
 @pytest.mark.asyncio
