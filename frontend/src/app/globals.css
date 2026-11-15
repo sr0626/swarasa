@@ -3,7 +3,7 @@
    custom CSS files"). The "Spice Market" visual direction's colors, fonts,
    radii, and shadows live as named tokens in ../../tailwind.config.ts
    (theme.extend) — this file has no color/font values of its own. The two
-   Google Fonts it uses are loaded via `next/font/google` in `layout.tsx`,
+   typefaces it uses are self-hosted via `next/font/local` in `layout.tsx`,
    which supplies the `--font-display` / `--font-body` custom properties
    that tailwind.config.ts's `fontFamily` tokens reference. */
 @tailwind base;
