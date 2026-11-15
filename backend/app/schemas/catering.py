@@ -46,12 +46,22 @@ class EligibleRestaurantOut(BaseModel):
     location_slug: str
 
 
+class UnavailableMatchOut(BaseModel):
+    """A public restaurant that matched the search but is not accepting
+    catering requests. Name + city ONLY — never ids, never the reason."""
+
+    name: str
+    city: str
+
+
 class EligibleRestaurantList(BaseModel):
     results: list[EligibleRestaurantOut]
     page: int
     page_size: int
     total: int
     max_restaurants: int
+    # Only populated when `total == 0` AND a `q`/`city` was supplied; else [].
+    unavailable_matches: list[UnavailableMatchOut] = []
 
 
 class EligibilityOut(BaseModel):

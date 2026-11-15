@@ -47,6 +47,7 @@ from app.schemas.catering import (
     EligibleRestaurantList,
     EligibleRestaurantOut,
     RequesterRecipientOut,
+    UnavailableMatchOut,
 )
 from app.services import audit_service, auth_service, platform_config_service
 from app.services.subscription_service import subscribed_clause
@@ -55,6 +56,7 @@ MAX_RESTAURANTS_KEY = "catering_max_restaurants"
 DEFAULT_MAX_RESTAURANTS = 5
 HARD_MAX_RESTAURANTS = 20  # a bad config value can never exceed this
 
+UNAVAILABLE_MATCH_LIMIT = 5
 MAX_REQUESTS_PER_DAY = 5
 RATE_WINDOW = timedelta(days=1)
 REQUEST_TTL = timedelta(days=14)
@@ -96,10 +98,13 @@ def eligible_conditions(now: datetime | None = None) -> list:
     ]
 
 
-async def list_eligible_restaurants(
-    db: AsyncSession, pagination: Pagination, *, city: str | None, q: str | None
-) -> EligibleRestaurantList:
-    conds = eligible_conditions()
+def _search_conditions(city: str | None, q: str | None) -> list:
+    """The picker's `city` / `q` filter — ONE definition shared by the
+    eligible search and the "found but not accepting" lookup so the two can
+    never disagree about what a search matches. `city` is an exact
+    case-insensitive match; `q` a substring of brand or location name with
+    LIKE wildcards escaped."""
+    conds: list = []
     if city and city.strip():
         conds.append(func.lower(RestaurantLocation.city) == city.strip().lower())
     if q and q.strip():
@@ -108,6 +113,43 @@ async def list_eligible_restaurants(
             func.lower(RestaurantBrand.name).like(like, escape="\\")
             | func.lower(func.coalesce(RestaurantLocation.location_name, "")).like(like, escape="\\")
         )
+    return conds
+
+
+async def _unavailable_matches(
+    db: AsyncSession, search: list
+) -> list[UnavailableMatchOut]:
+    """Empty-results path only. PUBLIC (active location, live brand)
+    restaurants matching the search that are not eligible — the caller has
+    already established that nothing eligible matches, so every public match
+    is by definition ineligible. Deliberately name + city only and never says
+    WHY (opted out vs not subscribed). Hidden / coming-soon / import-review /
+    closed / deleted listings are excluded so their existence is never
+    confirmed. One bounded query."""
+    rows = (
+        await db.execute(
+            select(RestaurantLocation, RestaurantBrand)
+            .join(RestaurantBrand, RestaurantBrand.id == RestaurantLocation.brand_id)
+            .where(
+                RestaurantLocation.status == RestaurantLocation.STATUS_ACTIVE,
+                RestaurantBrand.deleted_at.is_(None),
+                *search,
+            )
+            .order_by(func.lower(RestaurantBrand.name), RestaurantLocation.id)
+            .limit(UNAVAILABLE_MATCH_LIMIT)
+        )
+    ).all()
+    return [
+        UnavailableMatchOut(name=restaurant_name(loc, brand), city=loc.city)
+        for loc, brand in rows
+    ]
+
+
+async def list_eligible_restaurants(
+    db: AsyncSession, pagination: Pagination, *, city: str | None, q: str | None
+) -> EligibleRestaurantList:
+    search = _search_conditions(city, q)
+    conds = eligible_conditions() + search
     base = (
         select(RestaurantLocation, RestaurantBrand)
         .join(RestaurantBrand, RestaurantBrand.id == RestaurantLocation.brand_id)
@@ -128,6 +170,9 @@ async def list_eligible_restaurants(
             .limit(pagination.page_size)
         )
     ).all()
+    unavailable = (
+        await _unavailable_matches(db, search) if total == 0 and search else []
+    )
     return EligibleRestaurantList(
         results=[
             EligibleRestaurantOut(
@@ -144,6 +189,7 @@ async def list_eligible_restaurants(
         page_size=pagination.page_size,
         total=total,
         max_restaurants=await get_max_restaurants(db),
+        unavailable_matches=unavailable,
     )
 
 
