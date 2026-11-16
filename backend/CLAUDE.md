@@ -218,8 +218,16 @@ These routes are explicitly public — all others require auth:
   best-effort, optional token used only to drop the owner's/manager's/admin's
   own views — `get_current_user_lenient`)
 - `POST /reports` (anonymous "report a problem"; uses `get_current_user_optional`
-  to attribute a signed-in caller — honeypot + length limits are its only
-  anti-abuse controls, see `services/listing_report_service.py`)
+  to attribute a signed-in caller — guarded by the form guard: signed single-use
+  form token, honeypot (`X-Form-Trap`), visitor/connection/user limits and a
+  global hourly breaker, plus length limits; see `services/form_guard_service.py`
+  and `docs/API_CONTRACTS.md` "Form guard")
+- `POST /forms/token`, `POST /forms/verify` (issue / check a form token; rate
+  limited, generic errors; `verify` is also called before the browser's Cognito
+  sign-up / login / password flows). Enforcement is behind the
+  `form_guard_enforced` platform flag (default off = log-only).
+- `GET /catering/eligibility/{location_id}` (public boolean + public picker
+  fields only; powers the "Request catering quote" card on location pages)
 
 ## Environment Variables (never hardcode these)
 ```
