@@ -14,11 +14,12 @@ import type {
 /** POST /claim — auth: any authenticated Cognito user (the claimant). */
 export async function submitClaim(
   input: CreateClaimInput,
-  accessToken: string
+  accessToken: string,
+  guardHeaders?: Record<string, string>
 ): Promise<ClaimResponse> {
   return apiFetch<ClaimResponse>(
     "/claim",
-    { method: "POST", body: JSON.stringify(input) },
+    { method: "POST", body: JSON.stringify(input), headers: guardHeaders },
     { accessToken }
   );
 }

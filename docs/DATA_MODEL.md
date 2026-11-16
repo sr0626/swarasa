@@ -338,3 +338,23 @@ a deliberate `POST /locations/{id}/status`. Existing imported rows that are
 still `coming_soon` are moved with the one-off `mark_imported_for_review`
 management command (docs/SCRIPTS.md); `deactivate_incomplete_listings` still
 hides a live listing as `coming_soon`.
+
+## form_guard_counter (migration `0025_form_guard`) — form-guard counters and token nonces
+
+Columns: `counter_key` (VARCHAR(120), PK), `n` (INTEGER NOT NULL, default 1),
+`expires_at` (BIGINT epoch seconds NOT NULL; index `ix_form_guard_counter_expires_at`).
+One row per live counter; the hour bucket is part of the key
+(`g:report:<bucket>` global, `v:`/`c:`/`d:report:<hash>:<bucket>` per visitor /
+proxied connection / direct connection, `u:claim:<hash>:<bucket>` per signed-in
+user, `n:<nonce>` single-use form token). Written by ONE atomic multi-row
+`INSERT ... ON CONFLICT (counter_key) DO UPDATE SET n = n + 1 RETURNING`
+(PostgreSQL in production, SQLite in tests); expired rows are purged
+opportunistically (about 2% of guarded requests, no cron).
+
+**Privacy / CCPA:** keys hold only a form name, a window number and a salted,
+truncated HMAC of a client / user key. No IP address, email or Cognito sub is
+stored, so there is nothing to export or delete (no entry in
+`GET /auth/me/data-export` or the deletion flow). Short-lived by construction
+(nonces up to 2 h, counters up to 1 h). Not an audited entity (no `audit_log`).
+No seed rows: `form_guard_enforced` and `form_guard_global_per_hour_<form>`
+are optional `platform_config` rows read with in-code defaults.

@@ -21,13 +21,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_session_factory
 from app.models.platform_config import PlatformConfig
-from app.services import platform_config_service
+from app.services import form_guard_service, platform_config_service
 
 logger = logging.getLogger("app.scripts.set_platform_int")
 
 # key -> (default, min, max)
 KNOWN_INT_SETTINGS: dict[str, tuple[int, int, int]] = {
     "catering_max_restaurants": (5, 1, 20),
+    # Global per-hour submission breakers of the form guard
+    # (`form_guard_global_per_hour_<form>`), see form_guard_service.
+    **form_guard_service.GLOBAL_LIMIT_SETTINGS,
 }
 
 

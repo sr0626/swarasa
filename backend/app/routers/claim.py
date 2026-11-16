@@ -1,7 +1,7 @@
 """Claim flow endpoints. See docs/API_CONTRACTS.md "Claim flow (/claim)"."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies.auth import CurrentUser, get_current_user, require_admin
@@ -17,7 +17,7 @@ from app.schemas.claim import (
     ClaimRejectRequest,
     ClaimStatus,
 )
-from app.services import claim_service
+from app.services import claim_service, form_guard_service
 
 router = APIRouter(prefix="/claim", tags=["claim"])
 
@@ -25,9 +25,13 @@ router = APIRouter(prefix="/claim", tags=["claim"])
 @router.post("", response_model=ClaimOut, status_code=status.HTTP_201_CREATED)
 async def submit_claim(
     body: ClaimCreate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> ClaimOut:
+    await form_guard_service.enforce_strict(
+        db, request, "claim", user_sub=current_user.cognito_sub
+    )
     claim = await claim_service.create_claim(db, current_user, body)
     return claim_service.to_claim_out(claim)
 

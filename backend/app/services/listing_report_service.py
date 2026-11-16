@@ -8,9 +8,11 @@ Anti-abuse posture (the endpoint is public + anonymous by design):
   <= 254);
 - a report can only reference a real brand (and a location of that brand).
 
-NOT built here (flagged for the human in the PR): per-IP rate limiting and
-CAPTCHA. Today the only throttle is API Gateway's account/stage-level
-throttling. Reports never change listing data (an admin acts on them
+Rate limiting, the signed form token (minimum time-to-submit, single use),
+the `X-Form-Trap` header honeypot and a global per-hour breaker are applied
+by the router through `form_guard_service` (docs/API_CONTRACTS.md "Form
+guard"), behind the `form_guard_enforced` flag. CAPTCHA (AWS WAF) is a later
+decision. Reports never change listing data (an admin acts on them
 separately), so the blast radius of spam is admin-queue noise, not
 corrupted listings.
 """

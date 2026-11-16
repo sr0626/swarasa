@@ -7,7 +7,7 @@ including the owner/admin-scoped list below (bare GET /restaurants).
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies.auth import (
@@ -33,7 +33,7 @@ from app.schemas.restaurant import (
     RestaurantSortValue,
     RestaurantUpdate,
 )
-from app.services import follow_service, location_service, restaurant_service
+from app.services import follow_service, form_guard_service, location_service, restaurant_service
 
 router = APIRouter(prefix="/restaurants", tags=["restaurants"])
 
@@ -192,9 +192,13 @@ async def list_restaurant_locations(
 @router.post("", response_model=RestaurantOut, status_code=status.HTTP_201_CREATED)
 async def create_restaurant(
     body: RestaurantCreate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(require_owner),
 ) -> RestaurantOut:
+    await form_guard_service.enforce_strict(
+        db, request, "brand_create", user_sub=current_user.cognito_sub
+    )
     return await restaurant_service.create_restaurant(db, body, current_user)
 
 

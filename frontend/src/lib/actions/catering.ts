@@ -6,6 +6,8 @@
 // the backend re-validates role, eligibility and ownership on every call.
 import { revalidatePath } from "next/cache";
 import { ApiError } from "@/lib/api/client";
+import { guardHeadersFor } from "@/lib/formGuard/server";
+import { guardErrorMessage } from "@/lib/formGuard/guardLogic";
 import {
   cancelCateringRequest,
   createCateringRequest,
@@ -68,15 +70,19 @@ export async function searchCateringRestaurantsAction(
 }
 
 export async function submitCateringRequestAction(
-  input: CateringRequestInput
+  input: CateringRequestInput,
+  guard?: unknown
 ): Promise<ActionResult<CateringRequest>> {
   const auth = await requireRole(["registered_user"], "Only signed-in diners can request catering quotes.");
   if (!auth.ok) return auth;
   try {
-    const data = await createCateringRequest(input, auth.session.accessToken);
+    const data = await createCateringRequest(input, auth.session.accessToken, guardHeadersFor(guard));
     revalidatePath("/account/catering");
     return { ok: true, data };
   } catch (error) {
+    const guardMessage =
+      error instanceof ApiError ? guardErrorMessage(error.status, error.code) : null;
+    if (guardMessage) return { ok: false, error: guardMessage };
     if (error instanceof ApiError && error.status === 422) {
       // Generic by design: the API never says which restaurant failed or why.
       return { ok: false, error: error.message };

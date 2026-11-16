@@ -23,6 +23,8 @@ import {
   REPORT_DETAILS_MAX_LENGTH,
 } from "@/lib/validation/listingReport";
 import { ClipboardCheckIcon } from "@/components/ui/icons";
+import { FormGuardFields } from "@/components/ui/FormGuardFields";
+import { useFormGuard } from "@/lib/formGuard/useFormGuard";
 import { brandHref } from "@/lib/restaurant/urls";
 import type { LocationSummary } from "@/types/location";
 import type { ReportCategory } from "@/types/listingReport";
@@ -58,6 +60,7 @@ export default function ReportProblemForm({
   const [details, setDetails] = useState("");
   const [email, setEmail] = useState("");
   const [website, setWebsite] = useState("");
+  const guard = useFormGuard("report");
   const [locationId, setLocationId] = useState<number | "">(
     locations.length === 1
       ? locations[0]!.id
@@ -98,13 +101,14 @@ export default function ReportProblemForm({
 
     setSubmitting(true);
     try {
-      const outcome = await submitReportAction(input);
+      const outcome = await submitReportAction(input, await guard.prepare());
       if (outcome.ok) {
         setDone(true);
       } else {
         setError(outcome.error);
       }
     } finally {
+      guard.refresh();
       setSubmitting(false);
     }
   }
@@ -142,6 +146,7 @@ export default function ReportProblemForm({
     <form
       onSubmit={handleSubmit}
       noValidate
+      {...guard.formProps}
       className="rounded-brand-card border border-brand-border bg-white p-6 shadow-brand-card sm:p-8"
     >
       <fieldset aria-describedby={categoryError ? "report_category_error" : undefined}>
@@ -279,6 +284,8 @@ export default function ReportProblemForm({
           onChange={(e) => setWebsite(e.target.value)}
         />
       </div>
+
+      <FormGuardFields guard={guard} />
 
       {error && (
         <p

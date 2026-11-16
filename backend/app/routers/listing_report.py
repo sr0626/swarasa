@@ -2,7 +2,7 @@
 (/reports)"."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies.auth import CurrentUser, get_current_user_optional, require_admin
@@ -17,7 +17,7 @@ from app.schemas.listing_report import (
     ReportStatus,
     ReportUpdate,
 )
-from app.services import listing_report_service
+from app.services import form_guard_service, listing_report_service
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -25,13 +25,26 @@ router = APIRouter(prefix="/reports", tags=["reports"])
 @router.post("", response_model=ReportReceiptOut, status_code=status.HTTP_201_CREATED)
 async def submit_report(
     body: ReportCreate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser | None = Depends(get_current_user_optional),
 ) -> ReportReceiptOut:
     """Auth: PUBLIC — no token required. A valid token, if sent, only
     attributes the report to that Cognito `sub` (a present-but-invalid
     token still 401s, same as every other optional-auth route).
+
+    Form guard (docs/API_CONTRACTS.md "Form guard"): form token + honeypot
+    header + per-visitor / per-user / global limits. A tripped honeypot gets
+    the normal receipt and nothing is stored, like the `website` body trap.
     """
+    outcome = await form_guard_service.enforce(
+        db,
+        request,
+        "report",
+        user_sub=current_user.cognito_sub if current_user is not None else None,
+    )
+    if outcome is form_guard_service.Outcome.DROP:
+        return ReportReceiptOut()
     await listing_report_service.create_report(db, current_user, body)
     # Same receipt whether the report was stored or a honeypot hit was
     # silently discarded.

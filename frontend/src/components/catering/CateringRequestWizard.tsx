@@ -10,6 +10,8 @@
 // everything and answers a generic "not available" if any restaurant stopped
 // being eligible meanwhile.
 import Link from "next/link";
+import { FormGuardFields } from "@/components/ui/FormGuardFields";
+import { useFormGuard } from "@/lib/formGuard/useFormGuard";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import {
   searchCateringRestaurantsAction,
@@ -154,6 +156,7 @@ export default function CateringRequestWizard({
   const nextKey = () => `item-${keyCounter.current++}`;
 
   const [step, setStep] = useState<Step>(1);
+  const guard = useFormGuard("catering_request");
   const [draft, setDraft] = useState<RequestDraft>(() => emptyDraft("item-0"));
   const [errors, setErrors] = useState<DraftErrors>({});
   const [today, setToday] = useState("");
@@ -253,7 +256,11 @@ export default function CateringRequestWizard({
   async function submit() {
     setSubmitting(true);
     setSubmitError(null);
-    const result = await submitCateringRequestAction(buildRequestPayload(draft, selectedIds));
+    const result = await submitCateringRequestAction(
+      buildRequestPayload(draft, selectedIds),
+      await guard.prepare()
+    );
+    guard.refresh();
     setSubmitting(false);
     if (result.ok) setDone(true);
     else setSubmitError(result.error);
@@ -279,8 +286,9 @@ export default function CateringRequestWizard({
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
-    <div>
+    <div {...guard.formProps}>
       <Stepper step={step} />
+      <FormGuardFields guard={guard} />
 
       {step === 1 && (
         <form

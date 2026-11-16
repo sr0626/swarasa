@@ -163,11 +163,12 @@ export async function getRestaurantLocations(
 /** POST /restaurants — auth: owner. */
 export async function createRestaurant(
   input: CreateRestaurantInput,
-  accessToken: string
+  accessToken: string,
+  guardHeaders?: Record<string, string>
 ): Promise<RestaurantBrand> {
   return apiFetch<RestaurantBrand>(
     "/restaurants",
-    { method: "POST", body: JSON.stringify(input) },
+    { method: "POST", body: JSON.stringify(input), headers: guardHeaders },
     { accessToken }
   );
 }

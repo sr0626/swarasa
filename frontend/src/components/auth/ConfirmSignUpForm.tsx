@@ -6,6 +6,8 @@
 // infra/modules/cognito/main.tf). This is that code-entry page, plus a
 // resend-code affordance — both explicitly called out in the task.
 import { useState, type FormEvent } from "react";
+import { FormGuardFields } from "@/components/ui/FormGuardFields";
+import { useFormGuard } from "@/lib/formGuard/useFormGuard";
 import { useRouter } from "next/navigation";
 import { confirmSignUp, resendSignUpCode } from "@aws-amplify/auth";
 import { ensureAmplifyConfigured } from "@/lib/auth/amplifyClient";
@@ -33,6 +35,7 @@ export default function ConfirmSignUpForm({
   const [formError, setFormError] = useState<string | null>(null);
   const [resendMessage, setResendMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const guard = useFormGuard("confirm");
   const [resending, setResending] = useState(false);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
@@ -54,6 +57,12 @@ export default function ConfirmSignUpForm({
     setSubmitting(true);
 
     try {
+      const gate = await guard.gate();
+      if (!gate.ok) {
+        setFormError(gate.error);
+        setSubmitting(false);
+        return;
+      }
       ensureAmplifyConfigured();
       const { isSignUpComplete } = await confirmSignUp({
         username: parsed.data.email,
@@ -90,6 +99,11 @@ export default function ConfirmSignUpForm({
 
     setResending(true);
     try {
+      const gate = await guard.gate();
+      if (!gate.ok) {
+        setFormError(gate.error);
+        return;
+      }
       ensureAmplifyConfigured();
       await resendSignUpCode({ username: emailCheck.data });
       setResendMessage("A new code has been sent to your email.");
@@ -101,7 +115,7 @@ export default function ConfirmSignUpForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate {...guard.formProps}>
       {formError && (
         <p
           role="alert"
@@ -165,6 +179,8 @@ export default function ConfirmSignUpForm({
           <p className="text-sm text-brand-closed">{fieldErrors.code}</p>
         )}
       </div>
+
+      <FormGuardFields guard={guard} />
 
       <button
         type="submit"

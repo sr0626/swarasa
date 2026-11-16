@@ -12,11 +12,12 @@ import type {
 /** POST /contact-admin — auth: owner or manager. 429 after 5 messages in an hour. */
 export async function contactAdmin(
   input: ContactAdminInput,
-  accessToken: string
+  accessToken: string,
+  guardHeaders?: Record<string, string>
 ): Promise<ContactAdminReceipt> {
   return apiFetch<ContactAdminReceipt>(
     "/contact-admin",
-    { method: "POST", body: JSON.stringify(input) },
+    { method: "POST", body: JSON.stringify(input), headers: guardHeaders },
     { accessToken }
   );
 }

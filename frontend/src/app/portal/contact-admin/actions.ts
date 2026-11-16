@@ -7,6 +7,8 @@
 // same length bounds the backend enforces so the user gets a specific
 // message instead of a generic 422.
 import { ApiError } from "@/lib/api/client";
+import { guardHeadersFor } from "@/lib/formGuard/server";
+import { guardErrorMessage } from "@/lib/formGuard/guardLogic";
 import { contactAdmin } from "@/lib/api/adminMessages";
 import { getServerSession } from "@/lib/auth/session";
 import {
@@ -19,11 +21,14 @@ import {
 export type ContactAdminActionResult = { ok: true } | { ok: false; error: string };
 
 /** POST /contact-admin — auth: owner or manager. */
-export async function contactAdminAction(input: {
-  subject: string;
-  body: string;
-  relatedLocationId: number | null;
-}): Promise<ContactAdminActionResult> {
+export async function contactAdminAction(
+  input: {
+    subject: string;
+    body: string;
+    relatedLocationId: number | null;
+  },
+  guard?: unknown
+): Promise<ContactAdminActionResult> {
   const session = await getServerSession();
   if (!session) {
     return { ok: false, error: "Your session has expired. Please sign in again." };
@@ -50,11 +55,14 @@ export async function contactAdminAction(input: {
   try {
     await contactAdmin(
       { subject, body, related_location_id: input.relatedLocationId },
-      session.accessToken
+      session.accessToken,
+      guardHeadersFor(guard)
     );
     return { ok: true };
   } catch (error) {
     if (error instanceof ApiError) {
+      const guardMessage = guardErrorMessage(error.status, error.code);
+      if (guardMessage) return { ok: false, error: guardMessage };
       return { ok: false, error: error.message };
     }
     return { ok: false, error: "Something went wrong. Please try again." };

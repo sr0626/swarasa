@@ -4,6 +4,8 @@
 // new password, via Cognito's confirmResetPassword(). Step 1 (request the
 // code) is app/forgot-password + ForgotPasswordForm.tsx.
 import { useState, type FormEvent } from "react";
+import { FormGuardFields } from "@/components/ui/FormGuardFields";
+import { useFormGuard } from "@/lib/formGuard/useFormGuard";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { confirmResetPassword } from "@aws-amplify/auth";
@@ -30,6 +32,7 @@ export default function ResetPasswordForm({
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const guard = useFormGuard("reset");
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -54,6 +57,12 @@ export default function ResetPasswordForm({
     setSubmitting(true);
 
     try {
+      const gate = await guard.gate();
+      if (!gate.ok) {
+        setFormError(gate.error);
+        setSubmitting(false);
+        return;
+      }
       ensureAmplifyConfigured();
       await confirmResetPassword({
         username: parsed.data.email,
@@ -68,7 +77,7 @@ export default function ResetPasswordForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate {...guard.formProps}>
       {formError && (
         <p
           role="alert"
@@ -176,6 +185,8 @@ export default function ResetPasswordForm({
           </p>
         )}
       </div>
+
+      <FormGuardFields guard={guard} />
 
       <button
         type="submit"

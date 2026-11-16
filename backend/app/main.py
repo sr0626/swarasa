@@ -26,6 +26,7 @@ from app.routers import (
     cuisine,
     data_deletion,
     deals,
+    forms,
     menu,
     health,
     listing_report,
@@ -43,6 +44,7 @@ app = FastAPI(title="Restaurant Discovery Platform API")
 register_exception_handlers(app)
 
 app.include_router(health.router)
+app.include_router(forms.router)
 app.include_router(search.router)
 app.include_router(sitemap.router)
 app.include_router(cities.router)

@@ -52,11 +52,14 @@ const API_FETCH_TIMEOUT_MS = 25_000;
 /** Thrown by apiFetch on any non-2xx response, or when a request times out. */
 export class ApiError extends Error {
   readonly status: number;
+  /** The backend's machine-readable `code` (e.g. `form_check_failed`), when it sent one. */
+  readonly code: string | null;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, code: string | null = null) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -100,19 +103,23 @@ export function toQueryString(
   return query ? `?${query}` : "";
 }
 
-async function extractErrorMessage(res: Response): Promise<string> {
+async function extractError(
+  res: Response
+): Promise<{ message: string; code: string | null }> {
   try {
     const body: unknown = await res.json();
     if (body && typeof body === "object" && "detail" in body) {
-      const detail = (body as { detail: unknown }).detail;
-      if (typeof detail === "string") return detail;
+      const { detail, code } = body as { detail: unknown; code?: unknown };
+      if (typeof detail === "string") {
+        return { message: detail, code: typeof code === "string" ? code : null };
+      }
     }
   } catch {
     // Response body wasn't JSON (or was empty) — fall through to the
     // generic message. Never surface raw stack/body details to the UI
     // (root CLAUDE.md "NEVER expose internal stack details").
   }
-  return `Request failed with status ${res.status}`;
+  return { message: `Request failed with status ${res.status}`, code: null };
 }
 
 /**
@@ -180,7 +187,8 @@ export async function apiFetch<TResponse>(
   }
 
   if (!res.ok) {
-    throw new ApiError(res.status, await extractErrorMessage(res));
+    const { message, code } = await extractError(res);
+    throw new ApiError(res.status, message, code);
   }
 
   if (res.status === 204) {

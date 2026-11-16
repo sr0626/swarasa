@@ -30,7 +30,14 @@ from app.models.platform_config import PlatformConfig
 #   implemented): when billing lands, gate per location by
 #   `restaurant_location.is_paid` in addition to this flag.
 MENU_ITEM_PHOTOS_ENABLED_KEY = "menu_item_photos_enabled"
-KNOWN_BOOL_FLAGS: tuple[str, ...] = (MENU_ITEM_PHOTOS_ENABLED_KEY,)
+#
+# form_guard_enforced — the form guard (honeypot / time-to-submit / rate
+#   limits, `form_guard_service`). OFF (default): every check is evaluated and
+#   a `would_block` line logged, but nothing is rejected, so backend and
+#   frontend can be deployed in either order. Turn ON only after both sides
+#   are deployed and verified.
+FORM_GUARD_ENFORCED_KEY = "form_guard_enforced"
+KNOWN_BOOL_FLAGS: tuple[str, ...] = (MENU_ITEM_PHOTOS_ENABLED_KEY, FORM_GUARD_ENFORCED_KEY)
 
 _TRUE_VALUES = frozenset({"true", "1", "yes", "on"})
 _FALSE_VALUES = frozenset({"false", "0", "no", "off"})
