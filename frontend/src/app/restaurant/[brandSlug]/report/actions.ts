@@ -9,6 +9,8 @@
 // present-but-invalid token on optional-auth routes), we retry once
 // anonymously rather than blocking the visitor from reporting.
 import { ApiError } from "@/lib/api/client";
+import { guardHeadersFor } from "@/lib/formGuard/server";
+import { guardErrorMessage } from "@/lib/formGuard/guardLogic";
 import { submitReport } from "@/lib/api/listingReports";
 import { getServerSession } from "@/lib/auth/session";
 import { createReportSchema } from "@/lib/validation/listingReport";
@@ -17,7 +19,8 @@ import type { CreateReportInput } from "@/types/listingReport";
 export type SubmitReportActionResult = { ok: true } | { ok: false; error: string };
 
 export async function submitReportAction(
-  input: unknown
+  input: unknown,
+  guard?: unknown
 ): Promise<SubmitReportActionResult> {
   const parsed = createReportSchema.safeParse(input);
   if (!parsed.success) {
@@ -39,12 +42,17 @@ export async function submitReportAction(
     reporter_email: session ? null : parsed.data.reporter_email || null,
   };
 
+  // Form guard (token, honeypot, visitor address) -- forwarded server-to-server only.
+  const guardHeaders = guardHeadersFor(guard);
+
   try {
     try {
-      await submitReport(body, session?.accessToken ?? null);
+      await submitReport(body, session?.accessToken ?? null, guardHeaders);
     } catch (error) {
       if (session && error instanceof ApiError && error.status === 401) {
-        await submitReport(body, null);
+        // The stale-token 401 happens before the guard runs, so the form
+        // token has not been consumed and can be reused for this retry.
+        await submitReport(body, null, guardHeaders);
       } else {
         throw error;
       }
@@ -52,6 +60,8 @@ export async function submitReportAction(
     return { ok: true };
   } catch (error) {
     if (error instanceof ApiError) {
+      const guardMessage = guardErrorMessage(error.status, error.code);
+      if (guardMessage) return { ok: false, error: guardMessage };
       if (error.status === 404) {
         return {
           ok: false,

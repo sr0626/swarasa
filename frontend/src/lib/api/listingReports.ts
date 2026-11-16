@@ -18,11 +18,12 @@ import type {
  */
 export async function submitReport(
   input: CreateReportInput,
-  accessToken?: string | null
+  accessToken?: string | null,
+  guardHeaders?: Record<string, string>
 ): Promise<ReportReceipt> {
   return apiFetch<ReportReceipt>(
     "/reports",
-    { method: "POST", body: JSON.stringify(input) },
+    { method: "POST", body: JSON.stringify(input), headers: guardHeaders },
     { accessToken }
   );
 }

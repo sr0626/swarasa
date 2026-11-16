@@ -9,7 +9,7 @@ Admin: `GET /admin/catering`, `PUT /admin/locations/{id}/subscription`.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
@@ -41,6 +41,7 @@ from app.schemas.catering import (
     SubscriptionOut,
 )
 from app.services import (
+    form_guard_service,
     admin_catering_service,
     catering_inbox_service,
     catering_service,
@@ -97,10 +98,16 @@ async def catering_eligibility(
 @router.post("/catering/requests", response_model=CateringRequestOut, status_code=status.HTTP_201_CREATED)
 async def create_catering_request(
     body: CateringRequestCreate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(require_registered_user),
 ) -> CateringRequestOut:
-    """Auth: registered_user only (owner/manager/admin get 403). 5/day."""
+    """Auth: registered_user only (owner/manager/admin get 403). 5/day (own
+    limit, in the service) plus the form guard (token + honeypot + global
+    breaker)."""
+    await form_guard_service.enforce_strict(
+        db, request, "catering_request", user_sub=current_user.cognito_sub
+    )
     return await catering_service.create_request(db, current_user, body)
 
 

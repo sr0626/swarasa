@@ -5,7 +5,7 @@
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies.auth import CurrentUser, require_admin, require_owner_or_manager
@@ -20,7 +20,7 @@ from app.schemas.admin_message import (
     ContactAdminCreate,
     ContactAdminReceipt,
 )
-from app.services import admin_message_service
+from app.services import admin_message_service, form_guard_service
 
 router = APIRouter(tags=["contact-admin"])
 
@@ -28,10 +28,16 @@ router = APIRouter(tags=["contact-admin"])
 @router.post("/contact-admin", response_model=ContactAdminReceipt, status_code=status.HTTP_201_CREATED)
 async def contact_admin(
     body: ContactAdminCreate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(require_owner_or_manager),
 ) -> ContactAdminReceipt:
-    """Auth: owner or manager. Max 5 messages per sender per rolling hour."""
+    """Auth: owner or manager. Max 5 messages per sender per rolling hour
+    (own limit, in the service) plus the form guard (token + honeypot +
+    global breaker)."""
+    await form_guard_service.enforce_strict(
+        db, request, "contact_admin", user_sub=current_user.cognito_sub
+    )
     await admin_message_service.create_message(db, current_user, body)
     return ContactAdminReceipt()
 

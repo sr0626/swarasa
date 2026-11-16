@@ -8,7 +8,7 @@ the JWT claims alone) via the dependencies in `app/dependencies/auth.py`.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies.auth import (
@@ -44,6 +44,7 @@ from app.schemas.manager_invite import (
 from app.schemas.photo import PhotoCreate, PhotoOut, PhotoUpdate, UploadUrlRequest, UploadUrlResponse
 from app.dependencies.pagination import Pagination, pagination_params
 from app.services import (
+    form_guard_service,
     location_manager_service,
     location_reopen_service,
     location_service,
@@ -73,9 +74,15 @@ async def get_location(
 @router.post("", response_model=LocationOut, status_code=status.HTTP_201_CREATED)
 async def create_location(
     body: LocationCreate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(require_owner_or_admin),
 ) -> LocationOut:
+    # Per-user + global rate limit only (no form token: this call follows
+    # POST /restaurants in the same submit and is owner/admin-gated).
+    await form_guard_service.enforce_strict(
+        db, request, "location_create", user_sub=current_user.cognito_sub
+    )
     return await location_service.create_location(db, body, current_user)
 
 
@@ -288,9 +295,13 @@ async def remove_location_manager(
 async def create_manager_invite(
     location_id: int,
     body: ManagerInviteCreate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(require_location_owner_or_admin),
 ) -> ManagerInviteCreatedOut:
+    await form_guard_service.enforce_strict(
+        db, request, "manager_invite", user_sub=current_user.cognito_sub
+    )
     """Auth: the location's owner, or admin acting for them. Returns the raw
     single-use token ONCE; no email is sent (SES deferred) — the caller shares
     the link themselves. See `manager_invite_service`."""

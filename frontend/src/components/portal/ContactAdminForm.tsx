@@ -7,6 +7,8 @@
 // 5-per-hour rate limit); this form only mirrors the bounds for fast feedback.
 import Link from "next/link";
 import { useState } from "react";
+import { FormGuardFields } from "@/components/ui/FormGuardFields";
+import { useFormGuard } from "@/lib/formGuard/useFormGuard";
 import { contactAdminAction } from "@/app/portal/contact-admin/actions";
 import {
   BODY_MAX_LENGTH,
@@ -31,6 +33,7 @@ export default function ContactAdminForm({
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const guard = useFormGuard("contact_admin");
 
   const subjectOk = subject.trim().length >= SUBJECT_MIN_LENGTH;
   const bodyOk = body.trim().length >= BODY_MIN_LENGTH;
@@ -40,17 +43,21 @@ export default function ContactAdminForm({
     setError(null);
     setSending(true);
     try {
-      const result = await contactAdminAction({
-        subject,
-        body,
-        relatedLocationId: locationId === "" ? null : Number(locationId),
-      });
+      const result = await contactAdminAction(
+        {
+          subject,
+          body,
+          relatedLocationId: locationId === "" ? null : Number(locationId),
+        },
+        await guard.prepare()
+      );
       if (result.ok) {
         setSent(true);
       } else {
         setError(result.error);
       }
     } finally {
+      guard.refresh();
       setSending(false);
     }
   }
@@ -95,6 +102,7 @@ export default function ContactAdminForm({
   return (
     <form
       onSubmit={handleSubmit}
+      {...guard.formProps}
       className="flex flex-col gap-4 rounded-brand-card border border-brand-border bg-white p-5 shadow-brand-card sm:p-6"
     >
       <div>
@@ -152,6 +160,8 @@ export default function ContactAdminForm({
           {body.length} / {BODY_MAX_LENGTH}
         </p>
       </div>
+
+      <FormGuardFields guard={guard} />
 
       {error && (
         <p

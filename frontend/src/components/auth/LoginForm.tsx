@@ -28,6 +28,8 @@
 // token inside it still expires in 1 hour; the keep-alive loop is what
 // actually refreshes it, for as long as this tab stays open).
 import { useState, type FormEvent } from "react";
+import { FormGuardFields } from "@/components/ui/FormGuardFields";
+import { useFormGuard } from "@/lib/formGuard/useFormGuard";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signIn, fetchAuthSession } from "@aws-amplify/auth";
@@ -74,6 +76,7 @@ export default function LoginForm({
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const guard = useFormGuard("login");
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -93,6 +96,12 @@ export default function LoginForm({
     setSubmitting(true);
 
     try {
+      const gate = await guard.gate();
+      if (!gate.ok) {
+        setFormError(gate.error);
+        setSubmitting(false);
+        return;
+      }
       ensureAmplifyConfigured();
       const { isSignedIn, nextStep } = await signIn({
         username: parsed.data.email,
@@ -170,7 +179,7 @@ export default function LoginForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate {...guard.formProps}>
       {formError && (
         <p
           role="alert"
@@ -242,6 +251,8 @@ export default function LoginForm({
           Forgot password?
         </Link>
       </div>
+
+      <FormGuardFields guard={guard} />
 
       <button
         type="submit"

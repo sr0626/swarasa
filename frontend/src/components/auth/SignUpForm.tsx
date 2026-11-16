@@ -41,6 +41,8 @@
 // next step, and the existing LoginForm.tsx flow is what actually
 // establishes a session afterward.
 import { useState, type FormEvent } from "react";
+import { FormGuardFields } from "@/components/ui/FormGuardFields";
+import { useFormGuard } from "@/lib/formGuard/useFormGuard";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signUp } from "@aws-amplify/auth";
@@ -94,6 +96,7 @@ export default function SignUpForm({
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const guard = useFormGuard("signup");
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -130,6 +133,12 @@ export default function SignUpForm({
     setSubmitting(true);
 
     try {
+      const gate = await guard.gate();
+      if (!gate.ok) {
+        setFormError(gate.error);
+        setSubmitting(false);
+        return;
+      }
       ensureAmplifyConfigured();
       const { isSignUpComplete, nextStep } = await signUp({
         username: parsed.data.email,
@@ -175,7 +184,7 @@ export default function SignUpForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate {...guard.formProps}>
       {formError && (
         <p
           role="alert"
@@ -357,6 +366,8 @@ export default function SignUpForm({
           </p>
         )}
       </div>
+
+      <FormGuardFields guard={guard} />
 
       <button
         type="submit"

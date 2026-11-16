@@ -24,7 +24,10 @@
 // but has no location. The result carries `brandId` so the form can retry
 // ONLY the location step (`existingBrandId`) instead of creating a
 // duplicate brand.
+import { ApiError } from "@/lib/api/client";
 import { createRestaurant } from "@/lib/api/restaurants";
+import { guardHeadersFor } from "@/lib/formGuard/server";
+import { guardErrorMessage } from "@/lib/formGuard/guardLogic";
 import { getServerSession } from "@/lib/auth/session";
 import {
   apiMessageFor as messageFor,
@@ -55,7 +58,8 @@ export type AddRestaurantResult =
 
 export async function addRestaurantAction(
   input: unknown,
-  existingBrandId?: number
+  existingBrandId?: number,
+  guard?: unknown
 ): Promise<AddRestaurantResult> {
   const session = await getServerSession();
   if (!session) {
@@ -92,13 +96,18 @@ export async function addRestaurantAction(
           description: values.description,
           website: values.website,
         },
-        session.accessToken
+        session.accessToken,
+        // Form guard: the token covers THIS call only. The follow-on location
+        // call below is owner-gated and only per-user rate limited.
+        guardHeadersFor(guard)
       );
       brandId = brand.id;
     } catch (error) {
+      const guardMessage =
+        error instanceof ApiError ? guardErrorMessage(error.status, error.code) : null;
       return {
         ok: false,
-        error: messageFor(error, "Something went wrong creating your restaurant."),
+        error: guardMessage ?? messageFor(error, "Something went wrong creating your restaurant."),
       };
     }
   }

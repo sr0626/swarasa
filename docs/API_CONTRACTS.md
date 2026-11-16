@@ -4796,3 +4796,107 @@ summary such as `Catering quote from X: $450.50`; the bell links it to
 the `set_platform_int` management command, e.g.
 `{"_management_command": "set_platform_int", "key": "catering_max_restaurants", "value": 8}`
 (omit `value` to read it).
+
+---
+
+## Form guard (`/forms`) — honeypot, time-to-submit, rate limits
+
+Free in-app abuse checks on every public / user-submitted form, shipped as a
+first layer ahead of AWS WAF CAPTCHA. Authoritative checks live in the
+BACKEND (`services/form_guard_service.py`); the Next.js server only
+forwards what the browser collected. Backed by `form_guard_counter`
+(`docs/DATA_MODEL.md`, migration `0025_form_guard`).
+
+### Enforcement flag (rollout)
+`platform_config.form_guard_enforced` (bool, **default false**). While off,
+every check runs and a `would_block` log line is written
+(`form_guard would_block form=<form> reason=<reason>`, no PII) but NOTHING
+is rejected, so backend and frontend deploy in either order. Turn on only
+after both are deployed and verified:
+`{"_management_command": "set_platform_flag", "key": "form_guard_enforced", "value": true}`.
+The existing per-sender limits (`contact-admin` 5/hour, catering 5/day) and
+the existing `website` honeypot body field on `POST /reports` are NOT behind
+the flag (unchanged behaviour).
+
+### Request headers (server-to-server, set by the Next server)
+| Header | Meaning |
+|---|---|
+| `X-Form-Token` | token from `POST /forms/token` for THIS form (single use) |
+| `X-Form-Trap` | honeypot value; only sent when non-empty (a human never fills it) |
+| `X-Visitor-IP` | visitor's first-hop address as the Next server saw it. A HINT only: hashed (salted), never stored or logged raw, never trusted alone |
+
+### POST /forms/token — PUBLIC
+Body `{"form": "<name>"}`, `<name>` one of `report`, `claim`,
+`contact_admin`, `catering_request`, `brand_create`, `signup`, `forgot`,
+`reset`, `confirm`, `login` (`422` otherwise). `200`
+`{"token": "...", "min_seconds": 3}`, `Cache-Control: no-store`.
+Token = `<issued_at>.<nonce>.<HMAC-SHA256 signature>`; the form name is bound
+by the signature (a token for another form fails). The key is derived from
+`FORM_GUARD_SECRET` if set, else from the DB connection secret (already in
+Secrets Manager; no new secret or IAM grant). Tokens identify nobody. Rate
+limited (per visitor 120/h, per connection 60/h direct or 3000/h via the Next
+proxy; no global breaker). `503 unavailable` only if no secret is available.
+
+### POST /forms/verify — PUBLIC
+Body `{"form", "token", "trap"?}`. `204` when the token is valid for that form
+and old enough, then consumes it. Used by the Next server (server action
+`verifyFormGateAction`) BEFORE the browser calls Cognito for sign-up /
+confirm / forgot / reset / sign-in. A tripped honeypot is a `400` here (no
+fake success: the caller would go on to Cognito).
+
+### Checks and errors (identical bodies for every reason)
+- `400 {"detail": "Please try again.", "code": "form_check_failed"}` — token
+  missing / malformed / forged / wrong form / too fast (< `min_seconds`) /
+  expired (> 2 h) / already used, or (non-report forms) honeypot filled.
+- `429 {"detail": "Too many requests. Please wait a while and try again.",
+  "code": "rate_limited"}` with `Retry-After` (seconds to window end).
+- A bad token is rejected BEFORE any counter write (a garbage flood costs no
+  store traffic). If the counter store is unavailable (e.g. migration not run)
+  the guard fails OPEN and logs; token verification stays stateless.
+
+### Per-form policy (per hour bucket; defaults in `form_guard_service.POLICIES`)
+| Form | Endpoint | Token (min s) | Limits (per hour) | Honeypot hit |
+|---|---|---|---|---|
+| `report` | `POST /reports` (anon + optional auth) | yes (3) | visitor 5, proxied-connection 300, direct-connection 5, signed-in user 10, global 60 | `201` receipt, nothing stored |
+| `claim` | `POST /claim` | yes (5) | user 5, global 100 | `400` |
+| `contact_admin` | `POST /contact-admin` | yes (3) | global 100 (+ existing 5/h per sender) | `400` |
+| `catering_request` | `POST /catering/requests` | yes (5) | global 200 (+ existing 5/day per user) | `400` |
+| `brand_create` | `POST /restaurants` | yes (4) | user 20, global 200 | `400` |
+| `location_create` | `POST /locations` | no | user 40, global 400 | n/a |
+| `manager_invite` | `POST /locations/{id}/manager-invites` | no | user 30, global 300 | n/a |
+| `signup` `forgot` `reset` `confirm` `login` | `POST /forms/verify` | yes (4/2/3/2/1) | visitor 5/5/10/15/40, global 60/60/120/200/none | `400` |
+
+Counter scopes: `v` per forwarded-visitor hash (tight, forgeable by a direct
+caller), `c` per connection hash when a visitor header is present (generous:
+it is the shared Amplify egress), `d` per connection hash when no visitor
+header is present (tight: a direct caller's real address), `u` per
+signed-in-user hash (unforgeable), `g` global per form (the control that
+bounds a distributed or header-forging flood). Global limits are tunable:
+`{"_management_command": "set_platform_int", "key": "form_guard_global_per_hour_report", "value": 120}`
+(1..100000; key = `form_guard_global_per_hour_<form>`).
+
+### Not covered (by design)
+- `POST /track/location/{id}`: unchanged (always `204`, no rows created — it
+  only bumps one aggregate counter per location per day, so it cannot fill
+  the database; a DB-backed breaker would add a write per beacon).
+- `POST /manager-invites/preview|accept`: the 256-bit single-use token is the
+  credential; a guess creates no row.
+- `POST /me/data-deletion`: already one pending request per user (`409`).
+- follow / unfollow, `POST /activity/tile-click`, notification reads,
+  catering inbox response, photo/menu upload-url presigns: signed-in,
+  role-gated, bounded rows (unique pairs / size-capped / no creation).
+- `/contact` page: a static `mailto:` page, there is no submission to guard.
+- Direct calls to Cognito's public API (sign-up, forgot password, sign-in)
+  bypass the Next server entirely, so the form guard cannot protect them.
+  Only AWS WAF ACFP / Cognito advanced security could; that is a later
+  decision.
+
+### Frontend (not an API, for reference)
+`useFormGuard(form)` fetches a token lazily on first focus/tap in the form
+(via same-origin `POST /api/form-token`, which relays to `/forms/token` and
+forwards `X-Visitor-IP`), waits out `min_seconds` silently at submit, sends
+`{token, trap}` to the server action (never from the browser to the API),
+and drops the single-use token after every attempt. `FormGuardFields` renders
+the off-screen honeypot (`referral_code2`, aria-hidden, tabindex -1,
+autocomplete off) and a hidden token input. If the token fetch fails the form
+still submits; the backend then answers its generic "please try again".

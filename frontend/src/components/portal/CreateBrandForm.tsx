@@ -22,6 +22,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { FormGuardFields } from "@/components/ui/FormGuardFields";
+import { useFormGuard } from "@/lib/formGuard/useFormGuard";
 import { addRestaurantAction } from "@/app/portal/brands/new/actions";
 import CuisineTagPicker from "@/components/portal/CuisineTagPicker";
 import { Field, LocationFields, labelClass } from "@/components/portal/formFields";
@@ -56,6 +58,7 @@ const EMPTY_VALUES: FormValues = {
 export default function CreateBrandForm({ cuisineTags }: { cuisineTags: CuisineTag[] }) {
   const router = useRouter();
   const [values, setValues] = useState<FormValues>(EMPTY_VALUES);
+  const guard = useFormGuard("brand_create");
   const [selectedTagIds, setSelectedTagIds] = useState<Set<number>>(new Set());
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [saving, setSaving] = useState(false);
@@ -121,11 +124,18 @@ export default function CreateBrandForm({ cuisineTags }: { cuisineTags: CuisineT
 
     setSaving(true);
     try {
-      const result = await addRestaurantAction(input, createdBrandId ?? undefined);
+      // A token is only needed for the brand-creating call; a retry of just the
+      // address step (createdBrandId set) makes no guarded call.
+      const result = await addRestaurantAction(
+        input,
+        createdBrandId ?? undefined,
+        createdBrandId === null ? await guard.prepare() : undefined
+      );
       if (result.ok) {
         router.push(`/portal/locations/${result.locationId}?new=${result.mapPosition}`);
         return;
       }
+      guard.refresh();
       if (result.brandId !== undefined) setCreatedBrandId(result.brandId);
       if (result.fieldErrors) {
         setFieldErrors(result.fieldErrors);
@@ -134,6 +144,7 @@ export default function CreateBrandForm({ cuisineTags }: { cuisineTags: CuisineT
       setError(result.error);
       setSaving(false);
     } catch {
+      guard.refresh();
       setError(
         brandLocked
           ? "Something went wrong saving the address. Please try again."
@@ -144,7 +155,7 @@ export default function CreateBrandForm({ cuisineTags }: { cuisineTags: CuisineT
   }
 
   return (
-    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-8">
+    <form onSubmit={handleSubmit} noValidate {...guard.formProps} className="flex flex-col gap-8">
       {brandLocked && (
         <div
           role="status"
@@ -257,6 +268,8 @@ export default function CreateBrandForm({ cuisineTags }: { cuisineTags: CuisineT
 
         <LocationFields values={values} errors={fieldErrors} onChange={set} />
       </fieldset>
+
+      <FormGuardFields guard={guard} />
 
       {error && (
         <p

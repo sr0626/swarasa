@@ -19,6 +19,8 @@
 // `frontend/src/lib/api/locations.ts`'s photo upload already uses
 // (getLocationPhotoUploadUrl -> PUT to S3 -> createLocationPhoto).
 import { useState } from "react";
+import { FormGuardFields } from "@/components/ui/FormGuardFields";
+import { useFormGuard } from "@/lib/formGuard/useFormGuard";
 import LocalDateTime from "@/components/ui/LocalDateTime";
 import Link from "next/link";
 import { submitClaimAction } from "@/app/claim/actions";
@@ -73,6 +75,7 @@ export default function ClaimForm({ brandId, brandName, locations }: ClaimFormPr
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<ClaimResponse | null>(null);
+  const guard = useFormGuard("claim");
 
   const needsLocationPicker = proofMethod === "phone_verification" && locations.length > 1;
 
@@ -105,7 +108,7 @@ export default function ClaimForm({ brandId, brandName, locations }: ClaimFormPr
 
     setSubmitting(true);
     try {
-      const outcome = await submitClaimAction(input);
+      const outcome = await submitClaimAction(input, await guard.prepare());
       if (outcome.ok) {
         setResult(outcome.claim);
       } else {
@@ -117,6 +120,7 @@ export default function ClaimForm({ brandId, brandName, locations }: ClaimFormPr
       // reset and nothing at all was shown.
       setSubmitError("Something went wrong submitting your claim. Please try again.");
     } finally {
+      guard.refresh();
       setSubmitting(false);
     }
   }
@@ -176,6 +180,7 @@ export default function ClaimForm({ brandId, brandName, locations }: ClaimFormPr
   return (
     <form
       onSubmit={handleSubmit}
+      {...guard.formProps}
       className="rounded-brand-card border border-brand-border bg-white p-6 shadow-brand-card sm:p-8"
     >
       <fieldset>
@@ -297,6 +302,8 @@ export default function ClaimForm({ brandId, brandName, locations }: ClaimFormPr
           </div>
         )}
       </div>
+
+      <FormGuardFields guard={guard} />
 
       {(fieldError || submitError) && (
         <p className="mt-4 rounded-brand-control bg-brand-closed-bg px-3 py-2.5 text-sm text-brand-closed">

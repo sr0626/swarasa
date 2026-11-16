@@ -66,11 +66,12 @@ export async function getCateringEligibility(locationId: number): Promise<Eligib
 /** POST /catering/requests — registered_user. */
 export async function createCateringRequest(
   input: CateringRequestInput,
-  accessToken: string
+  accessToken: string,
+  guardHeaders?: Record<string, string>
 ): Promise<CateringRequest> {
   return apiFetch<CateringRequest>(
     "/catering/requests",
-    { method: "POST", body: JSON.stringify(input) },
+    { method: "POST", body: JSON.stringify(input), headers: guardHeaders },
     { accessToken }
   );
 }

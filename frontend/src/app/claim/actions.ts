@@ -13,6 +13,8 @@
 // `session.accessToken` as a prop — this action re-reads the session from
 // the httpOnly cookie itself and attaches the token to the real API call.
 import { ApiError } from "@/lib/api/client";
+import { guardHeadersFor } from "@/lib/formGuard/server";
+import { guardErrorMessage } from "@/lib/formGuard/guardLogic";
 import { submitClaim } from "@/lib/api/claim";
 import { getServerSession } from "@/lib/auth/session";
 import { createClaimSchema } from "@/lib/validation/claim";
@@ -23,7 +25,8 @@ export type SubmitClaimActionResult =
   | { ok: false; error: string };
 
 export async function submitClaimAction(
-  input: unknown
+  input: unknown,
+  guard?: unknown
 ): Promise<SubmitClaimActionResult> {
   const session = await getServerSession();
   if (!session) {
@@ -40,10 +43,12 @@ export async function submitClaimAction(
   }
 
   try {
-    const claim = await submitClaim(parsed.data, session.accessToken);
+    const claim = await submitClaim(parsed.data, session.accessToken, guardHeadersFor(guard));
     return { ok: true, claim };
   } catch (error) {
     if (error instanceof ApiError) {
+      const guardMessage = guardErrorMessage(error.status, error.code);
+      if (guardMessage) return { ok: false, error: guardMessage };
       if (error.status === 409) {
         return {
           ok: false,

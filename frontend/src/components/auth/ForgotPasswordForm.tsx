@@ -9,6 +9,8 @@
 // whether or not the email is registered — the success copy below is
 // worded accordingly, never confirming or denying an account exists.
 import { useState, type FormEvent } from "react";
+import { FormGuardFields } from "@/components/ui/FormGuardFields";
+import { useFormGuard } from "@/lib/formGuard/useFormGuard";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { resetPassword } from "@aws-amplify/auth";
@@ -27,6 +29,7 @@ export default function ForgotPasswordForm() {
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const guard = useFormGuard("forgot");
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -46,6 +49,12 @@ export default function ForgotPasswordForm() {
     setSubmitting(true);
 
     try {
+      const gate = await guard.gate();
+      if (!gate.ok) {
+        setFormError(gate.error);
+        setSubmitting(false);
+        return;
+      }
       ensureAmplifyConfigured();
       await resetPassword({ username: parsed.data.email });
       router.push(
@@ -58,7 +67,7 @@ export default function ForgotPasswordForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate {...guard.formProps}>
       {formError && (
         <p
           role="alert"
@@ -90,6 +99,8 @@ export default function ForgotPasswordForm() {
           <p className="text-sm text-brand-closed">{fieldErrors.email}</p>
         )}
       </div>
+
+      <FormGuardFields guard={guard} />
 
       <button
         type="submit"

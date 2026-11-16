@@ -41,6 +41,7 @@ from app.models.user_notification import UserNotification
 from app.models.manager_invite import ManagerInvite
 from app.models.location_daily_stat import LocationDailyStat
 from app.models.catering import CateringRequest, CateringRequestItem, CateringRequestRecipient
+from app.models.form_guard_counter import FormGuardCounter
 
 __all__ = [
     "OwnerAccount",
@@ -73,4 +74,5 @@ __all__ = [
     "CateringRequest",
     "CateringRequestItem",
     "CateringRequestRecipient",
+    "FormGuardCounter",
 ]

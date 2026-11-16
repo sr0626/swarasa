@@ -25,6 +25,7 @@ _STATUS_CODES = {
     404: "not_found",
     405: "method_not_allowed",
     409: "conflict",
+    429: "rate_limited",
     422: "validation_error",
     500: "internal_error",
 }
@@ -44,6 +45,7 @@ class AppError(Exception):
         detail: str,
         code: str,
         extra: dict[str, object] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         self.status_code = status_code
         self.detail = detail
@@ -52,6 +54,8 @@ class AppError(Exception):
         # `detail`/`code` (e.g. `missing` on `listing_incomplete`). Must never
         # carry internal details — same rule as `detail`.
         self.extra = extra or {}
+        # Optional response headers (e.g. `Retry-After` on a 429).
+        self.headers = headers
         super().__init__(detail)
 
 
@@ -65,6 +69,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=exc.status_code,
             content={**exc.extra, "detail": exc.detail, "code": exc.code},
+            headers=exc.headers,
         )
 
     @app.exception_handler(RequestValidationError)
