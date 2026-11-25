@@ -27,6 +27,7 @@ from factories import create_brand, create_location
 
 async def test_unauthed_user_can_view_a_restaurant(client, db_session, as_anonymous):
     brand = await create_brand(db_session, is_claimed=True, name="Public Spice House")
+    await create_location(db_session, brand_id=brand.id)  # public brands need one active location
     await db_session.commit()
 
     response = await client.get(f"/restaurants/{brand.id}")
@@ -46,6 +47,7 @@ async def test_unauthed_user_can_view_a_restaurant_by_slug(client, db_session, a
     restaurant_service.get_restaurant.
     """
     brand = await create_brand(db_session, is_claimed=True, name="Slug Lookup House")
+    await create_location(db_session, brand_id=brand.id)  # public brands need one active location
     await db_session.commit()
 
     response = await client.get(f"/restaurants/{brand.slug}")
@@ -65,9 +67,11 @@ async def test_restaurant_lookup_404s_for_unknown_slug(client, as_anonymous):
 async def test_unauthed_user_can_view_unclaimed_listing_with_claim_cta_data(client, db_session, as_anonymous):
     """DECISIONS.md "Claim flow": unclaimed listings (owner_id NULL,
     is_claimed=false) "stay visible and searchable ... nothing is hidden
-    while unclaimed."
+    while unclaimed." (A listing with no active location is hidden whether
+    claimed or not: see test_brand_visibility.py.)
     """
     brand = await create_brand(db_session, is_claimed=False, owner_id=None)
+    await create_location(db_session, brand_id=brand.id)  # public brands need one active location
     await db_session.commit()
 
     response = await client.get(f"/restaurants/{brand.id}")

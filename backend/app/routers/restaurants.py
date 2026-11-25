@@ -2,7 +2,8 @@
 (restaurant_brand)".
 
 Public: GET /restaurants/{id}, GET /restaurants/{id}/locations
-(backend/CLAUDE.md "Public Routes"). Everything else requires auth,
+(backend/CLAUDE.md "Public Routes"); the brand reads 404 for the public while
+the brand has no active location. Everything else requires auth,
 including the owner/admin-scoped list below (bare GET /restaurants).
 """
 from __future__ import annotations
@@ -135,12 +136,14 @@ async def list_restaurants(
 # so the literal `by-slug` segment is never swallowed by those path params.
 @router.get("/by-slug/{brand_slug}", response_model=RestaurantPublicOut)
 async def get_restaurant_by_slug(
-    brand_slug: str, db: AsyncSession = Depends(get_db)
+    brand_slug: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser | None = Depends(get_current_user_optional),
 ) -> RestaurantPublicOut:
     """Public. The brand plus its ACTIVE locations (cards) in one round trip —
     what the public `/restaurant/{brand_slug}` page renders from
     (docs/API_CONTRACTS.md "GET /restaurants/by-slug/{brand_slug}")."""
-    return await restaurant_service.get_public_restaurant_by_slug(db, brand_slug)
+    return await restaurant_service.get_public_restaurant_by_slug(db, brand_slug, current_user)
 
 
 @router.get(
@@ -161,10 +164,14 @@ async def get_location_page_by_slugs(
 
 
 @router.get("/{id_or_slug}", response_model=RestaurantOut)
-async def get_restaurant(id_or_slug: str, db: AsyncSession = Depends(get_db)) -> RestaurantOut:
+async def get_restaurant(
+    id_or_slug: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser | None = Depends(get_current_user_optional),
+) -> RestaurantOut:
     """`id_or_slug` may be the numeric `restaurant_brand.id` or its `slug`
     (docs/API_CONTRACTS.md "GET /restaurants/{id}")."""
-    return await restaurant_service.get_restaurant(db, id_or_slug)
+    return await restaurant_service.get_restaurant(db, id_or_slug, current_user)
 
 
 @router.get("/{brand_id}/locations", response_model=LocationListResponse)

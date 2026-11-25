@@ -25,10 +25,16 @@ export function googleMapsSearchUrl(fullAddress: string): string {
 }
 
 /**
- * The tile's single bottom-right cover chip: "Unclaimed" takes precedence
- * over an "N locations" count; null when neither applies.
+ * The tile's single bottom-right cover chip. A followed restaurant with no
+ * public location says so first; then "Unclaimed" takes precedence over an
+ * "N locations" count; null when none applies.
  */
-export function cardSideNote(isClaimed: boolean, locationCount: number): string | null {
+export function cardSideNote(
+  isClaimed: boolean,
+  locationCount: number,
+  isListed = true
+): string | null {
+  if (!isListed) return "Not listed right now";
   if (!isClaimed) return "Unclaimed";
   if (locationCount > 1) return `${locationCount} locations`;
   return null;

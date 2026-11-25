@@ -20,6 +20,7 @@ import RestaurantCard from "@/components/listing/RestaurantCard";
 import InfoPanel from "@/components/ui/InfoPanel";
 import Pagination from "@/components/search/Pagination";
 import SearchOriginNote from "@/components/search/SearchOriginNote";
+import { emptyResultsBody } from "@/lib/search/emptyResults";
 import { buildSearchHref, countFilters, type SearchFilters } from "@/lib/search/filters";
 import { loadSavedLocation } from "@/lib/search/loadSavedLocation";
 import { originNote, originSearchParams, resolveSearchOrigin } from "@/lib/search/searchOrigin";
@@ -109,13 +110,11 @@ export default async function SearchResults({ filters, page, location, query }: 
     return (
       <InfoPanel
         title="No restaurants match your search"
-        body={
-          countFilters(filters) > 0
-            ? filters.openNow
-              ? "No matching restaurants are open right now (restaurants with unknown hours are left out). Try removing a filter, or use Clear all to see everything nearby."
-              : "No restaurants have all of these tags yet. Try removing a filter, or use Clear all to see everything nearby."
-            : "No restaurants are listed here yet. Check back soon."
-        }
+        body={emptyResultsBody({
+          filterCount: countFilters(filters),
+          openNow: filters.openNow,
+          query,
+        })}
       />
     );
   }

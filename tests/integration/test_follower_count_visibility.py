@@ -65,6 +65,7 @@ async def test_public_single_restaurant_endpoint_never_includes_follower_count(
     owner_a = await create_owner(db_session)
     owner_b = await create_owner(db_session)
     brand = await create_brand(db_session, owner_id=owner_a.id, is_claimed=True)
+    await create_location(db_session, brand_id=brand.id)  # public brands need one active location
     await db_session.commit()
     await create_follow(db_session, brand_id=brand.id)
     await create_follow(db_session, brand_id=brand.id)
@@ -90,6 +91,7 @@ async def test_public_single_restaurant_endpoint_hides_follower_count_from_ownin
     `GET /restaurants` instead (covered above)."""
     owner = await create_owner(db_session)
     brand = await create_brand(db_session, owner_id=owner.id, is_claimed=True)
+    await create_location(db_session, brand_id=brand.id)  # public brands need one active location
     await db_session.commit()
     await create_follow(db_session, brand_id=brand.id)
     await db_session.commit()
@@ -103,6 +105,7 @@ async def test_public_single_restaurant_endpoint_hides_follower_count_from_ownin
 @pytest.mark.asyncio
 async def test_anonymous_caller_gets_null_follower_count(client, db_session, as_anonymous):
     brand = await create_brand(db_session, is_claimed=True)
+    await create_location(db_session, brand_id=brand.id)  # public brands need one active location
     await db_session.commit()
     await create_follow(db_session, brand_id=brand.id)
     await db_session.commit()

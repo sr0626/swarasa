@@ -44,7 +44,7 @@ export default async function AddLocationPage({ searchParams }: AddLocationPageP
   let brand: RestaurantBrand | null = null;
   if (brandId !== null) {
     try {
-      brand = await getRestaurantById(brandId);
+      brand = await getRestaurantById(brandId, session.accessToken);
     } catch {
       brand = null;
     }

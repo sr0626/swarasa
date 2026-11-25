@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from factories import create_brand, create_owner
+from factories import create_brand, create_location, create_owner
 
 
 @pytest.mark.asyncio
@@ -105,6 +105,7 @@ async def test_response_shape_matches_get_restaurant_by_id(client, db_session, a
     """
     owner = await create_owner(db_session)
     brand = await create_brand(db_session, owner_id=owner.id, is_claimed=True, name="Shape Check Brand")
+    await create_location(db_session, brand_id=brand.id)  # public brands need one active location
     await db_session.commit()
 
     as_user("owner", sub=owner.cognito_sub, email=owner.email)
