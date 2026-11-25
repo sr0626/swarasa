@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies.pagination import Pagination
 from app.models.catering import REQUEST_OPEN, CateringRequest, CateringRequestRecipient
 from app.schemas.catering import AdminCateringList, AdminCateringRowOut
-from app.services.catering_service import expire_due_requests
+from app.services.catering_service import effective_expiry, expire_due_requests
 
 
 def _escape_like(value: str) -> str:
@@ -73,7 +73,7 @@ async def list_requests(
                 headcount=req.headcount,
                 status=req.status,  # type: ignore[arg-type]
                 created_at=req.created_at,
-                expires_at=req.expires_at,
+                expires_at=effective_expiry(req),
                 recipient_count=total_recipients,
                 pending_count=int(pending),
                 quoted_count=int(quoted),

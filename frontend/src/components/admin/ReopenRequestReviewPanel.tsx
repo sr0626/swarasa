@@ -10,6 +10,7 @@
 // real irreversible-feeling step already happened on the owner's side
 // (marking it closed) and this is the review, not a second destructive
 // action.
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
 import LocalDateTime from "@/components/ui/LocalDateTime";
@@ -37,7 +38,11 @@ export default function ReopenRequestReviewPanel({
 }: ReopenRequestReviewPanelProps) {
   const [requests, setRequests] = useState<ReopenRequestQueueItem[]>(initialRequests);
 
+  const router = useRouter();
+
   function handleResolved(updated: ReopenRequestResponse) {
+    // Re-render the server parts too: the page's totals and the menu badges.
+    router.refresh();
     setRequests((prev) =>
       prev.flatMap((r) => {
         if (r.request_id !== updated.request_id) return [r];

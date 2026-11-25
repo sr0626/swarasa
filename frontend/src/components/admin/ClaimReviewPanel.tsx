@@ -4,6 +4,7 @@
 // The page loads the list server-side and passes it in; this component owns
 // per-card review actions only (approve / reject with reviewer notes). The
 // status filter and pagination live on the page as real links.
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
 import LocalDateTime from "@/components/ui/LocalDateTime";
@@ -55,7 +56,11 @@ export default function ClaimReviewPanel({
     setClaims((prev) => prev.map((c) => (c.claim_id === updated.claim_id ? { ...c, ...updated } : c)));
   }
 
+  const router = useRouter();
+
   function handleResolved(updated: ClaimResponse, reviewer: ClaimReviewer) {
+    // Re-render the server parts too: the page's totals and the menu badges.
+    router.refresh();
     const needsWarning = updated.owner_group_granted === false;
     if (needsWarning) {
       setOwnerGroupWarnings((prev) => new Set(prev).add(updated.claim_id));

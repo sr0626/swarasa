@@ -10,6 +10,7 @@ from geoalchemy2.functions import ST_MakePoint, ST_SetSRID
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import us_zip
 from app.core.errors import AppError
 from app.models.claim_request import ClaimRequest
 from app.models.location_manager import LocationManager
@@ -293,6 +294,8 @@ async def create_location(db: AsyncSession, body: LocationCreate, current_user) 
                 403, "Not authorized to add a location to this restaurant", "forbidden"
             )
 
+    _require_zip_in_state(body.postal_code, body.state)
+
     location = RestaurantLocation(
         brand_id=body.brand_id,
         # Fixed for life (never re-derived on an address edit) — see
@@ -377,6 +380,11 @@ _AUDITED_FIELDS = _UPDATABLE_FIELDS + _CLEARABLE_FIELDS
 _ADDRESS_BLOCK = ("address_line1", "city", "state", "postal_code")
 
 
+def _require_zip_in_state(postal_code: str, state: str) -> None:
+    if not us_zip.zip_matches_state(postal_code, state):
+        raise AppError(422, us_zip.mismatch_message(postal_code, state), "zip_state_mismatch")
+
+
 async def update_location(
     db: AsyncSession, location_id: int, body: LocationUpdate, current_user
 ) -> LocationOut:
@@ -402,6 +410,13 @@ async def update_location(
                 "be edited directly.",
                 "coordinates_not_editable",
             )
+
+    # Only when the ZIP or state actually changes, so an older row with a bad
+    # pair doesn't block unrelated edits (the editor sends every field).
+    new_state = (data.get("state") or location.state or "").upper()
+    new_postal = data.get("postal_code") or location.postal_code
+    if (new_state, new_postal) != ((location.state or "").upper(), location.postal_code):
+        _require_zip_in_state(new_postal, new_state)
 
     for field in _UPDATABLE_FIELDS:
         if field in data and data[field] is not None:

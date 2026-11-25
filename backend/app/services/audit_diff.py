@@ -20,7 +20,11 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import datetime
+from datetime import timezone as dt_timezone
 from typing import Any
+
+from app.services import hours_service
 
 _DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
@@ -68,6 +72,8 @@ _SKIP_KEYS = frozenset(
         "hours_updated_days",
         "hours",
         "deleted_at",
+        # Internal marker on a manual subscription change ("manual").
+        "note",
     }
 )
 _ADDRESS_KEYS = ("address_line1", "address_line2", "city", "state", "postal_code")
@@ -103,7 +109,19 @@ def _titleize(slug: str) -> str:
     return slug.replace("_", " ").replace("-", " ").strip().title()
 
 
-def format_value(key: str, value: Any) -> str | None:
+def _format_end_date(value: str, timezone_name: str) -> str:
+    """A stored end-of-day instant as the date it means: `Dec 31, 2026`."""
+    try:
+        instant = datetime.fromisoformat(value)
+    except ValueError:
+        return value
+    if instant.tzinfo is None:
+        instant = instant.replace(tzinfo=dt_timezone.utc)
+    local = instant.astimezone(hours_service.safe_zone(timezone_name))
+    return f"{local.strftime('%b')} {local.day}, {local.year}"
+
+
+def format_value(key: str, value: Any, timezone_name: str = "America/Chicago") -> str | None:
     """Friendly display string for one stored value. `None` = nothing (rendered
     as a dash by the UI)."""
     if value is None or value == "" or value == []:
@@ -114,6 +132,8 @@ def format_value(key: str, value: Any) -> str | None:
         return "Live" if value else "Hidden"
     if key == "phone":
         return format_phone(str(value))
+    if key == "paid_until":
+        return _format_end_date(str(value), timezone_name)
     if key == "cuisine_tags" and isinstance(value, list):
         return ", ".join(_titleize(str(v)) for v in value)
     if key == "specialties" and isinstance(value, list):
@@ -226,6 +246,7 @@ def diff_changes(
     new_val: dict | None,
     *,
     manager_label: str | None = None,
+    timezone_name: str = "America/Chicago",
 ) -> list[Change]:
     """The reader-facing changes for one audit row (see module docstring)."""
     old = old_val or {}
@@ -268,8 +289,8 @@ def diff_changes(
             Change(
                 field=key,
                 label=FIELD_LABELS.get(key, _titleize(key)),
-                old=format_value(key, old.get(key)),
-                new=format_value(key, new.get(key)),
+                old=format_value(key, old.get(key), timezone_name),
+                new=format_value(key, new.get(key), timezone_name),
             )
         )
 

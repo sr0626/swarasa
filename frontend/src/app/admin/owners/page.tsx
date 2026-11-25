@@ -14,6 +14,7 @@
 // this list includes every owner account, including ones that have not
 // added a restaurant yet -- so its total can be higher than the Overview
 // "Total owners" tile.
+import { formatPhone } from "@/lib/formatPhone";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import Link from "next/link";
@@ -267,7 +268,9 @@ function OwnerRow({ owner }: { owner: AdminOwnerRow }) {
               <span className="block text-xs text-brand-ink-muted">{owner.full_name}</span>
             )}
             {owner.phone && (
-              <span className="block text-xs text-brand-ink-subtle">{owner.phone}</span>
+              <span className="block text-xs text-brand-ink-subtle">
+                {formatPhone(owner.phone)}
+              </span>
             )}
           </>
         )}

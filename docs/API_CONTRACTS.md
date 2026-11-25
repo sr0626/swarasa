@@ -178,7 +178,10 @@ Notes:
   caller, including anonymous; never accompanied by deal title/
   description here — see `GET /locations/{id}`'s `deals_today` for the
   content-gated array. `docs/DECISIONS.md` "Deals: public boolean
-  signal, gated content".
+  signal, gated content". **Never true on a day the location is marked closed**
+  (2026-11-25; unknown hours do not count as closed). The same applies to the
+  `has_deals_today` filter, brand/city/follow tiles and `GET /locations/{id}`,
+  where such a deal moves to `upcoming_deals` with its next open occurrence.
 
 ---
 
@@ -989,6 +992,11 @@ kept and the owner sees a gentle notice.
 Response: `200`, same shape as `GET /locations/{id}`.
 
 Audit: `audit_log` row (`action="update"`).
+
+**ZIP and state** (2026-11-25, this route and `POST /locations`): on create, and
+on an update that changes either, the ZIP's first three digits must belong to
+the state, else `422` with `code: "zip_state_mismatch"`. A coarse check, not
+proof the ZIP exists. Bulk import reports the same code per row.
 
 ### PUT /locations/{id}/hours
 
@@ -2856,7 +2864,8 @@ endpoint could scope to.
   assignment history — that's the owner's business), `owner_account`
   rows, and (not yet applicable, but architecturally excluded by table
   rather than by field so it stays excluded once it exists) payment/
-  billing internals.
+  billing internals. Manual subscription changes (`restaurant_location` rows
+  marked `note: "manual"`) are excluded from the manager feed (2026-11-25).
 
 See `backend/app/services/audit_query_service.py` module docstring for
 the full per-role table/action breakdown and the reasoning behind each
@@ -4736,7 +4745,9 @@ requesting is a diner action, like follows).
   not available") if ANY chosen location is not eligible — the same response
   for unknown, hidden, deleted-brand, free, lapsed and not-opted-in, so nothing
   about a specific restaurant is revealed; `429 rate_limited` (5 requests per
-  rolling 24h per user). Expires after 14 days. Audited (`catering_request`).
+  rolling 24h per user). Closes at the earlier of 14 days and the end of the event
+  date (America/Chicago); `expires_at` reports that instant. Audited
+  (`catering_request`). The requester can also close it earlier with cancel.
 - `GET /catering/requests?page=&page_size=` — own requests, newest first, each
   `{id, event_date, headcount, delivery_or_pickup, delivery_city, delivery_zip,
   requester_phone, notes, status, created_at, expires_at, items[], recipients:[{
@@ -4788,8 +4799,8 @@ outside the caller's scope is `404`. `registered_user` -> `403`.
 - `PUT /admin/locations/{location_id}/subscription` (admin only) — **MANUAL paid
   flag, no payment taken**, used as "subscribed" until a payment processor exists.
   Body `{is_paid: bool, paid_until: "YYYY-MM-DD" | null}`. `is_paid=false` always
-  clears `paid_until`; a given `paid_until` (end of that UTC day) must be in the
-  future (`422`); unknown location `404`. Returns `{location_id, is_paid,
+  clears `paid_until`; a given `paid_until` (end of that day in the location's
+  time zone) must be in the future (`422`); unknown location `404`. Returns `{location_id, is_paid,
   paid_until, subscribed}`. Audited on `restaurant_location` with old/new values,
   actor admin and `note: "manual"`. Does not touch Stripe code paths and does not
   gate any existing free feature (menu, deals).

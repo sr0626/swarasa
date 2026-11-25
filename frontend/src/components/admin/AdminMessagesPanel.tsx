@@ -5,6 +5,7 @@
 // name) and the related location, and lets the admin mark it resolved or
 // re-open it. The status tabs, search and pagination live on the page as real
 // links / a GET form, so this component only owns per-card actions.
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
 import { updateMessageStatusAction } from "@/app/admin/messages/actions";
@@ -44,7 +45,11 @@ export default function AdminMessagesPanel({
 }: AdminMessagesPanelProps) {
   const [messages, setMessages] = useState<AdminMessage[]>(initialMessages);
 
+  const router = useRouter();
+
   function handleUpdated(updated: AdminMessage) {
+    // Re-render the server parts too: the page's totals and the menu badges.
+    router.refresh();
     setMessages((prev) =>
       prev.flatMap((m) => {
         if (m.message_id !== updated.message_id) return [m];

@@ -30,6 +30,7 @@
 // Provenance (admin-only, from the same endpoint): each brand shows its
 // owner ("Owner: <email>" / "Unclaimed") and each brand AND location shows
 // "Created <date> by <who> (<role>)".
+import { formatPhone } from "@/lib/formatPhone";
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import {
@@ -865,7 +866,9 @@ function LocationRow({
           </>
         )
       )}
-      {location.phone && <p className="text-xs text-brand-ink-subtle">{location.phone}</p>}
+      {location.phone && (
+        <p className="text-xs text-brand-ink-subtle">{formatPhone(location.phone)}</p>
+      )}
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
         {highlight && <span className={`${TAG} bg-brand-accent text-white`}>Matches filter</span>}
         <span className={`${TAG} ${STATUS_TAG_CLASS[location.status]}`}>

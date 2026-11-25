@@ -270,7 +270,9 @@ async def _active_location_cards(db: AsyncSession, brand_id: int) -> list[BrandL
                 is_closed=status.is_closed,
                 opens_later_today=status.opens_later_today,
                 has_deal_today=any(
-                    deal_service.deal_matches_today(d, row.timezone)
+                    deal_service.deal_matches_today(
+                        d, row.timezone, closed_today=bool(status.is_closed)
+                    )
                     for d in deals_by_location.get(row.id, [])
                 ),
                 cover_photo_url=s3_service.resolve_media_url(cover.s3_key) if cover else None,

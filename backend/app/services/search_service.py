@@ -271,9 +271,14 @@ async def search(
     deals_by_location = await deal_service.get_active_deals_map(
         db, [row.location_id for row in candidates]
     )
+    closed_today = await deal_service.closed_today_location_ids(
+        db, [(row.location_id, row.timezone) for row in candidates], deals_by_location
+    )
     has_deal_today_by_location: dict[int, bool] = {
         row.location_id: any(
-            deal_service.deal_matches_today(d, row.timezone)
+            deal_service.deal_matches_today(
+                d, row.timezone, closed_today=row.location_id in closed_today
+            )
             for d in deals_by_location.get(row.location_id, [])
         )
         for row in candidates

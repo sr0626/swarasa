@@ -3251,6 +3251,22 @@ in setup would stay readable, unlike its locations); Rejected: Keeping a
 name-only page for claim-by-URL (publishes the unreviewed data the import
 status exists to hold back)*
 
+2026-11-25 | Rules settled after the UAT run:
+(1) A catering request closes at the earlier of 14 days and the end of its event
+date; the requester can cancel sooner (user decision). Applied on read, so older
+requests follow it.
+(2) No "deal(s) available today" on a day the location is marked closed all day;
+the deal is listed under upcoming instead. Unknown hours do not count as closed.
+(3) A manual catering subscription also makes the listing "Featured" and ranks
+it first — confirmed as wanted (user decision), because both come from `is_paid`.
+(4) A manual subscription end date means the end of that day at the location.
+(5) A ZIP code must belong to its state (first three digits). Checked only when
+the ZIP or state changes, so older rows stay editable.
+(6) Managers never see subscription changes in their activity feed; claim
+rejections are now in the audit log.
+*Rejected: validating that a ZIP exists (needs a ZIP database); Rejected:
+rewriting stored catering expiry dates (not needed when applied on read)*
+
 ---
 
 ## Agent Architecture
