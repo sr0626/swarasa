@@ -3236,6 +3236,21 @@ Owners can later claim and enrich their own listing.
 quality risk), partner/restaurant self-submission for the initial 500 (too slow
 to reach launch volume, no accounts exist yet)*
 
+2026-11-24 | A restaurant brand is publicly readable only while it has at
+least one `active` location. `GET /restaurants/{id_or_slug}` and
+`GET /restaurants/by-slug/{brand_slug}` (and so the `/restaurant/{brand}` page)
+return 404 otherwise, to everyone except an admin, the owning owner and an
+active manager of one of its locations. Found in the UAT run: imported,
+unreviewed listings were readable by anyone who guessed the name, although
+locations were already hidden. Applies to claimed and unclaimed brands alike,
+so a hidden unclaimed listing cannot be claimed from the site until it is
+activated. A follower keeps the tile ("Not listed right now", not a link) and
+can still unfollow.
+*Rejected: Hiding only unclaimed brands (a claimed restaurant that is closed or
+in setup would stay readable, unlike its locations); Rejected: Keeping a
+name-only page for claim-by-URL (publishes the unreviewed data the import
+status exists to hold back)*
+
 ---
 
 ## Agent Architecture

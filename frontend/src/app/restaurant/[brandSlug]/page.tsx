@@ -2,7 +2,8 @@
 // canonical, per frontend/CLAUDE.md's "SEO Requirements". What it renders
 // depends on how many ACTIVE locations the brand has (lib/restaurant/pageMode.ts):
 //
-//   0 locations -> a brand-only page (name, description, claim CTA)
+//   0 locations -> not public (404). Only an admin, the owner or a manager of
+//                  the brand gets a brand-only preview page.
 //   1 location  -> THAT location's full profile, right here at the short brand
 //                  URL (canonical = this URL). The long location URL
 //                  /restaurant/{brand}/{location} also works and canonicalises here.
@@ -11,7 +12,7 @@
 //
 // So every old shared link to /restaurant/{brandSlug} keeps working — even
 // once a second location is added (the URL then becomes the landing page).
-// Unknown / soft-deleted brand -> 404.
+// Unknown / soft-deleted / hidden (no active location) brand -> 404.
 //
 // Data: ONE round trip for the brand + its active location cards
 // (`GET /restaurants/by-slug/{brand}`), plus the sole location's full detail
@@ -38,9 +39,12 @@ interface BrandPageProps {
   params: { brandSlug: string };
 }
 
-async function loadBrand(brandSlug: string): Promise<RestaurantPublic | null> {
+async function loadBrand(
+  brandSlug: string,
+  accessToken?: string
+): Promise<RestaurantPublic | null> {
   try {
-    return await getRestaurantPublicBySlug(brandSlug);
+    return await getRestaurantPublicBySlug(brandSlug, accessToken);
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) return null;
     throw error;
@@ -48,7 +52,8 @@ async function loadBrand(brandSlug: string): Promise<RestaurantPublic | null> {
 }
 
 export async function generateMetadata({ params }: BrandPageProps): Promise<Metadata> {
-  const restaurant = await loadBrand(params.brandSlug);
+  const session = await getServerSession();
+  const restaurant = await loadBrand(params.brandSlug, session?.accessToken);
   if (!restaurant) return { title: "Restaurant Not Found" };
 
   const mode = decideBrandPage(restaurant.locations);
@@ -71,7 +76,7 @@ export async function generateMetadata({ params }: BrandPageProps): Promise<Meta
 
 export default async function BrandPage({ params }: BrandPageProps) {
   const session = await getServerSession();
-  const restaurant = await loadBrand(params.brandSlug);
+  const restaurant = await loadBrand(params.brandSlug, session?.accessToken);
   if (!restaurant) notFound();
 
   const currentPath = brandHref(restaurant.slug);

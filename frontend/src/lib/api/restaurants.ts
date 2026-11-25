@@ -78,12 +78,20 @@ export async function getMyRestaurants(
   );
 }
 
-/** GET /restaurants/{id} — public. Used by the SSR listing page. */
-export async function getRestaurantById(id: number): Promise<RestaurantBrand> {
+/**
+ * GET /restaurants/{id} — public and viewer-aware. A brand with no active
+ * location is a 404 unless `accessToken` belongs to an admin, its owner or one
+ * of its managers, so console pages must pass the token. Authenticated reads
+ * are never Next-cached.
+ */
+export async function getRestaurantById(
+  id: number,
+  accessToken?: string
+): Promise<RestaurantBrand> {
   return apiFetch<RestaurantBrand>(
     `/restaurants/${id}`,
     { method: "GET" },
-    { revalidateSeconds: 60 }
+    { accessToken, revalidateSeconds: accessToken ? undefined : 60 }
   );
 }
 
@@ -106,13 +114,17 @@ export async function getRestaurantBySlug(slug: string): Promise<RestaurantBrand
  * GET /restaurants/by-slug/{brand_slug} — public. The brand plus its ACTIVE
  * locations (cards) in ONE round trip: what `/restaurant/{brandSlug}` renders
  * from (one location -> that location's profile, several -> the landing page).
- * 404 for an unknown or soft-deleted brand.
+ * 404 for an unknown or soft-deleted brand, and for one with no active
+ * location unless `accessToken` is an admin's, its owner's or a manager's.
  */
-export async function getRestaurantPublicBySlug(brandSlug: string): Promise<RestaurantPublic> {
+export async function getRestaurantPublicBySlug(
+  brandSlug: string,
+  accessToken?: string
+): Promise<RestaurantPublic> {
   return apiFetch<RestaurantPublic>(
     `/restaurants/by-slug/${encodeURIComponent(brandSlug)}`,
     { method: "GET" },
-    { revalidateSeconds: 60 }
+    { accessToken, revalidateSeconds: accessToken ? undefined : 60 }
   );
 }
 

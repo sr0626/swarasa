@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import AppError
 from app.dependencies.pagination import Pagination
 from app.models.claim_request import ClaimRequest
+from app.models.location_manager import LocationManager
 from app.models.owner_account import OwnerAccount
 from app.models.restaurant_brand import RestaurantBrand
 from app.models.restaurant_location import RestaurantLocation
@@ -138,17 +139,64 @@ async def _brand_to_out(db: AsyncSession, brand: RestaurantBrand, current_user=N
     )
 
 
-async def get_restaurant(db: AsyncSession, id_or_slug: str) -> RestaurantOut:
+async def _ensure_brand_readable(
+    db: AsyncSession, brand: RestaurantBrand, current_user
+) -> None:
+    """The visibility gate behind the PUBLIC brand reads (`GET
+    /restaurants/{id_or_slug}`, `GET /restaurants/by-slug/{brand_slug}`): a
+    brand is public only while it has at least one `active` location —
+    otherwise (hidden, in setup, imported and unreviewed, closed, or with no
+    location at all) it 404s, never 403, so a caller can't tell "hidden" from
+    "doesn't exist". Admins, the owning owner and an active manager of one of
+    its locations can still read it (the console and previews need it) —
+    the same access rule as `location_service.get_readable_location_or_404`.
+    """
+    active = await db.execute(
+        select(RestaurantLocation.id)
+        .where(
+            RestaurantLocation.brand_id == brand.id,
+            RestaurantLocation.status == RestaurantLocation.STATUS_ACTIVE,
+        )
+        .limit(1)
+    )
+    if active.scalar_one_or_none() is not None:
+        return
+    if current_user is not None:
+        if current_user.role == "admin":
+            return
+        if current_user.role == "owner" and brand.owner_id is not None:
+            owner = await auth_service.get_owner_account_by_sub(db, current_user.cognito_sub)
+            if owner is not None and owner.id == brand.owner_id:
+                return
+        if current_user.role == "manager":
+            assigned = await db.execute(
+                select(LocationManager.id)
+                .join(RestaurantLocation, RestaurantLocation.id == LocationManager.location_id)
+                .where(
+                    RestaurantLocation.brand_id == brand.id,
+                    LocationManager.user_id == current_user.cognito_sub,
+                    LocationManager.is_active == True,  # noqa: E712
+                )
+                .limit(1)
+            )
+            if assigned.scalar_one_or_none() is not None:
+                return
+    raise AppError(404, "Restaurant not found", "not_found")
+
+
+async def get_restaurant(
+    db: AsyncSession, id_or_slug: str, current_user=None
+) -> RestaurantOut:
     """`id_or_slug` resolves either the numeric `restaurant_brand.id` or its
     `slug` (docs/API_CONTRACTS.md "GET /restaurants/{id}"): all-digits ->
     id lookup, otherwise -> slug lookup.
 
-    Public — no `current_user` here, by design (the router has no auth
-    dependency at all for this route). `_brand_to_out`'s `follower_count`
-    therefore always comes back `null`: this endpoint must never leak a
-    brand's follower count to the public, including to the owner
-    themselves browsing their own public page or a different owner
-    probing another brand's id/slug (see `_caller_may_view_follower_count`).
+    Public. `current_user` only decides whether a brand with no active
+    location is readable (`_ensure_brand_readable`); it is deliberately NOT
+    passed to `_brand_to_out`, so `follower_count` always comes back `null`:
+    this endpoint must never leak a brand's follower count, including to the
+    owner browsing their own public page or a different owner probing
+    another brand's id/slug (see `_caller_may_view_follower_count`).
     """
     if id_or_slug.isdigit():
         brand = await db.get(RestaurantBrand, int(id_or_slug))
@@ -159,6 +207,7 @@ async def get_restaurant(db: AsyncSession, id_or_slug: str) -> RestaurantOut:
     # for this public route (docs/API_CONTRACTS.md "DELETE /restaurants/{id}").
     if brand is None or brand.deleted_at is not None:
         raise AppError(404, "Restaurant not found", "not_found")
+    await _ensure_brand_readable(db, brand, current_user)
     return await _brand_to_out(db, brand)
 
 
@@ -238,15 +287,19 @@ async def _active_location_cards(db: AsyncSession, brand_id: int) -> list[BrandL
     return cards
 
 
-async def get_public_restaurant_by_slug(db: AsyncSession, brand_slug: str) -> RestaurantPublicOut:
+async def get_public_restaurant_by_slug(
+    db: AsyncSession, brand_slug: str, current_user=None
+) -> RestaurantPublicOut:
     """`GET /restaurants/by-slug/{brand_slug}` — public. The brand plus its
     ACTIVE locations (one round trip for the public brand page). A
     nonexistent or soft-deleted brand is a 404 for everyone, admin included
-    (same as `get_restaurant`); a brand with no active location is still
-    returned, with `locations: []`."""
+    (same as `get_restaurant`). A brand with no active location 404s too,
+    except for its owner/assigned manager/an admin, who get it with
+    `locations: []` (`_ensure_brand_readable`)."""
     brand = await _brand_by_slug(db, brand_slug)
     if brand is None or brand.deleted_at is not None:
         raise AppError(404, "Restaurant not found", "not_found")
+    await _ensure_brand_readable(db, brand, current_user)
     base = await _brand_to_out(db, brand)
     return RestaurantPublicOut(
         **base.model_dump(), locations=await _active_location_cards(db, brand.id)

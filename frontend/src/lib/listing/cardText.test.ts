@@ -38,3 +38,8 @@ test("cardSideNote: shows the count only when there are several locations", () =
   assert.equal(cardSideNote(true, 1), null);
   assert.equal(cardSideNote(true, 0), null);
 });
+
+test("cardSideNote: a restaurant with no public location says so first", () => {
+  assert.equal(cardSideNote(false, 0, false), "Not listed right now");
+  assert.equal(cardSideNote(true, 0, false), "Not listed right now");
+});

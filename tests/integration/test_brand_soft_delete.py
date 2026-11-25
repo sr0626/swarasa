@@ -456,8 +456,9 @@ async def test_restore_clears_flag_keeps_locations_deactivated_and_is_idempotent
     assert len(restore_audit) == 1
     assert restore_audit[0].actor_id == admin.cognito_sub
 
-    # Public brand page is back; idempotent second restore adds no audit row.
-    assert (await client.get(f"/restaurants/{brand.id}")).status_code == 200
+    # Still not public: its locations stay deactivated, and a brand with no
+    # active location is hidden. Idempotent second restore adds no audit row.
+    assert (await client.get(f"/restaurants/{brand.id}")).status_code == 404
     assert (await client.post(f"/restaurants/{brand.id}/restore")).status_code == 200
     again = [
         r for r in await _audit_rows(db_session, "restaurant_brand", brand.id) if r.new_val == {"deleted_at": None}

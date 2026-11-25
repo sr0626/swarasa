@@ -12,8 +12,9 @@
 // SHARED TILE: used by the homepage's "Popular near you", the search results
 // and the account page's "Restaurants you follow" (FollowedRestaurantsGrid) —
 // one tile, never a fork. `item` is a `RestaurantCardItem`: a followed brand
-// whose locations are all inactive has `nearest_location: null`, and the
-// address / hours / deal badge / Featured ribbon rows are then simply omitted.
+// whose locations are all inactive has `nearest_location: null`; the tile is
+// then not a link (that brand has no public page), says "Not listed right
+// now", and omits the address / hours / deal badge / Featured ribbon rows.
 // `distance_mi` is null on the favourites grid (no viewer position), in which
 // case the address line shows no distance.
 //
@@ -44,7 +45,7 @@ import FollowButton from "@/components/ui/FollowButton";
 import { LocationPinIcon, StarIcon } from "@/components/ui/icons";
 import OpenStatusBadge from "@/components/ui/OpenStatusBadge";
 import { cardSideNote, formatFullAddress, googleMapsSearchUrl } from "@/lib/listing/cardText";
-import { brandHref, locationHref } from "@/lib/restaurant/urls";
+import { locationHref } from "@/lib/restaurant/urls";
 
 interface RestaurantCardProps {
   item: RestaurantCardItem;
@@ -90,7 +91,61 @@ export default function RestaurantCard({
   const fullAddress = nearest_location ? formatFullAddress(nearest_location) : null;
   // Bottom-right cover chip: one short note, Unclaimed taking precedence
   // over the locations count.
-  const sideNote = cardSideNote(item.is_claimed, item.location_count_nearby);
+  const sideNote = cardSideNote(
+    item.is_claimed,
+    item.location_count_nearby,
+    nearest_location !== null
+  );
+
+  const tileBody = (
+    <>
+      <div className="relative h-40 w-full shrink-0 overflow-hidden bg-brand-warm-gradient">
+        {coverPhoto ? (
+          // eslint-disable-next-line @next/next/no-img-element -- remote
+          // CloudFront URL, no next/image domain config for this host yet
+          // (same as RestaurantHero.tsx, the detail page's equivalent).
+          <img
+            src={coverPhoto}
+            alt={`${item.name} cover photo`}
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+        ) : (
+          <DefaultRestaurantImage />
+        )}
+        {nearest_location?.is_paid && (
+          <span className="absolute bottom-3 left-3 inline-flex items-center gap-1 rounded-brand-pill bg-brand-ink/85 px-2.5 py-1 text-xs font-semibold text-brand-bg">
+            <StarIcon className="h-3 w-3" />
+            Featured
+          </span>
+        )}
+        {nearest_location?.has_deal_today && (
+          // Top-left, a plain non-link badge for EVERY viewer: the whole tile
+          // is already the link (signed-out visitors get the sign-in prompt
+          // on the restaurant page's deals banner).
+          <DealBadge variant="overlay" className="absolute left-3 top-3" />
+        )}
+        {sideNote && (
+          <span className="absolute bottom-3 right-3 max-w-[40%] truncate rounded-brand-pill bg-brand-ink/85 px-2.5 py-1 text-xs font-semibold text-brand-bg">
+            {sideNote}
+          </span>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-1.5 px-4 pt-4">
+        <h3
+          title={item.name}
+          className="truncate font-display text-lg font-semibold leading-6 text-brand-ink"
+        >
+          {item.name}
+        </h3>
+        {cuisineLine && (
+          <p className="truncate text-xs font-medium leading-4 text-brand-ink-subtle">
+            {cuisineLine}
+          </p>
+        )}
+      </div>
+    </>
+  );
 
   return (
     // A plain <div>, not a <Link> — the address line below opens Google
@@ -103,72 +158,29 @@ export default function RestaurantCard({
     // sit absolutely positioned over the image's top-right corner without
     // living inside the card's own Link.
     <div className="group relative flex h-full min-h-[18.8rem] flex-col overflow-hidden rounded-brand-card border border-brand-border bg-white shadow-brand-card transition hover:shadow-brand-card-hover">
-      <TrackedTileLink
-        // The tile represents ONE location, so it links to that location's own page
-        // (a followed brand with no active location falls back to the brand URL).
-        href={
-          nearest_location
-            ? locationHref(item.slug, nearest_location.slug)
-            : brandHref(item.slug)
-        }
-        className="flex flex-col"
-        locationId={nearest_location?.location_id ?? null}
-        track={
-          isRegisteredUser && clickSource
-            ? {
-                brand_id: item.brand_id,
-                location_id: nearest_location?.location_id ?? null,
-                source: clickSource,
-              }
-            : undefined
-        }
-      >
-        <div className="relative h-40 w-full shrink-0 overflow-hidden bg-brand-warm-gradient">
-          {coverPhoto ? (
-            // eslint-disable-next-line @next/next/no-img-element -- remote
-            // CloudFront URL, no next/image domain config for this host yet
-            // (same as RestaurantHero.tsx, the detail page's equivalent).
-            <img
-              src={coverPhoto}
-              alt={`${item.name} cover photo`}
-              className="absolute inset-0 h-full w-full object-cover"
-            />
-          ) : (
-            <DefaultRestaurantImage />
-          )}
-          {nearest_location?.is_paid && (
-            <span className="absolute bottom-3 left-3 inline-flex items-center gap-1 rounded-brand-pill bg-brand-ink/85 px-2.5 py-1 text-xs font-semibold text-brand-bg">
-              <StarIcon className="h-3 w-3" />
-              Featured
-            </span>
-          )}
-          {nearest_location?.has_deal_today && (
-            // Top-left, a plain non-link badge for EVERY viewer: the whole tile
-            // is already the link (signed-out visitors get the sign-in prompt
-            // on the restaurant page's deals banner).
-            <DealBadge variant="overlay" className="absolute left-3 top-3" />
-          )}
-          {sideNote && (
-            <span className="absolute bottom-3 right-3 max-w-[40%] truncate rounded-brand-pill bg-brand-ink/85 px-2.5 py-1 text-xs font-semibold text-brand-bg">
-              {sideNote}
-            </span>
-          )}
-        </div>
-
-        <div className="flex flex-col gap-1.5 px-4 pt-4">
-          <h3
-            title={item.name}
-            className="truncate font-display text-lg font-semibold leading-6 text-brand-ink"
-          >
-            {item.name}
-          </h3>
-          {cuisineLine && (
-            <p className="truncate text-xs font-medium leading-4 text-brand-ink-subtle">
-              {cuisineLine}
-            </p>
-          )}
-        </div>
-      </TrackedTileLink>
+      {nearest_location ? (
+        <TrackedTileLink
+          // The tile represents ONE location, so it links to that location's own page.
+          href={locationHref(item.slug, nearest_location.slug)}
+          className="flex flex-col"
+          locationId={nearest_location.location_id}
+          track={
+            isRegisteredUser && clickSource
+              ? {
+                  brand_id: item.brand_id,
+                  location_id: nearest_location.location_id,
+                  source: clickSource,
+                }
+              : undefined
+          }
+        >
+          {tileBody}
+        </TrackedTileLink>
+      ) : (
+        // A followed restaurant with no public location has no public page to
+        // open; the tile stays so it can still be unfollowed.
+        <div className="flex flex-col">{tileBody}</div>
+      )}
 
       {showFollowButton && (
         <FollowButton

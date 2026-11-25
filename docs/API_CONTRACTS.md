@@ -329,6 +329,11 @@ geo component, no `nearest_location`/`distance_mi` fields at all.
 
 ### GET /restaurants/{id}
 
+**Visibility (public, viewer-aware):** `404` unless the brand has at least one
+`active` location, or the caller (optional bearer token) is an admin, the owning
+owner, or an active manager of one of its locations. A brand that is imported and
+unreviewed, in setup, hidden or closed is therefore not readable by name or id.
+
 Auth: none (public)
 
 **`{id}` accepts either the numeric `restaurant_brand.id` or the brand's
@@ -414,7 +419,10 @@ differ per branch). Additive: every location payload below gained `slug`
 Auth: none (public). The brand plus its **ACTIVE** locations in one round trip
 (what `/restaurant/{brand_slug}` renders from). 404 for an unknown or
 soft-deleted brand (admins included — same as `GET /restaurants/{id}`).
-A brand with no active location still returns 200 with `locations: []`.
+A brand with no `active` location is hidden: `404` for the public and for any
+signed-in user without access; an admin, the owning owner or an active manager
+of one of its locations gets `200` with `locations: []` (same rule on `GET
+/restaurants/{id}`).
 
 Response: every `GET /restaurants/{id}` field (`follower_count` always `null`;
 `location_count` = number of active locations) plus:

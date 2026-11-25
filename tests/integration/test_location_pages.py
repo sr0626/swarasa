@@ -351,15 +351,13 @@ async def test_brand_by_slug_card_fields_and_deal_signal(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_brand_by_slug_with_no_active_location_returns_empty_list(client, db_session):
+async def test_brand_by_slug_with_no_active_location_is_hidden_from_the_public(client, db_session):
     _owner, brand = await _owned_brand(db_session, slug="namaste-grill")
     await create_location(db_session, brand_id=brand.id, slug="irving", status="coming_soon")
     await db_session.commit()
 
     response = await client.get("/restaurants/by-slug/namaste-grill")
-    assert response.status_code == 200
-    assert response.json()["locations"] == []
-    assert response.json()["location_count"] == 0
+    assert response.status_code == 404
 
 
 @pytest.mark.asyncio
