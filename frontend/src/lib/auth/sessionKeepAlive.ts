@@ -42,6 +42,7 @@
 // moving off `@aws-amplify/auth` for the sign-in flow — too large a change
 // to fold into this PR blind, without a real Cognito pool to verify against.
 import { fetchAuthSession } from "@aws-amplify/auth";
+import { isSessionIdle, resetActivity } from "./activityStore";
 
 /** Refresh this long before the access token's real expiry, not exactly at it. */
 const REFRESH_BUFFER_MS = 5 * 60 * 1000;
@@ -50,6 +51,7 @@ const MIN_DELAY_MS = 10 * 1000;
 
 let timer: ReturnType<typeof setTimeout> | null = null;
 let running = false;
+let remember = false;
 
 export function stopSessionKeepAlive(): void {
   running = false;
@@ -59,8 +61,15 @@ export function stopSessionKeepAlive(): void {
   }
 }
 
-/** Idempotent — calling it while already running just no-ops instead of stacking timers. */
-export function startSessionKeepAlive(): void {
+/**
+ * Called right after a sign-in. Without "keep me signed in" the loop stops as
+ * soon as the visitor has been idle past the limit (lib/auth/activity.ts), so
+ * an unattended tab is still signed out. Calling it while already running does
+ * not stack timers.
+ */
+export function startSessionKeepAlive(options: { rememberMe: boolean }): void {
+  resetActivity();
+  remember = options.rememberMe;
   if (running) return;
   running = true;
   void scheduleFromCurrentSession();
@@ -88,6 +97,10 @@ async function scheduleFromCurrentSession(): Promise<void> {
 
 async function refreshAndReschedule(): Promise<void> {
   if (!running) return;
+  if (!remember && isSessionIdle()) {
+    stopSessionKeepAlive();
+    return;
+  }
   try {
     const refreshed = await fetchAuthSession({ forceRefresh: true });
     // Deliberately the ID token -- fixed 2026-09-18 alongside LoginForm.tsx,
@@ -104,7 +117,7 @@ async function refreshAndReschedule(): Promise<void> {
     const res = await fetch("/api/auth/session", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accessToken, rememberMe: true }),
+      body: JSON.stringify({ accessToken, rememberMe: remember }),
     });
 
     if (!res.ok) {

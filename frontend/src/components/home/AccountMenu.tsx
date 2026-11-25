@@ -20,6 +20,7 @@ import { useRouter } from "next/navigation";
 import { signOut } from "@aws-amplify/auth";
 import { ensureAmplifyConfigured } from "@/lib/auth/amplifyClient";
 import { stopSessionKeepAlive } from "@/lib/auth/sessionKeepAlive";
+import { useSessionActivity } from "@/lib/auth/useSessionActivity";
 import { announceMenuOpen, onOtherMenuOpen } from "@/lib/nav/exclusiveMenu";
 import { ChevronDownIcon } from "@/components/ui/icons";
 import type { UserRole } from "@/types/auth";
@@ -84,6 +85,9 @@ export default function AccountMenu({
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const itemRefs = useRef<Array<HTMLAnchorElement | HTMLButtonElement | null>>([]);
+  // Rendered only for a signed-in visitor, so this is where activity extends
+  // the session.
+  useSessionActivity();
 
   // Only one top-bar menu open at a time: announce this one, close on another's.
   const menuId = useId();
