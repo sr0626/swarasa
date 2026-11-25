@@ -116,9 +116,8 @@ function formatBoundary(
  *   start, no end -> "From Sep 25, 2026 · Ongoing"
  *   no start, end -> "Until Oct 31, 2026"       (legacy rows)
  *   neither       -> "Ongoing"                  (legacy rows)
- * `timeZone` is an IANA name (the location's, for the public list); omit it
- * to use the runtime's own zone (the owner's own browser, matching what
- * they typed into the form).
+ * `timeZone` is an IANA name (the location's, matching what the owner typed
+ * into the form); omit it to use the runtime's own zone.
  */
 export function formatDealDateRange(
   startAt: string | null | undefined,
@@ -206,7 +205,9 @@ export function dealTypeLabel(dealType: string | null | undefined): string {
 
 /**
  * Live owner-form hint. `endLocal` is the `<input type="datetime-local">`
- * value ("YYYY-MM-DDTHH:MM", browser-local, or ""); `ongoing` is the
+ * value ("YYYY-MM-DDTHH:MM", restaurant local time, or ""); it is only
+ * re-formatted here (parsed and printed in the same zone), never converted.
+ * `ongoing` is the
  * "Ongoing (no end date)" checkbox.
  *   ongoing                     -> "Will show as: Special (ongoing)"
  *   not ongoing, valid end date -> "Will show as: Deal (ends Oct 31, 2026)"

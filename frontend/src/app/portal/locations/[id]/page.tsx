@@ -229,6 +229,7 @@ export default async function PortalLocationPage({ params, searchParams }: Locat
         locationId={location.id}
         initialDeals={deals}
         initialDealsHidden={dealsHidden}
+        timeZone={location.timezone}
       />
     ) : (
       anchored(

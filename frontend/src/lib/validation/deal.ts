@@ -23,16 +23,15 @@ export const applicableDaysSchema = z
   });
 
 /**
- * `start_at`/`end_at` come from `<input type="datetime-local">`
- * ("YYYY-MM-DDTHH:MM", no timezone) and are converted to a real ISO instant
- * via `new Date(value).toISOString()` at the browser's own local timezone —
- * there is no established pattern elsewhere in this codebase for entering a
- * timestamp in the *location's* timezone specifically (LocationHoursEditor's
- * time inputs are plain wall-clock HH:MM with no date/timezone conversion at
- * all), so this uses the simplest correct option rather than inventing a new
- * one. Flagged in the PR description as a follow-up worth a closer look if
- * an owner and their location turn out to be in different timezones often.
+ * `start_at`/`end_at` as sent to the API: an instant WITH a zone ("...Z" or
+ * "+-hh:mm"). The form converts its `<input type="datetime-local">` values
+ * using the restaurant's time zone (`lib/deals/zonedTime.ts`) before they get
+ * here. A zone-less value is rejected: this schema also runs in a server
+ * action, where reading it as the machine's local time (UTC) saved deals
+ * hours early.
  */
+const ZONE_SUFFIX = /(Z|[+-]\d{2}:?\d{2})$/i;
+
 const optionalDateTimeSchema = z
   .string()
   .trim()
@@ -40,7 +39,7 @@ const optionalDateTimeSchema = z
   .transform((value, ctx): string | null => {
     if (!value) return null;
     const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) {
+    if (!ZONE_SUFFIX.test(value) || Number.isNaN(parsed.getTime())) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Enter a valid date and time" });
       return z.NEVER;
     }

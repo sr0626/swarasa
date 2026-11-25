@@ -39,6 +39,7 @@ import {
   formatDealDateRange,
   formatDealDays,
 } from "@/lib/deals/format";
+import { isoToWallClock, safeTimeZone, toApiDateTime } from "@/lib/deals/zonedTime";
 import {
   DEAL_DESCRIPTION_MAX_LENGTH,
   DEAL_TITLE_MAX_LENGTH,
@@ -78,25 +79,12 @@ const EMPTY_FORM: DealFormState = {
   is_active: true,
 };
 
-function pad(n: number): string {
-  return String(n).padStart(2, "0");
-}
-
-/** ISO instant -> "YYYY-MM-DDTHH:MM" in the browser's local timezone, the
- * inverse of the `new Date(value).toISOString()` in lib/validation/deal.ts. */
-function toDateTimeInputValue(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
 /** True for a deal created before start dates were required (start_at NULL). */
 function isLegacyUndated(deal: Deal): boolean {
   return deal.start_at === null;
 }
 
-function formFromDeal(deal: Deal): DealFormState {
+function formFromDeal(deal: Deal, timeZone: string): DealFormState {
   // Legacy handling (no migration/backfill): a deal created before start
   // dates were required has start_at NULL. Editing it must not dead-end on
   // a blank required field, so the start box is pre-filled with the date the
@@ -108,8 +96,8 @@ function formFromDeal(deal: Deal): DealFormState {
     title: deal.title,
     description: deal.description ?? "",
     applicable_days: deal.applicable_days ? [...deal.applicable_days] : [],
-    start_at: toDateTimeInputValue(startIso),
-    end_at: toDateTimeInputValue(deal.end_at),
+    start_at: isoToWallClock(startIso, timeZone),
+    end_at: isoToWallClock(deal.end_at, timeZone),
     ongoing: deal.end_at === null,
     is_active: deal.is_active,
   };
@@ -119,11 +107,16 @@ export default function LocationDealsManager({
   locationId,
   initialDeals,
   initialDealsHidden = false,
+  timeZone,
 }: {
   locationId: number;
+  /** The location's IANA zone: every deal date/time on this panel is the
+   * restaurant's local time, whatever device it is edited from. */
+  timeZone: string;
   initialDeals: Deal[];
   initialDealsHidden?: boolean;
 }) {
+  const zone = safeTimeZone(timeZone);
   const [deals, setDeals] = useState<Deal[]>(initialDeals);
   // "Hide all deals" — location-level, independent of each deal's own switch.
   const [dealsHidden, setDealsHidden] = useState(initialDealsHidden);
@@ -151,7 +144,7 @@ export default function LocationDealsManager({
   }
 
   function openEdit(deal: Deal) {
-    setForm(formFromDeal(deal));
+    setForm(formFromDeal(deal, zone));
     setFormError(null);
     setFieldErrors({});
     setLegacyStartNote(isLegacyUndated(deal));
@@ -197,7 +190,12 @@ export default function LocationDealsManager({
     // Same rules the server enforces (start required; end required unless
     // "Ongoing"; end after start) — checked here first so the owner gets
     // inline messages next to the fields instead of a generic error.
-    const check = dealFormSchema.safeParse(form);
+    const payload = {
+      ...form,
+      start_at: toApiDateTime(form.start_at, zone),
+      end_at: toApiDateTime(form.end_at, zone),
+    };
+    const check = dealFormSchema.safeParse(payload);
     if (!check.success) {
       const errors = fieldErrorsFromZod(check.error);
       setFieldErrors(errors);
@@ -216,8 +214,8 @@ export default function LocationDealsManager({
       // be valid here (start set; end set or Ongoing ticked).
       const result =
         editing === "new"
-          ? await createLocationDealAction(locationId, form)
-          : await updateLocationDealAction(locationId, editing as number, form);
+          ? await createLocationDealAction(locationId, payload)
+          : await updateLocationDealAction(locationId, editing as number, payload);
       if (result.ok) {
         const saved = result.data;
         setDeals((prev) =>
@@ -494,7 +492,7 @@ export default function LocationDealsManager({
             {dealTypeHint(form.ongoing, form.end_at)}
           </p>
           <p className="-mt-2 text-xs text-brand-ink-subtle">
-            Times use this device&apos;s timezone. For something like &ldquo;every Tuesday&rdquo;,
+            Times are the restaurant&apos;s local time ({zone}). For something like &ldquo;every Tuesday&rdquo;,
             pick the Tuesday chip above, a start date, and tick Ongoing.
           </p>
 
@@ -570,7 +568,7 @@ export default function LocationDealsManager({
                   )}
                   <p className="mt-1 text-xs text-brand-ink-subtle">
                     {formatDealDays(deal.applicable_days)} ·{" "}
-                    {formatDealDateRange(deal.start_at, deal.end_at)}
+                    {formatDealDateRange(deal.start_at, deal.end_at, zone)}
                   </p>
                 </div>
 

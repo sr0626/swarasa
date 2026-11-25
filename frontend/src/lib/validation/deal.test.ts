@@ -14,8 +14,8 @@ const base = {
   title: "  Lunch buffet  ",
   description: "",
   applicable_days: [],
-  start_at: "2026-09-25T09:00",
-  end_at: "2026-10-31T21:00",
+  start_at: "2026-09-25T14:00:00.000Z",
+  end_at: "2026-11-01T02:00:00.000Z",
   ongoing: false,
   is_active: true,
 };
@@ -43,10 +43,17 @@ test("rejects a blank title and an out-of-range day", () => {
   assert.equal(dealFormSchema.safeParse({ ...base, applicable_days: [7] }).success, false);
 });
 
-test("datetime-local values are converted to ISO instants", () => {
-  const parsed = dealFormSchema.parse(base);
-  assert.match(parsed.start_at ?? "", /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
-  assert.match(parsed.end_at ?? "", /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+test("instants with a zone are normalised to ISO", () => {
+  const parsed = dealFormSchema.parse({ ...base, start_at: "2026-09-25T09:00:00-05:00" });
+  assert.equal(parsed.start_at, "2026-09-25T14:00:00.000Z");
+  assert.equal(parsed.end_at, "2026-11-01T02:00:00.000Z");
+});
+
+test("a zone-less date-time is rejected, never read in the server's own zone", () => {
+  for (const schema of [dealFormSchema, updateDealFormSchema]) {
+    assert.equal(schema.safeParse({ ...base, start_at: "2026-09-25T09:00" }).success, false);
+    assert.equal(schema.safeParse({ ...base, end_at: "2026-10-31T21:00" }).success, false);
+  }
 });
 
 test("a missing start date is rejected with an inline message on start_at", () => {
@@ -79,9 +86,9 @@ test("Ongoing discards a stale end date rather than sending both", () => {
 });
 
 test("end before start (and end equal to start) is rejected on end_at", () => {
-  const reversed = errorsFor({ ...base, start_at: "2026-09-25T18:00", end_at: "2026-09-25T12:00" });
+  const reversed = errorsFor({ ...base, start_at: "2026-09-25T18:00:00Z", end_at: "2026-09-25T12:00:00Z" });
   assert.match(reversed.end_at, /after the start/);
-  const equal = errorsFor({ ...base, start_at: "2026-09-25T18:00", end_at: "2026-09-25T18:00" });
+  const equal = errorsFor({ ...base, start_at: "2026-09-25T18:00:00Z", end_at: "2026-09-25T18:00:00Z" });
   assert.match(equal.end_at, /after the start/);
 });
 
