@@ -11,7 +11,7 @@
 // the new list. Server Component — no state.
 import { CheckIcon } from "@/components/ui/icons";
 import { SECTION_ANCHOR_CLASS } from "@/components/portal/editorSectionAnchor";
-import { isInSetup, setupChecklist } from "@/lib/portal/listingSetup";
+import { isInSetup, setupChecklist, showSetupChecklist } from "@/lib/portal/listingSetup";
 import type { LocationStatus } from "@/types/location";
 
 const ANCHOR: Record<"hours" | "info", string> = { hours: "sec-hours", info: "sec-info" };
@@ -25,7 +25,7 @@ export default function ListingSetupBanner({
   setupMissing: string[];
   role: string;
 }) {
-  if (!isInSetup(status)) return null;
+  if (!showSetupChecklist(status, setupMissing)) return null;
 
   const items = setupChecklist(setupMissing);
   const canAct = role === "owner" || role === "admin";
@@ -75,9 +75,11 @@ export default function ListingSetupBanner({
       </ul>
 
       <p className="mt-3 text-xs text-brand-ink-subtle">
-        {canAct
-          ? "When every item is checked, press Activate listing in the bar at the top of the page."
-          : "The owner activates the listing once these are done."}
+        {!canAct
+          ? "The owner activates the listing once these are done."
+          : isInSetup(status)
+            ? "When every item is checked, press Activate listing in the bar at the top of the page."
+            : "When every item is checked, set the status to Active from the menu next to the name."}
       </p>
     </section>
   );

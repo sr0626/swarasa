@@ -5,9 +5,16 @@
 /** Always shown next to the control so nobody mistakes it for billing. */
 export const MANUAL_LABEL = "MANUAL (testing, no payment taken)";
 
-/** "2027-01-31T23:59:59Z" -> "2027-01-31" (the calendar date the admin chose). */
+/**
+ * `paid_until` -> the calendar date the admin chose. It is stored as 23:59:59
+ * at the location, as UTC: that is early the NEXT day in UTC for any US zone
+ * (older rows are 23:59:59 UTC). Stepping back 11 hours lands on the chosen
+ * date in every one of those cases, without needing the location's zone.
+ */
 export function datePart(iso: string): string {
-  return iso.slice(0, 10);
+  const instant = Date.parse(iso);
+  if (Number.isNaN(instant)) return iso.slice(0, 10);
+  return new Date(instant - 11 * 3_600_000).toISOString().slice(0, 10);
 }
 
 /**

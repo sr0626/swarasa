@@ -53,7 +53,7 @@ from app.schemas.catering import (
     InboxRowOut,
 )
 from app.services import audit_service, auth_service
-from app.services.catering_service import expire_due_requests, restaurant_name
+from app.services.catering_service import effective_expiry, expire_due_requests, restaurant_name
 from app.services.subscription_service import is_location_subscribed
 
 KIND_CATERING_QUOTE = "catering_quote"
@@ -96,7 +96,7 @@ def _joined(stmt):
 
 
 def _can_respond(request: CateringRequest, now: datetime) -> bool:
-    return request.status == REQUEST_OPEN and _aware(request.expires_at) > now
+    return request.status == REQUEST_OPEN and effective_expiry(request) > now
 
 
 async def list_inbox(
@@ -167,7 +167,7 @@ async def list_inbox(
                 and rec.status == RECIPIENT_PENDING
                 and req.status == REQUEST_OPEN,
                 created_at=req.created_at,
-                expires_at=req.expires_at,
+                expires_at=effective_expiry(req),
             )
             for rec, req, loc, brand, item_count in rows
         ],
@@ -230,7 +230,7 @@ def _detail(
         quote_note=rec.quote_note,
         quoted_at=rec.quoted_at,
         created_at=req.created_at,
-        expires_at=req.expires_at,
+        expires_at=effective_expiry(req),
         can_respond=_can_respond(req, datetime.now(timezone.utc)),
     )
 

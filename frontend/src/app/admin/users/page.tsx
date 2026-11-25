@@ -85,8 +85,9 @@ export default async function AdminUsersPage({ searchParams }: UsersPageProps) {
         >
           audit log
         </Link>
-        . You can&apos;t disable or reset your own account, or the last admin. Role-specific
-        reports: {" "}
+        . You can&apos;t disable or reset your own account, or the last admin. Counts here are
+        sign-in accounts; the Owners and Managers reports list only people with an owner record or
+        a location assignment, so their totals can be lower. Role-specific reports: {" "}
         <Link href="/admin/owners" className="font-semibold text-brand-accent underline-offset-2 hover:underline">
           Owners
         </Link>

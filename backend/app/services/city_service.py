@@ -202,7 +202,9 @@ async def list_city_restaurants(db: AsyncSession, slug: str, pagination) -> City
                     opens_later_today=today.opens_later_today,
                     # Content-free signal only (same rule as /search tiles).
                     has_deal_today=any(
-                        deal_service.deal_matches_today(d, loc.timezone)
+                        deal_service.deal_matches_today(
+                            d, loc.timezone, closed_today=bool(today.is_closed)
+                        )
                         for d in deals_map.get(loc.id, [])
                     ),
                 ),

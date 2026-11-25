@@ -180,6 +180,12 @@ def _summarize(table_name: str, action: str, old_val: dict | None, new_val: dict
     if table_name == "restaurant_location" and set(old_val) == {"is_active"} and set(new_val) == {"is_active"}:
         return "Location reactivated" if new_val.get("is_active") else "Location deactivated"
 
+    if table_name == "restaurant_location" and "paid_until" in new_val and new_val.get("note") == "manual":
+        return "Manual subscription set" if new_val.get("is_paid") else "Manual subscription cleared"
+
+    if table_name == "claim_request" and new_val.get("status") == "rejected":
+        return "Claim rejected"
+
     if table_name == "restaurant_brand" and "deleted_at" in new_val:
         return "Restaurant deleted by an administrator" if new_val["deleted_at"] else "Restaurant restored"
 
@@ -405,7 +411,12 @@ async def _list_activity(
             _manager_subject(row, current_user, ctx) if row.table_name == "location_manager" else None
         )
         changes = audit_diff.diff_changes(
-            row.table_name, row.action, row.old_val, row.new_val, manager_label=manager_label
+            row.table_name,
+            row.action,
+            row.old_val,
+            row.new_val,
+            manager_label=manager_label,
+            timezone_name=_where(row, ctx)["timezone"],
         )
         results.append(
             OwnerActivityOut(
@@ -499,7 +510,14 @@ async def list_manager_activity(
     brand_ids = select(RestaurantLocation.brand_id).where(RestaurantLocation.id.in_(location_ids))
 
     ownership_filter = or_(
-        and_(AuditLog.table_name == "restaurant_location", AuditLog.record_id.in_(location_ids)),
+        and_(
+            AuditLog.table_name == "restaurant_location",
+            AuditLog.record_id.in_(location_ids),
+            # Never billing: subscription changes (marked `note: manual`,
+            # subscription_service) are the owner's and admin's business only.
+            # Any future payment write to this table must be excluded too.
+            func.coalesce(AuditLog.new_val["note"].as_string(), "") != "manual",
+        ),
         and_(AuditLog.table_name == "restaurant_brand", AuditLog.record_id.in_(brand_ids)),
     )
 

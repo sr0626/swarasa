@@ -176,7 +176,11 @@ export default function LocationProfile({
                 (location.about / location.specialties). Renders nothing when
                 both are empty. */}
             {location && (
-              <RestaurantAbout about={location.about} specialties={location.specialties} />
+              <RestaurantAbout
+                about={location.about}
+                specialties={location.specialties}
+                heading={restaurant.description ? "At this location" : "About"}
+              />
             )}
 
             {/* Public, free-tier menu (renders nothing when empty). */}

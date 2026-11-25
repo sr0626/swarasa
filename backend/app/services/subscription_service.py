@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import AppError
 from app.models.restaurant_location import RestaurantLocation
 from app.schemas.catering import SubscriptionOut
-from app.services import audit_service
+from app.services import audit_service, hours_service
 
 
 def _aware(value: datetime) -> datetime:
@@ -48,9 +48,11 @@ def subscribed_clause(now: datetime | None = None):
     )
 
 
-def _end_of_day(day: date) -> datetime:
-    """`paid_until` as an end-of-day UTC instant, so "until Dec 31" includes Dec 31."""
-    return datetime.combine(day, time(23, 59, 59), tzinfo=timezone.utc)
+def _end_of_day(day: date, timezone_name: str) -> datetime:
+    """`paid_until` as the end of that day AT THE LOCATION (stored as UTC), so
+    "until Dec 31" lasts through Dec 31 there."""
+    local = datetime.combine(day, time(23, 59, 59), tzinfo=hours_service.safe_zone(timezone_name))
+    return local.astimezone(timezone.utc)
 
 
 async def set_manual_subscription(
@@ -70,7 +72,7 @@ async def set_manual_subscription(
 
     new_until: datetime | None = None
     if is_paid and paid_until is not None:
-        new_until = _end_of_day(paid_until)
+        new_until = _end_of_day(paid_until, location.timezone)
         if new_until <= datetime.now(timezone.utc):
             raise AppError(422, "The end date must be in the future", "validation_error")
 

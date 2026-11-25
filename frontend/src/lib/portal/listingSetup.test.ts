@@ -11,6 +11,7 @@ import {
   knownMissing,
   setupChecklist,
   setupSummary,
+  showSetupChecklist,
 } from "./listingSetup.ts";
 
 test("only coming_soon and import_review listings are 'in setup'", () => {
@@ -121,4 +122,12 @@ test("goLiveBarState: an unknown key from a newer server keeps the bar in 'missi
   assert.deepEqual(state?.items, []);
   const mixed = goLiveBarState("coming_soon", ["hours", "something_new"]);
   assert.equal(mixed?.headline, "2 things left: add hours, finish the remaining details");
+});
+
+test("showSetupChecklist: setup states always, a hidden listing only while incomplete", () => {
+  assert.equal(showSetupChecklist("coming_soon", []), true);
+  assert.equal(showSetupChecklist("import_review", ["hours"]), true);
+  assert.equal(showSetupChecklist("owner_deactivated", ["hours"]), true);
+  assert.equal(showSetupChecklist("owner_deactivated", []), false);
+  assert.equal(showSetupChecklist("active", ["hours"]), false);
 });

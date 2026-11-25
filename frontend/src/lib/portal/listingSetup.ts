@@ -48,6 +48,15 @@ export function isInSetup(status: LocationStatus): boolean {
   return status === "coming_soon" || status === "import_review";
 }
 
+/**
+ * Whether to show the readable checklist: any listing in setup, and a hidden
+ * (owner-deactivated) one that is still missing something and so can't be
+ * switched back on yet.
+ */
+export function showSetupChecklist(status: LocationStatus, setupMissing: readonly string[]): boolean {
+  return isInSetup(status) || (status === "owner_deactivated" && setupMissing.length > 0);
+}
+
 /** Whether the "Activate listing" action should be enabled. */
 export function canActivate(status: LocationStatus, setupMissing: readonly string[]): boolean {
   return isInSetup(status) && knownMissing(setupMissing).length === 0 && !hasUnknownMissing(setupMissing);

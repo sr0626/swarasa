@@ -35,6 +35,15 @@ test("datePart keeps the calendar date", () => {
   assert.equal(datePart("2027-01-31T23:59:59+00:00"), "2027-01-31");
 });
 
+test("datePart: end of day at a US location is still the chosen date", () => {
+  // Eastern, Central (winter and summer), Pacific, Hawaii.
+  assert.equal(datePart("2027-02-01T04:59:59Z"), "2027-01-31");
+  assert.equal(datePart("2027-01-01T05:59:59Z"), "2026-12-31");
+  assert.equal(datePart("2027-07-01T04:59:59Z"), "2027-06-30");
+  assert.equal(datePart("2027-02-01T07:59:59Z"), "2027-01-31");
+  assert.equal(datePart("2027-02-01T09:59:59Z"), "2027-01-31");
+});
+
 test("validateUntilDate: empty ok, future ok, today/past/garbage rejected", () => {
   const today = "2026-11-13";
   assert.equal(validateUntilDate("", today), null);

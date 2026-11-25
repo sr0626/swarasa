@@ -29,6 +29,7 @@ import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
+from app.core import us_zip
 from app.core.bulk_import_hours import MAX_HOURS_CELL_LENGTH, parse_hours
 from app.core.geo_bounds import is_plausible_us_point
 from app.core.phone import US_PHONE_ERROR, normalize_us_phone
@@ -187,6 +188,14 @@ def check_row_fields(
             out.values["postal_code"] = postal
         else:
             error("postal_code", "bad_zip", f"postal_code {postal!r} must be a 5-digit ZIP (or ZIP+4).")
+
+    if "state" in out.values and "postal_code" in out.values:
+        if not us_zip.zip_matches_state(out.values["postal_code"], out.values["state"]):
+            error(
+                "postal_code",
+                "zip_state_mismatch",
+                us_zip.mismatch_message(out.values["postal_code"], out.values["state"]),
+            )
 
     country = cleaned["country"]
     if country is not None and country.upper() != "US":

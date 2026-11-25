@@ -107,7 +107,10 @@ export default function CateringResponseForm({ detail }: { detail: InboxDetail }
             inputMode="decimal"
             autoComplete="off"
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
+            onChange={(e) => {
+              setAmount(e.target.value);
+              setError(null);
+            }}
             placeholder="450.00"
             aria-describedby="quote-amount-hint"
             className={`${inputClass} pl-7`}

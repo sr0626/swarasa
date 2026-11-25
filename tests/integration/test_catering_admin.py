@@ -4,6 +4,8 @@
 that changes `catering_max_restaurants`."""
 from __future__ import annotations
 
+from zoneinfo import ZoneInfo
+
 from datetime import date, datetime, timedelta, timezone
 
 import pytest
@@ -64,7 +66,10 @@ async def test_admin_sets_subscription_with_end_date_and_audits(client, db_sessi
     body = resp.json()
     assert body["is_paid"] is True
     assert body["subscribed"] is True
-    assert body["paid_until"].startswith(until)
+    # Stored as the end of that day at the location, so read it back there.
+    stored = datetime.fromisoformat(body["paid_until"].replace("Z", "+00:00"))
+    local = stored.astimezone(ZoneInfo("America/Chicago"))
+    assert (local.date().isoformat(), local.hour, local.minute) == (until, 23, 59)
 
     await db_session.refresh(location)
     assert location.is_paid is True
@@ -82,7 +87,7 @@ async def test_admin_sets_subscription_with_end_date_and_audits(client, db_sessi
     assert audit.old_val == {"is_paid": False, "paid_until": None}
     assert audit.new_val["is_paid"] is True
     assert audit.new_val["note"] == "manual"
-    assert audit.new_val["paid_until"].startswith(until)
+    assert audit.new_val["paid_until"] == stored.astimezone(ZoneInfo("UTC")).isoformat()
 
 
 @pytest.mark.asyncio

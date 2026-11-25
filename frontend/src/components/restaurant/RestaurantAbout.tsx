@@ -8,11 +8,18 @@
 // Usage: <RestaurantAbout about={location.about} specialties={location.specialties} />
 
 interface RestaurantAboutProps {
+  /** Heading text; the page passes another one when the brand's own "About"
+   * section is already shown above. */
+  heading?: string;
   about?: string | null;
   specialties?: string[] | null;
 }
 
-export default function RestaurantAbout({ about, specialties }: RestaurantAboutProps) {
+export default function RestaurantAbout({
+  about,
+  specialties,
+  heading = "About",
+}: RestaurantAboutProps) {
   const paragraphs = (about ?? "")
     .split(/\r?\n\s*\r?\n/)
     .map((p) => p.trim())
@@ -22,9 +29,9 @@ export default function RestaurantAbout({ about, specialties }: RestaurantAboutP
   if (paragraphs.length === 0 && chips.length === 0) return null;
 
   return (
-    <section aria-labelledby="about-heading">
-      <h2 id="about-heading" className="font-display text-xl font-bold text-brand-ink">
-        About
+    <section aria-labelledby="location-about-heading">
+      <h2 id="location-about-heading" className="font-display text-xl font-bold text-brand-ink">
+        {heading}
       </h2>
 
       {paragraphs.length > 0 && (

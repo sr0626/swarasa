@@ -325,7 +325,9 @@ async def delete_deal(db: AsyncSession, location_id: int, deal_id: int, current_
 # ---------------------------------------------------------------------------
 
 
-def deal_matches_today(deal: Deal, tz_name: str, *, now: datetime | None = None) -> bool:
+def deal_matches_today(
+    deal: Deal, tz_name: str, *, now: datetime | None = None, closed_today: bool = False
+) -> bool:
     """Does this deal apply RIGHT NOW, in the location's own timezone?
 
     Deliberately re-checks `start_at`/`end_at` against the current instant
@@ -347,7 +349,7 @@ def deal_matches_today(deal: Deal, tz_name: str, *, now: datetime | None = None)
     day that isn't the real day a test happens to run on (a real bug this
     module's own tests caught).
     """
-    if not deal.is_active:
+    if not deal.is_active or closed_today:
         return False
     now = now or datetime.now(timezone.utc)
     if deal.start_at is not None and now < _aware(deal.start_at):
@@ -359,6 +361,23 @@ def deal_matches_today(deal: Deal, tz_name: str, *, now: datetime | None = None)
         if today not in deal.applicable_days:
             return False
     return True
+
+
+async def closed_today_location_ids(
+    db: AsyncSession,
+    candidates: list[tuple[int, str]],
+    deals_by_location: dict[int, list[Deal]],
+    *,
+    now: datetime | None = None,
+) -> set[int]:
+    """Which of these `(location_id, timezone)` are marked CLOSED all of today
+    (their own weekday): a deal can't be "available today" there. Unknown hours
+    do not count as closed. Only locations that have deals are queried."""
+    with_deals = [(lid, tz) for lid, tz in candidates if deals_by_location.get(lid)]
+    if not with_deals:
+        return set()
+    rows = await hours_service.get_today_hours_for_candidates(db, with_deals, now_utc=now)
+    return {lid for lid, row in rows.items() if row.is_closed}
 
 
 async def get_active_deals_map(
@@ -404,7 +423,12 @@ async def deals_today_for_location(
     `hours_service.today_status_for_location`'s relationship to
     `get_hours_map_for_locations`)."""
     by_location = await get_active_deals_map(db, [location_id])
-    return [d for d in by_location.get(location_id, []) if deal_matches_today(d, tz_name)]
+    closed = await closed_today_location_ids(db, [(location_id, tz_name)], by_location)
+    return [
+        d
+        for d in by_location.get(location_id, [])
+        if deal_matches_today(d, tz_name, closed_today=location_id in closed)
+    ]
 
 
 async def todays_deals_by_brand(
@@ -442,12 +466,15 @@ async def todays_deals_by_brand(
     ).all()
     deals_by_location = await get_active_deals_map(db, [row.id for row in loc_rows])
     now = now or datetime.now(timezone.utc)
+    closed = await closed_today_location_ids(
+        db, [(row.id, row.timezone) for row in loc_rows], deals_by_location, now=now
+    )
     result: dict[int, list[Deal]] = {}
     for row in loc_rows:
         matching = [
             d
             for d in sorted(deals_by_location.get(row.id, []), key=lambda d: d.id)
-            if deal_matches_today(d, row.timezone, now=now)
+            if deal_matches_today(d, row.timezone, now=now, closed_today=row.id in closed)
         ]
         if matching:
             result.setdefault(row.brand_id, []).extend(matching)
@@ -493,7 +520,7 @@ def next_occurrence_date(
 
 
 def split_today_and_upcoming(
-    deals: list[Deal], tz_name: str, *, now: datetime | None = None
+    deals: list[Deal], tz_name: str, *, now: datetime | None = None, closed_today: bool = False
 ) -> tuple[list[Deal], list[tuple[Deal, date]]]:
     """Partition a location's ACTIVE deals (the single `get_active_deals_map`
     result — no extra query) into (deals that apply today, other deals that
@@ -507,11 +534,17 @@ def split_today_and_upcoming(
     now = now or datetime.now(timezone.utc)
     todays: list[Deal] = []
     upcoming: list[tuple[Deal, date]] = []
+    # Closed today: look for the next occurrence from tomorrow on.
+    search_from = now
+    if closed_today:
+        zone = hours_service.safe_zone(tz_name)
+        tomorrow = now.astimezone(zone).date() + timedelta(days=1)
+        search_from = datetime.combine(tomorrow, time.min, tzinfo=zone)
     for deal in deals:
-        if deal_matches_today(deal, tz_name, now=now):
+        if deal_matches_today(deal, tz_name, now=now, closed_today=closed_today):
             todays.append(deal)
             continue
-        nxt = next_occurrence_date(deal, tz_name, now=now)
+        nxt = next_occurrence_date(deal, tz_name, now=search_from)
         if nxt is not None:
             upcoming.append((deal, nxt))
     upcoming.sort(key=lambda pair: (pair[1], pair[0].title.casefold(), pair[0].id))
@@ -524,7 +557,10 @@ async def todays_and_upcoming_for_location(
     """One query, both lists — used by `GET /locations/{id}` so the new
     `upcoming_deals` field costs no extra round trip."""
     by_location = await get_active_deals_map(db, [location_id])
-    return split_today_and_upcoming(by_location.get(location_id, []), tz_name, now=now)
+    closed = await closed_today_location_ids(db, [(location_id, tz_name)], by_location, now=now)
+    return split_today_and_upcoming(
+        by_location.get(location_id, []), tz_name, now=now, closed_today=location_id in closed
+    )
 
 
 async def caller_may_view_deal_content_for_location(

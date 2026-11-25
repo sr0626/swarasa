@@ -422,6 +422,18 @@ async def reject_claim(
     claim.reviewed_by = admin_sub
     claim.reviewed_at = datetime.now(timezone.utc)
     claim.reviewer_notes = reviewer_notes
+    # No `reviewer_notes` key here: `_latest_notes_edits` reads that key as a
+    # later EDIT of the note.
+    await audit_service.log(
+        db,
+        table_name="claim_request",
+        record_id=claim.id,
+        action="update",
+        actor_id=admin_sub,
+        actor_role="admin",
+        old_val={"status": "pending_review"},
+        new_val={"status": "rejected"},
+    )
     await db.commit()
     await db.refresh(claim)
     return claim

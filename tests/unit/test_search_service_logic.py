@@ -58,6 +58,10 @@ class _FakeSession:
         self._call_count += 1
         if self._call_count == 1:
             return _FakeResult(self._deals)
+        # Locations with deals also get one "today's hours" lookup (closed
+        # today suppresses the deal badge): none recorded here.
+        if self._call_count == 2 and self._deals:
+            return _FakeResult([])
         return _FakeResult(self._brands)
 
 

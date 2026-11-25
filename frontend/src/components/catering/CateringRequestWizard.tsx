@@ -213,6 +213,14 @@ export default function CateringRequestWizard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
+  // Once messages are showing, keep them in step with what is typed, so a
+  // corrected field doesn't keep its old error until the next "Next".
+  useEffect(() => {
+    setErrors((shown) =>
+      Object.keys(shown).length === 0 ? shown : validateDraft(draft, today || localTodayIso())
+    );
+  }, [draft, today]);
+
   function setField<K extends keyof RequestDraft>(key: K, value: RequestDraft[K]) {
     setDraft((d) => ({ ...d, [key]: value }));
   }

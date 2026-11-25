@@ -17,9 +17,10 @@ Rules enforced here, server-side:
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -60,6 +61,8 @@ UNAVAILABLE_MATCH_LIMIT = 5
 MAX_REQUESTS_PER_DAY = 5
 RATE_WINDOW = timedelta(days=1)
 REQUEST_TTL = timedelta(days=14)
+# Event dates are calendar dates with no zone; the platform is Dallas-Fort Worth.
+_PLATFORM_ZONE = ZoneInfo("America/Chicago")
 # How far ahead an event may be (a sanity bound, not a business rule).
 MAX_EVENT_DAYS_AHEAD = 730
 
@@ -229,14 +232,31 @@ async def check_eligibility(db: AsyncSession, location_id: int) -> EligibilityOu
     )
 
 
+def end_of_event_day(event_date: date) -> datetime:
+    """Midnight after the event date in the platform's zone, as UTC."""
+    midnight = datetime.combine(event_date + timedelta(days=1), time.min, tzinfo=_PLATFORM_ZONE)
+    return midnight.astimezone(timezone.utc)
+
+
+def effective_expiry(request: CateringRequest) -> datetime:
+    """A request closes at the earlier of its 14-day life and the end of its
+    event date. Applied on read as well, so rows created before this rule
+    follow it too."""
+    stored = request.expires_at
+    if stored.tzinfo is None:
+        stored = stored.replace(tzinfo=timezone.utc)
+    return min(stored, end_of_event_day(request.event_date))
+
+
 async def expire_due_requests(db: AsyncSession) -> None:
     """Lazy housekeeping, run at the start of every catering read: open
-    requests past `expires_at` become `closed` and their still-pending
-    recipients `expired` (quoted/declined rows keep their outcome)."""
+    requests past `expires_at` or past their event date become `closed` and
+    their still-pending recipients `expired` (quoted/declined rows keep their
+    outcome)."""
     now = datetime.now(timezone.utc)
-    due = select(CateringRequest.id).where(
-        CateringRequest.status == REQUEST_OPEN, CateringRequest.expires_at <= now
-    )
+    today = now.astimezone(_PLATFORM_ZONE).date()
+    is_due = or_(CateringRequest.expires_at <= now, CateringRequest.event_date < today)
+    due = select(CateringRequest.id).where(CateringRequest.status == REQUEST_OPEN, is_due)
     pending = await db.execute(
         update(CateringRequestRecipient)
         .where(
@@ -248,7 +268,7 @@ async def expire_due_requests(db: AsyncSession) -> None:
     )
     closed = await db.execute(
         update(CateringRequest)
-        .where(CateringRequest.status == REQUEST_OPEN, CateringRequest.expires_at <= now)
+        .where(CateringRequest.status == REQUEST_OPEN, is_due)
         .values(status=REQUEST_CLOSED)
         .execution_options(synchronize_session=False)
     )
@@ -301,7 +321,7 @@ def _to_out(
         notes=request.notes,
         status=request.status,  # type: ignore[arg-type]
         created_at=request.created_at,
-        expires_at=request.expires_at,
+        expires_at=effective_expiry(request),
         items=[
             CateringItemOut(
                 item_name=i.item_name, size=i.size, quantity=i.quantity, note=i.note  # type: ignore[arg-type]
@@ -350,6 +370,10 @@ async def create_request(
     ):
         raise AppError(422, "Please choose a valid event date", "validation_error")
 
+    expires_at = min(now + REQUEST_TTL, end_of_event_day(body.event_date))
+    if expires_at <= now:
+        raise AppError(422, "The event date can't be in the past", "validation_error")
+
     max_restaurants = await get_max_restaurants(db)
     if len(set(body.location_ids)) != len(body.location_ids):
         raise AppError(422, "Each restaurant can only be chosen once", "duplicate_restaurants")
@@ -376,7 +400,7 @@ async def create_request(
         notes=body.notes,
         status=REQUEST_OPEN,
         created_at=now,
-        expires_at=now + REQUEST_TTL,
+        expires_at=expires_at,
         items=[
             CateringRequestItem(
                 item_name=i.item_name, size=i.size, quantity=i.quantity, note=i.note

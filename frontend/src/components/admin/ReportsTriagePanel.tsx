@@ -5,6 +5,7 @@
 // lets the admin resolve / dismiss it (or re-open a closed one) with
 // optional notes. The status filter and pagination live on the page as real
 // links (server-rendered), so this component only owns per-card actions.
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
 import LocalDateTime from "@/components/ui/LocalDateTime";
@@ -48,7 +49,11 @@ export default function ReportsTriagePanel({
 }: ReportsTriagePanelProps) {
   const [reports, setReports] = useState<ListingReport[]>(initialReports);
 
+  const router = useRouter();
+
   function handleUpdated(updated: ListingReport) {
+    // Re-render the server parts too: the page's totals and the menu badges.
+    router.refresh();
     setReports((prev) =>
       prev.flatMap((r) => {
         if (r.report_id !== updated.report_id) return [r];
