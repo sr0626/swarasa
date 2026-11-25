@@ -8,9 +8,11 @@
 // page itself needs no data fetching, so it stays a plain Server Component
 // for the metadata/layout shell.
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import TopBar from "@/components/home/TopBar";
 import LoginForm from "@/components/auth/LoginForm";
-import { safeNextPath } from "@/lib/auth/safeNext";
+import { postSignInPath, safeNextPath } from "@/lib/auth/safeNext";
+import { getServerSession } from "@/lib/auth/session";
 
 export const metadata: Metadata = {
   title: "Sign In",
@@ -23,12 +25,16 @@ export const metadata: Metadata = {
  * Server Component, same as before) so the confirmation banner survives a
  * full page load with no client-side state needed.
  */
-export default function LoginPage({
+export default async function LoginPage({
   searchParams,
 }: {
   searchParams: { confirmed?: string; reset?: string; next?: string | string[] };
 }) {
   const next = safeNextPath(searchParams.next);
+  // Already signed in: never show the sign-in form next to an account menu.
+  // To use another account, sign out first.
+  const session = await getServerSession();
+  if (session) redirect(postSignInPath(session.role, next));
   const banner = searchParams.confirmed
     ? "Your account is confirmed — sign in below."
     : searchParams.reset

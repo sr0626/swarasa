@@ -2069,6 +2069,23 @@ cancellation option — charge proceeds. Simplest UX for restaurant teams where
 manager handles admin.
 *Rejected: Owner-only card entry (friction when manager handles billing)*
 
+2026-11-25 | Sessions end after 15 minutes of INACTIVITY, not 15 minutes after
+sign-in (UAT: an owner was signed out in the middle of editing). While the
+visitor is using the site, `PUT /api/auth/session` re-extends the cookie of a
+still-valid session (server-verified; it cannot create or revive one), and the
+tab's token refresh now runs for every sign-in, stopping once idle when "keep me
+signed in" is off. A signed-in visitor on the wrong page sees "not available to
+your account" instead of the sign-in form, and the sign-in page redirects anyone
+already signed in. Permissions are unchanged: still checked server-side on every
+request.
+Not changed: after a full page reload the browser no longer holds the refresh
+token, so any session (including "keep me signed in") ends when the current
+one-hour token expires.
+*Rejected: Simply lengthening the cookie (leaves an unattended shared computer
+signed in longer); Rejected for now: storing the Cognito refresh token in a
+second httpOnly cookie with a server-side refresh (the real fix for surviving
+reloads, but a security design that needs the user's decision)*
+
 ---
 
 ## Billing & Payments

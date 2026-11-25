@@ -106,6 +106,30 @@ export async function POST(request: Request) {
 }
 
 /**
+ * Extends a still-valid session while it is being used
+ * (lib/auth/useSessionActivity.ts). Takes no body: the token is the one in the
+ * httpOnly cookie, re-verified here, so this can never create or revive a
+ * session. A "keep me signed in" cookie already has its long life and is left
+ * alone; otherwise the 15-minute window restarts.
+ */
+export async function PUT() {
+  const token = cookies().get(SESSION_COOKIE_NAME)?.value;
+  if (!token || !(await resolveSession(token))) {
+    return NextResponse.json({ error: "No active session." }, { status: 401 });
+  }
+  if (cookies().get(REMEMBER_ME_COOKIE_NAME)?.value !== "1") {
+    cookies().set(SESSION_COOKIE_NAME, token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: SESSION_MAX_AGE_SECONDS,
+    });
+  }
+  return NextResponse.json({ ok: true });
+}
+
+/**
  * Ends the session: deletes the httpOnly `rp_access_token` cookie
  * `getServerSession()` reads, and the `rp_remember_me` flag cookie
  * alongside it. Explicit `path: "/"` on both deletes to match exactly how

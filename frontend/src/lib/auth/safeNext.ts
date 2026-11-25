@@ -8,6 +8,10 @@
 // backslash tricks) is dropped, so this can never become an open redirect.
 import type { UserRole } from "@/types/auth";
 
+/** Request header carrying the current path+query to server components
+ * (set by src/middleware.ts). */
+export const PATHNAME_HEADER = "x-pathname";
+
 /** Returns `raw` if it is a safe same-site path, otherwise `null`. */
 export function safeNextPath(raw: string | string[] | undefined | null): string | null {
   if (typeof raw !== "string") return null;
@@ -40,12 +44,12 @@ export function dealSignInHref(currentPath: string): string {
 
 /**
  * Whether `role` can actually use `path` -- so a diner who signs in from a
- * link meant for owners lands on the normal homepage instead of being
- * bounced by the destination's own guard straight back to /login. Mirrors
- * the `requireSession([...])` guards: /portal/brands/new is owner-only,
- * /portal/locations/new is owner/admin,
- * other /portal/* is owner/manager, /admin/* is admin; everything else
- * (e.g. /claim) is open to any signed-in role.
+ * link meant for owners lands on the normal homepage instead of the "not
+ * available to your account" page. Mirrors the `requireSession([...])`
+ * guards: /portal/brands/new is owner-only, /portal/locations/new is
+ * owner/admin, other /portal/* is owner/manager, /admin/* is admin,
+ * /account/catering is registered_user; everything else (e.g. /claim) is open
+ * to any signed-in role.
  */
 export function pathAllowedForRole(path: string, role: UserRole): boolean {
   if (path.startsWith("/portal/brands/new")) return role === "owner";
@@ -53,5 +57,25 @@ export function pathAllowedForRole(path: string, role: UserRole): boolean {
   if (path.startsWith("/portal/locations/new")) return role === "owner" || role === "admin";
   if (path.startsWith("/portal")) return role === "owner" || role === "manager";
   if (path.startsWith("/admin")) return role === "admin";
+  if (path.startsWith("/account/catering")) return role === "registered_user";
   return true;
+}
+
+/** Where each role lands after signing in when there is no usable `next`. */
+const ROLE_LANDING: Record<UserRole, string> = {
+  owner: "/account",
+  manager: "/account",
+  admin: "/admin/listings",
+  registered_user: "/",
+};
+
+/**
+ * Destination for a signed-in visitor: `next` only if it is a safe same-site
+ * path this role can use (never the sign-in page itself, which would loop),
+ * otherwise the role's landing page.
+ */
+export function postSignInPath(role: UserRole, next: string | null | undefined): string {
+  const safe = safeNextPath(next);
+  if (safe && !/^\/login(\/|\?|#|$)/.test(safe) && pathAllowedForRole(safe, role)) return safe;
+  return ROLE_LANDING[role] ?? "/";
 }

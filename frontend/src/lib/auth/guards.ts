@@ -8,9 +8,10 @@
 //
 // requireSession() folds that into one call for the portal/admin route
 // placeholders (and future pages) so each one doesn't repeat the check.
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getServerSession } from "./session";
-import { safeNextPath, withNext } from "./safeNext";
+import { PATHNAME_HEADER, safeNextPath, withNext } from "./safeNext";
 import type { Session, UserRole } from "@/types/auth";
 
 export async function requireSession(
@@ -19,8 +20,16 @@ export async function requireSession(
   returnTo?: string,
 ): Promise<Session> {
   const session = await getServerSession();
-  if (!session || !allowedRoles.includes(session.role)) {
-    redirect(withNext("/login", safeNextPath(returnTo)));
+  if (!session) {
+    // `x-pathname` is set by src/middleware.ts for the signed-in areas, so a
+    // page that passes no `returnTo` still comes back after sign-in.
+    const path = returnTo ?? headers().get(PATHNAME_HEADER);
+    redirect(withNext("/login", safeNextPath(path)));
+  }
+  // Signed in, wrong role: say so. Sending them to the sign-in form would look
+  // like being signed out while the header still shows the account menu.
+  if (!allowedRoles.includes(session.role)) {
+    redirect("/not-allowed");
   }
   return session;
 }

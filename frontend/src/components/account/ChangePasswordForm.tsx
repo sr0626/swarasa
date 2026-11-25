@@ -26,6 +26,7 @@
 // design flagged as a follow-up in sessionKeepAlive.ts's header comment —
 // out of scope for this change.
 import { useEffect, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { fetchAuthSession, updatePassword } from "@aws-amplify/auth";
 import { ensureAmplifyConfigured } from "@/lib/auth/amplifyClient";
 import {
@@ -34,6 +35,8 @@ import {
 } from "@/lib/validation/auth";
 import { messageForAuthError } from "@/lib/auth/errorMessages";
 import InfoPanel from "@/components/ui/InfoPanel";
+import { withNext } from "@/lib/auth/safeNext";
+import { stopSessionKeepAlive } from "@/lib/auth/sessionKeepAlive";
 
 type FieldErrors = Partial<Record<keyof ChangePasswordFormValues, string>>;
 type SessionCheck = "checking" | "ready" | "unavailable";
@@ -51,6 +54,23 @@ export default function ChangePasswordForm() {
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+  const router = useRouter();
+
+  // The sign-in page sends a signed-in visitor straight back, so end this
+  // session first (same clean-up as the account menu's Logout).
+  async function handleSignInAgain() {
+    if (signingOut) return;
+    setSigningOut(true);
+    stopSessionKeepAlive();
+    try {
+      await fetch("/api/auth/session", { method: "DELETE" });
+    } catch {
+      // Best effort -- the redirect below still happens.
+    }
+    router.push(withNext("/login", "/account/security"));
+    router.refresh();
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -123,10 +143,20 @@ export default function ChangePasswordForm() {
 
   if (sessionCheck === "unavailable") {
     return (
-      <InfoPanel
-        title="Please sign in again to change your password"
-        body="For security, changing your password needs a fresh sign-in in this browser tab. Sign in again, then come back to this page."
-      />
+      <div className="flex flex-col gap-3">
+        <InfoPanel
+          title="Please sign in again to change your password"
+          body="For security, changing your password needs a fresh sign-in in this browser tab. You'll come straight back here."
+        />
+        <button
+          type="button"
+          onClick={handleSignInAgain}
+          disabled={signingOut}
+          className="min-h-[44px] rounded-brand-control bg-brand-accent px-4 text-sm font-semibold text-white transition hover:bg-brand-accent-hover disabled:opacity-60"
+        >
+          {signingOut ? "Signing out..." : "Sign in again"}
+        </button>
+      </div>
     );
   }
 

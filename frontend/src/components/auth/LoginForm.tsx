@@ -36,30 +36,12 @@ import { signIn, fetchAuthSession } from "@aws-amplify/auth";
 import { ensureAmplifyConfigured } from "@/lib/auth/amplifyClient";
 import { startSessionKeepAlive } from "@/lib/auth/sessionKeepAlive";
 import { signInSchema, type SignInFormValues } from "@/lib/validation/auth";
-import { withNext, pathAllowedForRole } from "@/lib/auth/safeNext";
+import { withNext, postSignInPath } from "@/lib/auth/safeNext";
 import { messageForAuthError, messageForNextStep } from "@/lib/auth/errorMessages";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { takePendingLocation } from "@/lib/auth/pendingLocation";
 import { updateLocationAction } from "@/app/account/actions";
 import type { UserRole } from "@/types/auth";
-
-/**
- * Where each pool group lands after sign-in. Owners and managers both land
- * on /account -- their own console (business page / manager console,
- * components/portal/OwnerShell.tsx / ManagerShell.tsx); admin has its own
- * section; a registered_user has no gated area yet in Phase 1, so it goes
- * back to the homepage.
- *
- * `manager` pointed at `/portal/dashboard` before the manager console
- * redesign -- that route is now just a redirect back to `/account`, so this
- * goes straight there instead of bouncing through it.
- */
-const ROLE_LANDING: Record<UserRole, string> = {
-  owner: "/account",
-  manager: "/account",
-  admin: "/admin/listings",
-  registered_user: "/",
-};
 
 type FieldErrors = Partial<Record<keyof SignInFormValues, string>>;
 
@@ -150,9 +132,9 @@ export default function LoginForm({
       }
 
       const { role } = (await res.json()) as { role: UserRole };
-      if (rememberMe) {
-        startSessionKeepAlive();
-      }
+      // Both modes keep refreshing the session while this tab holds the
+      // Cognito tokens; without "keep me signed in" it stops once idle.
+      startSessionKeepAlive({ rememberMe });
       // A new diner's city/ZIP, parked by the signup form (this tab), is
       // saved to their profile now that a session exists. Best-effort: on
       // any failure the home/account banner asks for it again.
@@ -168,9 +150,7 @@ export default function LoginForm({
       }
       // `nextPath` only if this role can use it (a diner signing in from an
       // owner-only link goes to the normal landing, not a guard bounce).
-      router.push(
-        nextPath && pathAllowedForRole(nextPath, role) ? nextPath : (ROLE_LANDING[role] ?? "/")
-      );
+      router.push(postSignInPath(role, nextPath));
       router.refresh();
     } catch (err) {
       setFormError(messageForAuthError(err));
