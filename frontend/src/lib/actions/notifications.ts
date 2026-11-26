@@ -21,7 +21,7 @@ async function requireRegisteredUserToken(): Promise<
     return { ok: false, error: "Your session has expired. Please sign in again." };
   }
   if (session.role !== "registered_user") {
-    return { ok: false, error: "Only registered users have deal alerts." };
+    return { ok: false, error: "Only registered users have notifications." };
   }
   return { ok: true, accessToken: session.accessToken };
 }

@@ -16,9 +16,9 @@ export function badgeText(unread: number): string | null {
 
 /** Accessible name of the bell button -- carries the count (the visual badge is aria-hidden). */
 export function bellLabel(unread: number): string {
-  if (!Number.isFinite(unread) || unread <= 0) return "Deal alerts, no unread";
+  if (!Number.isFinite(unread) || unread <= 0) return "Notifications, no unread";
   const n = Math.floor(unread);
-  return `Deal alerts, ${n} unread`;
+  return `Notifications, ${n} unread`;
 }
 
 /** Where a tapped alert goes: a catering quote opens "My catering requests";

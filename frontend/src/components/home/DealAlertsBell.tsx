@@ -156,12 +156,12 @@ export default function DealAlertsBell({ data }: { data: NotificationList | null
         <div
           id={panelId}
           role="region"
-          aria-label="Deal alerts"
+          aria-label="Notifications"
           className="absolute inset-x-4 top-full z-50 mt-1 max-h-[80vh] overflow-y-auto rounded-brand-control border border-brand-border bg-white pb-2 shadow-brand-card-hover sm:inset-x-auto sm:right-0 sm:mt-2 sm:w-80"
         >
           <div className="flex items-center justify-between px-4 pb-1 pt-3">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-brand-ink-subtle">
-              Deal alerts
+              Notifications
             </h3>
             {state.unread > 0 && (
               <button
@@ -177,11 +177,11 @@ export default function DealAlertsBell({ data }: { data: NotificationList | null
 
           {!data ? (
             <p className="px-4 py-4 text-sm text-brand-ink-muted">
-              Deal alerts are unavailable right now. Try again after reloading the page.
+              Notifications are unavailable right now. Try again after reloading the page.
             </p>
           ) : state.items.length === 0 ? (
             <p className="px-4 py-4 text-sm text-brand-ink-muted">
-              No deal alerts yet. Follow a restaurant and we&apos;ll tell you here when it posts a deal.
+              No notifications yet. Follow a restaurant to hear about its new deals; catering quotes show here too.
             </p>
           ) : (
             <ul>

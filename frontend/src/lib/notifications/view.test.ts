@@ -43,9 +43,9 @@ test("badge is hidden at zero/invalid, shows the count, caps at 99+", () => {
 });
 
 test("bell label carries the unread count for screen readers", () => {
-  assert.equal(bellLabel(0), "Deal alerts, no unread");
-  assert.equal(bellLabel(3), "Deal alerts, 3 unread");
-  assert.equal(bellLabel(250), "Deal alerts, 250 unread");
+  assert.equal(bellLabel(0), "Notifications, no unread");
+  assert.equal(bellLabel(3), "Notifications, 3 unread");
+  assert.equal(bellLabel(250), "Notifications, 250 unread");
 });
 
 test("an alert links to the location page's deals section", () => {
