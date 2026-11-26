@@ -712,3 +712,35 @@ git push -u origin fix/self-host-fonts   # claude
 git push -u origin feature/catering-search-messages   # claude
 git push -u origin fix/readiness-gate-all-activations   # claude
 ```
+
+## 2026-11-15
+```bash
+git push -u origin docs/wave-288-292   # claude
+git push -u origin docs/decisions-wave-20   # claude
+git push -u origin docs/validation-checklist   # claude
+git push origin HEAD:feature/form-guard   # claude
+aws lambda invoke --function-name swarasa-api-dev --cli-binary-format raw-in-base64-out --payload '{"_management_command": "alembic_upgrade"}' --profile swarasa-dev --region us-east-1 ...   # user
+aws sso login --profile swarasa-dev   # user  (expired session)
+aws lambda invoke --function-name swarasa-api-dev --cli-binary-format raw-in-base64-out --payload '{"_management_command": "alembic_upgrade"}' --profile swarasa-dev --region us-east-1 ...   # user  (after the #296 deploy, applying 0025_form_guard)
+```
+
+## 2026-11-24
+```bash
+git push -u origin fix/deal-time-zone   # claude
+git push -u origin fix/hidden-brand-and-search-copy   # claude
+```
+
+## 2026-11-25
+```bash
+git push -u origin fix/signin-session-roles   # claude
+git push -u origin fix/uat-findings   # claude
+git push origin fix/uat-findings   # claude
+git push -u origin fix/catering-open-until   # claude
+```
+
+## 2026-11-26
+```bash
+git push origin fix/catering-open-until   # claude
+git push -u origin docs/wave-295-301   # claude
+```
+
