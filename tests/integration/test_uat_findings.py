@@ -165,7 +165,8 @@ async def test_catering_request_closes_after_its_event_date(client, db_session, 
     open_one = by_date[upcoming.isoformat()]
     assert open_one["status"] == "open"
     closes = datetime.fromisoformat(open_one["expires_at"].replace("Z", "+00:00")).astimezone(CHICAGO)
-    assert (closes.date(), closes.hour) == (upcoming + timedelta(days=1), 0)
+    # Shown as "open until <date>": it must be the event date itself.
+    assert (closes.date(), closes.hour, closes.minute) == (upcoming, 23, 59)
 
 
 @pytest.mark.asyncio
