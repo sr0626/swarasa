@@ -233,9 +233,11 @@ async def check_eligibility(db: AsyncSession, location_id: int) -> EligibilityOu
 
 
 def end_of_event_day(event_date: date) -> datetime:
-    """Midnight after the event date in the platform's zone, as UTC."""
-    midnight = datetime.combine(event_date + timedelta(days=1), time.min, tzinfo=_PLATFORM_ZONE)
-    return midnight.astimezone(timezone.utc)
+    """The last second of the event date in the platform's zone, as UTC. Not
+    the following midnight: screens show this instant as "open until <date>",
+    which must read as the event date."""
+    last = datetime.combine(event_date, time(23, 59, 59), tzinfo=_PLATFORM_ZONE)
+    return last.astimezone(timezone.utc)
 
 
 def effective_expiry(request: CateringRequest) -> datetime:

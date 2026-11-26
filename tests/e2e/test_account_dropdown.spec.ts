@@ -106,7 +106,7 @@ test.fixme(
 );
 
 test.fixme(
-  "Logout clears the session: cookies removed, keep-alive stopped, redirected to /, and a reload does not re-establish the signed-in menu",
+  "Sign Out clears the session: cookies removed, keep-alive stopped, redirected to /, and a reload does not re-establish the signed-in menu",
   async ({ page, context }) => {
     // Needs: a real signed-in session with a live `rp_access_token` cookie
     // to actually exercise the full clear — the DELETE route's own
@@ -115,7 +115,7 @@ test.fixme(
     await loginAs(page, "owner");
     await page.goto("/");
     await page.getByRole("button", { name: /Hello,/ }).click();
-    await page.getByRole("menuitem", { name: "Logout" }).click();
+    await page.getByRole("menuitem", { name: "Sign Out" }).click();
     await expect(page).toHaveURL(/\/$/);
     await expect(page.getByRole("link", { name: "Sign In" })).toBeVisible();
     const cookies = await context.cookies();

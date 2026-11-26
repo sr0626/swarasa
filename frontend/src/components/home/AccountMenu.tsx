@@ -138,7 +138,7 @@ export default function AccountMenu({
   const items: MenuItem[] = [
     ...leadingItemsFor(role),
     { key: "security", label: "Security", href: "/account/security" },
-    { key: "logout", label: loggingOut ? "Signing out…" : "Logout", onSelect: handleLogout },
+    { key: "logout", label: loggingOut ? "Signing out…" : "Sign Out", onSelect: handleLogout },
   ];
 
   useEffect(() => {
