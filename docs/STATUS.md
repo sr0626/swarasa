@@ -28,25 +28,45 @@ fully satisfied and asked to stop iterating for now, with an explicit intent
 to revisit later, not a final sign-off.
 
 ## Open PRs
-- Only in-flight docs PRs as of 2026-10-28: this wave-19 tracker/status/
-  cmd-log batch and the DECISIONS.md wave-19 entries. No code PRs open.
+- Only this docs batch (wave 21). No code PRs open (2026-11-26).
 
 ## Live state (2026-11)
-- Migrations on main through `0024_catering_requests`, all applied to dev.
+- Migrations on main through `0025_form_guard`, all applied to dev.
 - Terraform applied by the human 2026-10-28: admin Cognito IAM statement
   (#249) and the post-confirmation Lambda update (#254).
-- Fonts are now self-hosted (#290), so the Amplify build no longer depends on
-  Google Fonts; the two earlier failed builds were that flake.
-- Data clean-up done 2026-11-13: the 5 imported test rows were hidden; 4 are
-  `import_review` ("Import issues"), id 70 stays `coming_soon` (claimed).
-  21 real Irving restaurants are live without a phone number (the readiness
-  rule only blocks RE-activation now, #292); phones still to add.
-- Catering testing needs a restaurant that is subscribed (admin "Manage
-  subscription" on Listings) AND opted in (location editor "Catering").
-- Open items: free in-app form checks then AWS WAF CAPTCHA (decided, not
-  built), Amplify GitHub-app migration, phone numbers for the 21 listings.
+- Fonts are self-hosted (#290).
+- Form guard is deployed in **log-only** mode: `form_guard_enforced` is off
+  until the user validates the forms and flips it (`set_platform_flag`).
+- UAT run 2026-11-20 to 11-26 (signed-out, admin, owner, diner, manager):
+  findings fixed in #297-#301. Admin and manager fixes in #300 are deployed
+  but not re-checked signed in.
+- Test data left in dev: Zz UAT Kitchen (location 100, subscribed until
+  2026-12-31, manager2 assigned, test deals and menu items), location 101
+  with a pending reopen request, one open admin message, one test report,
+  one cancelled catering request.
+- 21 real Irving restaurants are live without a phone number, and real
+  listings have no cuisine/dietary tags (home page filters mostly return
+  nothing). Both need data from the user.
+- Open items: staying signed in after a full page reload (security decision),
+  AWS WAF CAPTCHA (decided, not built), Amplify GitHub-app migration.
 - Deferred: admin MFA (lowest priority); payments (catering uses a manual
   paid flag in the meantime).
+
+## Landed 2026-11-24 to 11-26, wave 21 (#295-#301)
+- **Validation checklist** (#295): `docs/VALIDATION_CHECKLIST.md`.
+- **Form guard** (#296, migration `0025_form_guard`): hidden trap field,
+  signed single-use form token and rate limits on public forms; log-only.
+- **Deal times** (#297): saved and shown in the restaurant's local time.
+- **Hidden restaurants** (#298): a brand with no live location is no longer
+  publicly readable; clearer no-match search message.
+- **Sign-in and session** (#299): no Sign In form beside the account menu,
+  "not available to your account" page, return to the requested page, session
+  ends on inactivity rather than 15 minutes after sign-in.
+- **UAT fixes** (#300): admin counts, claim rejection audit, manager activity
+  without billing, catering closes on the event date, no deal badge on closed
+  days, ZIP/state check, and smaller screen fixes.
+- **Follow-ups** (#301): catering "open until" date, "Sign Out" label, bell
+  titled "Notifications".
 
 ## Live state (2026-09-25, earlier)
 - Migrations through `0016_location_cuisine` applied to dev via

@@ -3284,6 +3284,17 @@ rejections are now in the audit log.
 *Rejected: validating that a ZIP exists (needs a ZIP database); Rejected:
 rewriting stored catering expiry dates (not needed when applied on read)*
 
+**A free in-app form guard ships ahead of AWS WAF CAPTCHA, log-only first**
+2026-11-15 | Built in PR #296 (migration `0025_form_guard`), approved by the
+user. A hidden trap field, a signed single-use form token with a minimum time to
+submit, and per-visitor, per-connection and per-user rate limits on public and
+user-submitted forms, enforced in the backend. It runs behind
+`platform_config.form_guard_enforced` (default off: logs `would_block`, rejects
+nothing) so the forms can be validated before the user turns it on. It is a
+first layer and does not replace the WAF CAPTCHA decision.
+*Rejected: enforcing from the first deploy (a mistake would block real
+submissions); Rejected: waiting for WAF (cost and infra work still open)*
+
 ---
 
 ## Agent Architecture
