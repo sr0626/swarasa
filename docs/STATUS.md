@@ -38,8 +38,10 @@ to revisit later, not a final sign-off.
 - Form guard is deployed in **log-only** mode: `form_guard_enforced` is off
   until the user validates the forms and flips it (`set_platform_flag`).
 - UAT run 2026-11-20 to 11-26 (signed-out, admin, owner, diner, manager):
-  findings fixed in #297-#306. A few cases were not run (they need email codes,
-  file upload or a further sign-in).
+  143 cases, 0 failing, 21 not run (including cases that need email codes, file
+  upload or a further sign-in). Findings fixed in #297-#306, except the open
+  items below and the benefits page heading ("Why join Swarasa" while its link
+  says "Sign up benefits").
 - Phone-width checks 2026-11-26: signed-out (iPhone and Android user agents),
   admin, owner and diner screens pass. Manager screens not yet checked. The
   small controls fixed in #306 still need a recheck on the live site.
