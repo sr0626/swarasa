@@ -171,7 +171,12 @@ export default function RestaurantHero({
             375px phone it drops to its own line under the name instead of
             squeezing the name into 3 lines and overflowing the page. */}
         <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
-          <h1 className="min-w-0 break-words font-display text-3xl font-bold text-brand-ink sm:text-4xl">
+          <h1
+            // With the follow button, the name shrinks so the heart stays on its line.
+            className={`min-w-0 break-words font-display text-3xl font-bold text-brand-ink sm:text-4xl ${
+              showFollowButton ? "flex-1 sm:flex-none" : ""
+            }`}
+          >
             {restaurant.name}
           </h1>
           {showFollowButton && (

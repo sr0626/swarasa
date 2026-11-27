@@ -57,7 +57,7 @@ export default function Hero() {
           onSubmit={handleSubmit}
           className="mx-auto mt-8 flex max-w-3xl flex-col gap-3 rounded-brand-card border border-brand-border bg-white p-3 shadow-brand-card sm:flex-row sm:items-center sm:gap-2"
         >
-          <label className="flex flex-1 items-center gap-2 rounded-brand-control px-3 py-2.5 sm:border-r sm:border-brand-border">
+          <label className="flex flex-1 items-center gap-2 rounded-brand-control px-3 py-0.5 sm:border-r sm:border-brand-border">
             <LocationPinIcon className="h-5 w-5 shrink-0 text-brand-ink-subtle" />
             <span className="sr-only">Location</span>
             <input
@@ -65,11 +65,11 @@ export default function Hero() {
               value={location}
               onChange={(e) => setLocation(e.target.value)}
               placeholder="City, ZIP, or neighborhood"
-              className="w-full min-w-0 border-0 bg-transparent text-sm text-brand-ink placeholder:text-brand-placeholder focus:outline-none"
+              className="min-h-[44px] w-full min-w-0 border-0 bg-transparent text-sm text-brand-ink placeholder:text-brand-placeholder focus:outline-none"
             />
           </label>
 
-          <label className="flex flex-1 items-center gap-2 rounded-brand-control px-3 py-2.5">
+          <label className="flex flex-1 items-center gap-2 rounded-brand-control px-3 py-0.5">
             <SearchIcon className="h-5 w-5 shrink-0 text-brand-ink-subtle" />
             <span className="sr-only">Cuisine, dish, or restaurant</span>
             <input
@@ -77,7 +77,7 @@ export default function Hero() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Cuisine, dish, or restaurant"
-              className="w-full min-w-0 border-0 bg-transparent text-sm text-brand-ink placeholder:text-brand-placeholder focus:outline-none"
+              className="min-h-[44px] w-full min-w-0 border-0 bg-transparent text-sm text-brand-ink placeholder:text-brand-placeholder focus:outline-none"
             />
           </label>
 

@@ -66,8 +66,8 @@ const PANEL_ID = "tag-filter-panel";
  * tall on touch screens, 36px from `sm` up like the tag chips. */
 function toggleChipClass(active: boolean): string {
   return active
-    ? "flex min-h-[44px] items-center gap-2 rounded-brand-pill bg-brand-ink px-4 text-sm font-medium text-brand-bg transition sm:min-h-[36px]"
-    : "flex min-h-[44px] items-center gap-2 rounded-brand-pill bg-brand-chip px-4 text-sm font-medium text-brand-chip-ink transition hover:bg-brand-chip/80 sm:min-h-[36px]";
+    ? "flex min-h-[44px] items-center gap-2 rounded-brand-pill bg-brand-ink px-4 text-sm font-medium text-brand-bg transition sm:min-h-[44px] sm:min-h-[36px]"
+    : "flex min-h-[44px] items-center gap-2 rounded-brand-pill bg-brand-chip px-4 text-sm font-medium text-brand-chip-ink transition hover:bg-brand-chip/80 sm:min-h-[44px] sm:min-h-[36px]";
 }
 
 export default function SearchFilterBar({
@@ -182,7 +182,7 @@ export default function SearchFilterBar({
               value={location}
               onChange={(e) => setLocation(e.target.value)}
               placeholder="City, ZIP, or neighborhood"
-              className="w-full min-w-0 border-0 bg-transparent text-sm text-brand-ink placeholder:text-brand-placeholder focus:outline-none"
+              className="min-h-[44px] w-full min-w-0 border-0 bg-transparent text-sm text-brand-ink placeholder:text-brand-placeholder focus:outline-none"
             />
           </label>
 
@@ -194,7 +194,7 @@ export default function SearchFilterBar({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Cuisine, dish, or restaurant"
-              className="w-full min-w-0 border-0 bg-transparent text-sm text-brand-ink placeholder:text-brand-placeholder focus:outline-none"
+              className="min-h-[44px] w-full min-w-0 border-0 bg-transparent text-sm text-brand-ink placeholder:text-brand-placeholder focus:outline-none"
             />
           </label>
 
@@ -291,7 +291,7 @@ export default function SearchFilterBar({
               type="button"
               onClick={handleToggleDealsToday}
               aria-label="Remove filter Deals today"
-              className="flex min-h-[36px] items-center gap-1.5 rounded-brand-pill border border-brand-border bg-white px-3 text-xs font-medium text-brand-ink transition hover:bg-brand-chip"
+              className="flex min-h-[44px] sm:min-h-[36px] items-center gap-1.5 rounded-brand-pill border border-brand-border bg-white px-3 text-xs font-medium text-brand-ink transition hover:bg-brand-chip"
             >
               Deals today
               <span aria-hidden="true" className="text-base leading-none text-brand-ink-subtle">
@@ -304,7 +304,7 @@ export default function SearchFilterBar({
               type="button"
               onClick={handleToggleOpenNow}
               aria-label="Remove filter Open now"
-              className="flex min-h-[36px] items-center gap-1.5 rounded-brand-pill border border-brand-border bg-white px-3 text-xs font-medium text-brand-ink transition hover:bg-brand-chip"
+              className="flex min-h-[44px] sm:min-h-[36px] items-center gap-1.5 rounded-brand-pill border border-brand-border bg-white px-3 text-xs font-medium text-brand-ink transition hover:bg-brand-chip"
             >
               Open now
               <span aria-hidden="true" className="text-base leading-none text-brand-ink-subtle">

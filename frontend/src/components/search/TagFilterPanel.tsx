@@ -25,7 +25,7 @@ import {
 const COLLAPSED_CHIP_LIMIT = 8;
 
 const CHIP_BASE =
-  "min-h-[44px] rounded-brand-pill px-4 text-sm font-medium transition sm:min-h-[36px]";
+  "min-h-[44px] rounded-brand-pill px-4 text-sm font-medium transition sm:min-h-[44px] sm:min-h-[36px]";
 const CHIP_ON = `${CHIP_BASE} bg-brand-ink text-brand-bg`;
 const CHIP_OFF = `${CHIP_BASE} bg-brand-chip text-brand-chip-ink hover:bg-brand-chip/80`;
 
@@ -80,7 +80,7 @@ export function TagFilterPanel({ groups, filters, onToggle }: TagFilterPanelProp
                   type="button"
                   aria-expanded={isExpanded}
                   onClick={() => setExpanded((prev) => ({ ...prev, [group.id]: !isExpanded }))}
-                  className="min-h-[44px] rounded-brand-pill px-3 text-sm font-medium text-brand-accent underline-offset-2 hover:underline sm:min-h-[36px]"
+                  className="min-h-[44px] rounded-brand-pill px-3 text-sm font-medium text-brand-accent underline-offset-2 hover:underline sm:min-h-[44px] sm:min-h-[36px]"
                 >
                   {isExpanded ? "Show fewer" : `Show all ${group.tags.length}`}
                 </button>
@@ -117,7 +117,7 @@ export function ActiveFilters({ groups, filters, onRemove, onClearAll }: ActiveF
               type="button"
               onClick={() => onRemove(param, name)}
               aria-label={`Remove filter ${label}`}
-              className="flex min-h-[36px] items-center gap-1.5 rounded-brand-pill border border-brand-border bg-white px-3 text-xs font-medium text-brand-ink transition hover:bg-brand-chip"
+              className="flex min-h-[44px] sm:min-h-[36px] items-center gap-1.5 rounded-brand-pill border border-brand-border bg-white px-3 text-xs font-medium text-brand-ink transition hover:bg-brand-chip"
             >
               {label}
               <span aria-hidden="true" className="text-base leading-none text-brand-ink-subtle">
@@ -130,7 +130,7 @@ export function ActiveFilters({ groups, filters, onRemove, onClearAll }: ActiveF
       <button
         type="button"
         onClick={onClearAll}
-        className="min-h-[36px] px-2 text-xs font-semibold text-brand-accent underline-offset-2 hover:underline"
+        className="min-h-[44px] sm:min-h-[36px] px-2 text-xs font-semibold text-brand-accent underline-offset-2 hover:underline"
       >
         Clear all
       </button>

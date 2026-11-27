@@ -115,7 +115,7 @@ function DesktopGroup({
         onClick={onToggle}
         className={`flex min-h-[44px] w-full items-center justify-between gap-2 rounded-brand-control px-4 text-xs font-bold uppercase tracking-wider text-brand-ink-muted transition hover:bg-brand-chip hover:text-brand-ink ${FOCUS}`}
       >
-        <span className="flex items-center gap-2">
+        <span className="relative flex items-center gap-2">
           {group.title}
           {badge && <GroupBadge badge={badge} />}
           {!open && containsActive && (
@@ -218,7 +218,7 @@ export default function ConsoleGroupedNav({ menu, label }: { menu: ConsoleNavMen
                     aria-controls={itemsRowId}
                     aria-label={groupControlLabel(groupBadge, g.id === activeGroupId)}
                     onClick={() => setPick({ path: pathname, id: g.id })}
-                    className={`flex min-h-[44px] items-center gap-2 whitespace-nowrap rounded-brand-pill border px-4 text-sm font-semibold transition ${FOCUS} ${
+                    className={`relative flex min-h-[44px] items-center gap-2 whitespace-nowrap rounded-brand-pill border px-4 text-sm font-semibold transition ${FOCUS} ${
                       isSelected
                         ? "border-brand-ink bg-brand-chip text-brand-ink"
                         : "border-brand-border bg-white text-brand-ink-muted hover:bg-brand-chip hover:text-brand-ink"

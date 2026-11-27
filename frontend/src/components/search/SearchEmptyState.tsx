@@ -53,7 +53,7 @@ export default function SearchEmptyState() {
 
       <p className="mt-6 text-sm text-brand-ink-muted">
         Just browsing?{" "}
-        <Link href="/" className="font-semibold text-brand-accent underline-offset-2 hover:underline">
+        <Link href="/" className="inline-flex min-h-[44px] items-center font-semibold text-brand-accent underline-offset-2 hover:underline">
           See popular near you
         </Link>
       </p>

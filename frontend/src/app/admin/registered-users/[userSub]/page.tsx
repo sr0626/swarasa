@@ -22,6 +22,7 @@ import {
 } from "@/lib/activity/describeEvent";
 import LocalDateTime from "@/components/ui/LocalDateTime";
 import type { ActivityEvent, ActivityEventType } from "@/types/userActivity";
+import { STACKED_HEAD, STACKED_ROW, STACKED_TITLE_CELL } from "@/components/ui/stackedTable";
 
 export const metadata: Metadata = {
   title: "Registered User Activity",
@@ -121,8 +122,8 @@ export default async function UserActivityPage({ params, searchParams }: UserAct
       ) : (
         <>
           <div className="mt-4 overflow-x-auto rounded-brand-card border border-brand-border bg-white shadow-brand-card">
-            <table className="w-full min-w-[560px] text-left text-sm">
-              <thead>
+            <table className="w-full text-left text-sm max-md:block md:min-w-[560px]">
+              <thead className={STACKED_HEAD}>
                 <tr className="border-b border-brand-border text-xs font-semibold uppercase tracking-wide text-brand-ink-subtle">
                   <th scope="col" className="px-4 py-3">
                     When
@@ -135,7 +136,7 @@ export default async function UserActivityPage({ params, searchParams }: UserAct
                   </th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="max-md:block">
                 {data.results.length === 0 ? (
                   <tr>
                     <td colSpan={3} className="px-4 py-6 text-center text-brand-ink-subtle">
@@ -144,14 +145,14 @@ export default async function UserActivityPage({ params, searchParams }: UserAct
                   </tr>
                 ) : (
                   data.results.map((event) => (
-                    <tr key={event.id} className="border-b border-brand-border align-top last:border-0">
-                      <td className="whitespace-nowrap px-4 py-3 text-brand-ink-muted">
+                    <tr key={event.id} className={`${STACKED_ROW} align-top`}>
+                      <td className={`${STACKED_TITLE_CELL} whitespace-nowrap text-brand-ink-muted`}>
                         <LocalDateTime value={event.created_at} fallback={event.created_at} />
                       </td>
-                      <td className="px-4 py-3 font-medium text-brand-ink">
+                      <td className={`${STACKED_TITLE_CELL} font-medium text-brand-ink`}>
                         {event.event_type === "search" ? "Search" : "Restaurant click"}
                       </td>
-                      <td className="px-4 py-3 text-brand-ink-muted">
+                      <td className={`${STACKED_TITLE_CELL} text-brand-ink-muted`}>
                         <EventDetails event={event} />
                       </td>
                     </tr>
