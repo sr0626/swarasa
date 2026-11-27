@@ -13,7 +13,9 @@ const LABELS: Record<LocationStatus, string> = {
   owner_deactivated: "Hidden",
   coming_soon: "Coming soon",
   import_review: "Import issues",
-  closed_pending_reopen: "Closed — pending reopen",
+  // The internal status also covers "closed, request rejected" and "closed, none
+  // asked yet", so the label claims nothing about a request.
+  closed_pending_reopen: "Closed",
 };
 
 export default function LocationStatusBadge({ status }: { status: LocationStatus }) {

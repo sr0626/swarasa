@@ -557,7 +557,7 @@ function statusWord(status: LocationStatus): string {
     case "import_review":
       return "Import issues";
     case "closed_pending_reopen":
-      return "Closed, pending reopen";
+      return "Closed";
   }
 }
 

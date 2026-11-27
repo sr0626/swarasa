@@ -58,7 +58,7 @@ export const LOCATION_STATUS_LABELS: Record<ListingLocationStatus, string> = {
   owner_deactivated: "Hidden (owner)",
   coming_soon: "Coming soon",
   import_review: "Import issues",
-  closed_pending_reopen: "Closed (reopen pending)",
+  closed_pending_reopen: "Closed",
 };
 
 /** `Owner: <email>` / `Unclaimed` / `Owner: deleted account`. */

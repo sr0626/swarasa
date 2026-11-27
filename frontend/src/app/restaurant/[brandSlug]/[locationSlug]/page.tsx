@@ -62,7 +62,10 @@ function canonicalFor(page: LocationPage): string {
 }
 
 export async function generateMetadata({ params }: LocationPageProps): Promise<Metadata> {
-  const page = await loadPage(params.brandSlug, params.locationSlug);
+  // Same viewer as the page itself, so an owner previewing a hidden listing
+  // doesn't get a "not found" tab title.
+  const session = await getServerSession();
+  const page = await loadPage(params.brandSlug, params.locationSlug, session?.accessToken);
   if (!page) return { title: "Restaurant Not Found" };
   const { restaurant, location } = page;
 

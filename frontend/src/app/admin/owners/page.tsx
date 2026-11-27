@@ -299,7 +299,7 @@ function OwnerRow({ owner }: { owner: AdminOwnerRow }) {
             <li>Hidden: {status.owner_deactivated}</li>
             <li>Coming soon: {status.coming_soon}</li>
             {status.import_review > 0 && <li>Import issues: {status.import_review}</li>}
-            <li>Closed, pending reopen: {status.closed_pending_reopen}</li>
+            <li>Closed: {status.closed_pending_reopen}</li>
           </ul>
         )}
       </td>
