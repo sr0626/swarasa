@@ -41,7 +41,8 @@ to revisit later, not a final sign-off.
   143 cases, 0 failing, 21 not run (including cases that need email codes, file
   upload or a further sign-in). Findings fixed in #297-#306, except the open
   items below and the benefits page heading ("Why join Swarasa" while its link
-  says "Sign up benefits").
+  says "Sign up benefits"). A few fixes are deployed but not yet seen on screen
+  (noted per item in the workbook).
 - Phone-width checks 2026-11-26: signed-out (iPhone and Android user agents),
   admin, owner and diner screens pass. Manager screens not yet checked. The
   small controls fixed in #306 still need a recheck on the live site.
