@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 import pytest
 
 from app.core.bulk_import_rules import check_row_fields
-from app.core.us_zip import zip_matches_state
+from app.core.us_zip import _RANGES, zip_matches_state
 
 
 @pytest.mark.parametrize(
@@ -38,3 +41,15 @@ def test_bulk_import_reports_a_wrong_state_zip():
     assert "zip_state_mismatch" in codes
     ok = [i.code for i in check_row_fields({**row, "postal_code": "75038"}).issues]
     assert "zip_state_mismatch" not in ok
+
+
+def test_frontend_copy_of_the_table_is_identical():
+    source = (
+        Path(__file__).resolve().parents[2] / "frontend/src/lib/geocode/usZip.ts"
+    ).read_text()
+    table = source[source.index("ZIP_PREFIX_RANGES") : source.index("const PREFIX")]
+    frontend = {
+        state: tuple((int(a), int(b)) for a, b in re.findall(r"\[(\d+), (\d+)\]", ranges))
+        for state, ranges in re.findall(r"^  ([A-Z]{2}): \[(.*)\],$", table, re.M)
+    }
+    assert frontend == _RANGES
