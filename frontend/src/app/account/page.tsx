@@ -116,7 +116,7 @@ export default async function AccountPage() {
   if (me?.role === "admin") {
     const navBadges = await loadAdminNavBadges(session.accessToken);
     return (
-      <AdminShell me={me} profile navBadges={navBadges}>
+      <AdminShell profile navBadges={navBadges}>
         <AdminAccountView me={me} />
       </AdminShell>
     );
@@ -126,7 +126,7 @@ export default async function AccountPage() {
   // account" active) -- the same OwnerShell /portal/brands/* uses.
   if (me?.role === "owner") {
     return (
-      <OwnerShell me={me} profile>
+      <OwnerShell profile>
         <OwnerAccountView
           me={me}
           brands={ownerRestaurants?.brands ?? []}
@@ -141,7 +141,7 @@ export default async function AccountPage() {
   // consoles use, via components/portal/ManagerShell.tsx.
   if (me?.role === "manager") {
     return (
-      <ManagerShell me={me} profile>
+      <ManagerShell profile>
         <ManagerAccountView
           me={me}
           locations={managedLocations}

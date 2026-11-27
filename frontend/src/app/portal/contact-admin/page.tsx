@@ -6,7 +6,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/guards";
-import { loadConsoleIdentity } from "@/lib/auth/consoleIdentity";
 import { loadContactAdminLocationOptions } from "@/lib/contactAdminLocations";
 import ContactAdminForm from "@/components/portal/ContactAdminForm";
 import ManagerShell from "@/components/portal/ManagerShell";
@@ -36,14 +35,11 @@ export default async function ContactAdminPage() {
     redirect("/account");
   }
 
-  const [me, locations] = await Promise.all([
-    loadConsoleIdentity(session),
-    loadContactAdminLocationOptions(session.role, session.accessToken),
-  ]);
+  const locations = await loadContactAdminLocationOptions(session.role, session.accessToken);
 
   if (session.role === "manager") {
     return (
-      <ManagerShell me={me}>
+      <ManagerShell>
         <Intro />
         <ContactAdminForm locations={locations} />
       </ManagerShell>
@@ -51,7 +47,7 @@ export default async function ContactAdminPage() {
   }
 
   return (
-    <OwnerShell me={me}>
+    <OwnerShell>
       <Intro />
       <ContactAdminForm locations={locations} />
     </OwnerShell>

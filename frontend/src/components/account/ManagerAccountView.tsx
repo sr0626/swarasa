@@ -1,5 +1,5 @@
 // /account for a manager -- rendered inside components/portal/ManagerShell.tsx
-// (the shared ConsoleShell: dark identity banner + left menu, same shape as
+// (the shared ConsoleShell: left menu, same shape as
 // the owner and admin consoles — see components/console/ConsoleShell.tsx).
 // This component is only the right-hand panel content, top to bottom:
 // "Locations I manage" (the default view -- MANAGER_NAV_ITEMS' "My
@@ -9,7 +9,7 @@
 //
 // REDESIGN (this PR): previously rendered standalone inside a plain <main>
 // with its own identity header and a "Go to the portal dashboard" link --
-// both removed now that the identity banner comes from ManagerShell and
+// both removed now that the frame comes from ManagerShell and
 // /portal/dashboard is just a redirect back to this same page (see that
 // route's own comment for the stale-bug fix).
 //
