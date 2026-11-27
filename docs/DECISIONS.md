@@ -2086,6 +2086,11 @@ signed in longer); Rejected for now: storing the Cognito refresh token in a
 second httpOnly cookie with a server-side refresh (the real fix for surviving
 reloads, but a security design that needs the user's decision)*
 
+2026-11-26 | "Keep me signed in" is ticked by default (user decision).
+A ticked session keeps refreshing while the tab is open and has no 15-minute
+idle sign-out; people on a shared computer have to untick it.
+*Rejected: leaving it unticked (people were signed out after short breaks)*
+
 ---
 
 ## Billing & Payments

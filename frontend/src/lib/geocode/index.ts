@@ -16,6 +16,7 @@ import {
   type GeocodeDeps,
   type GeocodeResult,
 } from "./geocoder";
+import { zipMatchesState } from "./usZip";
 
 export type { GeocodeAddress, GeocodePrecision, GeocodeResult } from "./geocoder";
 
@@ -28,6 +29,10 @@ const REAL_DEPS: GeocodeDeps = {
 
 /** Resolves to null (never throws) when the address can't be placed on the map. */
 export function geocodeAddress(address: GeocodeAddress): Promise<GeocodeResult | null> {
+  // A ZIP from another state is refused by the API; looking it up first only
+  // made that answer take 20+ seconds. (An older stored row with such a pair
+  // still saves, keeping its map position.)
+  if (!zipMatchesState(address.postal_code, address.state)) return Promise.resolve(null);
   return geocodeWithProviders(address, REAL_DEPS);
 }
 

@@ -198,7 +198,7 @@ test.describe("login page additions", () => {
     await page.goto("/login");
     const remember = page.getByLabel("Keep me signed in");
     await expect(remember).toBeVisible();
-    await expect(remember).not.toBeChecked();
+    await expect(remember).toBeChecked();
     await expect(
       page.getByRole("link", { name: "Forgot your password?" })
     ).toHaveAttribute("href", "/forgot-password");
