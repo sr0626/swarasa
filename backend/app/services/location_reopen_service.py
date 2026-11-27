@@ -78,7 +78,7 @@ async def create_reopen_request(
     if location.status != RestaurantLocation.STATUS_CLOSED_PENDING_REOPEN:
         raise AppError(
             409,
-            "This location is not closed pending reopen — there is nothing to request.",
+            "This location isn't closed, so there is nothing to request.",
             "not_closed_pending_reopen",
         )
 

@@ -98,7 +98,7 @@ export function listingsSummaryChips(summary: AdminListingsSummary): SummaryChip
     chip("Coming soon", summary.coming_soon),
     warnIfAny("Import issues", summary.import_review),
     chip("Hidden", summary.owner_deactivated, "inactive"),
-    chip("Closed, pending reopen", summary.closed_pending_reopen, "inactive"),
+    chip("Closed", summary.closed_pending_reopen, "inactive"),
   ];
 }
 

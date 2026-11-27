@@ -103,7 +103,7 @@ const STATUS_OPTIONS: ReadonlyArray<{ value: ListingStatusFilter; label: string 
   { value: "owner_deactivated", label: "Hidden — owner deactivated" },
   { value: "coming_soon", label: "Coming soon" },
   { value: "import_review", label: "Import issues" },
-  { value: "closed_pending_reopen", label: "Closed — pending reopen" },
+  { value: "closed_pending_reopen", label: "Closed" },
   { value: "deleted", label: "Deleted listings" },
 ];
 
@@ -112,7 +112,7 @@ const STATUS_LABELS: Record<ListingStatusFilter, string> = {
   owner_deactivated: "Hidden — owner deactivated",
   coming_soon: "Coming soon",
   import_review: "Import issues",
-  closed_pending_reopen: "Closed — pending reopen",
+  closed_pending_reopen: "Closed",
   deleted: "Deleted listings",
 };
 
