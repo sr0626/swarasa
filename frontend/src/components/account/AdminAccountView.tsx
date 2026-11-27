@@ -1,5 +1,5 @@
 // /account for an admin: the Profile panel of the admin console. The dark
-// "Admin console" banner and the left menu (Profile / Claims / Reports /
+// left menu (Profile / Claims / Reports /
 // Listings) come from components/admin/AdminShell.tsx, which app/account/
 // page.tsx wraps around this view -- this component only renders the right-
 // hand panel: account details + security. (Data export / deletion lives at /privacy, which shows admins a note instead.) No followed-

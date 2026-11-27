@@ -25,6 +25,7 @@ import {
   reviewedByLead,
   validateClaimNotes,
 } from "@/lib/claimReview";
+import { PHONE_TAP_LINK } from "@/components/ui/stackedTable";
 
 const TEXTAREA_CLASS =
   "mt-2 w-full resize-y rounded-brand-control border border-brand-border bg-white px-3 py-2.5 text-sm text-brand-ink placeholder:text-brand-placeholder focus:border-brand-accent focus:outline-none";
@@ -272,7 +273,7 @@ function ClaimCard({
           <h2 className="font-display text-lg font-bold text-brand-ink">
             <Link
               href={brandHref(claim.brand_slug)}
-              className="underline-offset-2 hover:underline"
+              className={`${PHONE_TAP_LINK} underline-offset-2 hover:underline`}
             >
               {claim.brand_name}
             </Link>

@@ -12,6 +12,7 @@ import { updateMessageStatusAction } from "@/app/admin/messages/actions";
 import LocalDateTime from "@/components/ui/LocalDateTime";
 import { locationHref } from "@/lib/restaurant/urls";
 import type { AdminMessage, AdminMessageStatus } from "@/types/adminMessage";
+import { PHONE_TAP_LINK } from "@/components/ui/stackedTable";
 
 interface AdminMessagesPanelProps {
   initialMessages: AdminMessage[];
@@ -156,7 +157,7 @@ function MessageCard({
                     message.related_location_brand_slug,
                     message.related_location_slug
                   )}
-                  className="text-brand-accent underline-offset-2 hover:underline"
+                  className={`${PHONE_TAP_LINK} text-brand-accent underline-offset-2 hover:underline`}
                 >
                   {message.related_location_label}
                 </Link>

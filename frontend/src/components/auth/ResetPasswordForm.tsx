@@ -199,7 +199,7 @@ export default function ResetPasswordForm({
       <p className="text-center text-sm text-brand-ink-muted">
         <Link
           href="/login"
-          className="font-medium text-brand-accent transition hover:text-brand-accent-hover"
+          className="inline-flex min-h-[44px] items-center font-medium text-brand-accent transition hover:text-brand-accent-hover"
         >
           Back to sign in
         </Link>

@@ -81,7 +81,7 @@ export default function TopBarShell({
     <header
       className={`${stickyOnMobile ? "sticky" : "relative md:sticky"} top-0 z-40 border-b border-brand-border bg-brand-bg/95 backdrop-blur`}
     >
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-4 sm:gap-4 sm:px-6">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-3 py-4 min-[390px]:px-4 sm:gap-4 sm:px-6">
         <Link
           href="/"
           className="flex min-h-[44px] shrink-0 flex-col justify-center leading-tight focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent"
@@ -131,7 +131,7 @@ export default function TopBarShell({
               {whyJoin && (
                 <Link
                   href={whyJoin.href}
-                  className="flex min-h-[44px] items-center whitespace-nowrap px-1 text-sm font-medium text-brand-ink-muted transition hover:text-brand-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent"
+                  className="flex min-h-[44px] items-center whitespace-nowrap px-1 text-[13px] font-medium text-brand-ink-muted transition hover:text-brand-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent max-[359px]:hidden min-[390px]:text-sm"
                 >
                   {whyJoin.label}
                 </Link>

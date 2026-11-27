@@ -27,6 +27,7 @@ import { getAdminOverview } from "@/lib/api/adminOverview";
 import { listAdminMessages } from "@/lib/api/adminMessages";
 import { getRegisteredUserCount } from "@/lib/api/adminStats";
 import type { LocationStatus } from "@/types/location";
+import { PHONE_TAP_LINK, STACKED_CELL, STACKED_HEAD, STACKED_ROW, STACKED_TITLE_CELL } from "@/components/ui/stackedTable";
 
 export const metadata: Metadata = {
   title: "Platform Overview",
@@ -212,8 +213,8 @@ export default async function AdminOverviewPage({ searchParams }: AdminOverviewP
           </p>
 
           <div className="mt-3 overflow-x-auto rounded-brand-card border border-brand-border bg-white shadow-brand-card">
-            <table className="w-full min-w-[640px] text-left text-sm">
-              <thead>
+            <table className="w-full text-left text-sm max-md:block md:min-w-[640px]">
+              <thead className={STACKED_HEAD}>
                 <tr className="border-b border-brand-border text-xs font-semibold uppercase tracking-wide text-brand-ink-subtle">
                   <th scope="col" className="px-4 py-3">
                     Owner
@@ -228,7 +229,7 @@ export default async function AdminOverviewPage({ searchParams }: AdminOverviewP
                   ))}
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="max-md:block">
                 {overview.owners.results.length === 0 ? (
                   <tr>
                     <td
@@ -240,18 +241,18 @@ export default async function AdminOverviewPage({ searchParams }: AdminOverviewP
                   </tr>
                 ) : (
                   overview.owners.results.map((owner) => (
-                    <tr key={owner.owner_id} className="border-b border-brand-border last:border-0">
-                      <td className="px-4 py-3 font-medium text-brand-ink">
+                    <tr key={owner.owner_id} className={STACKED_ROW}>
+                      <td className={`${STACKED_TITLE_CELL} font-medium text-brand-ink`}>
                         <Link
                           href={`/admin/listings?owner_email=${encodeURIComponent(owner.email)}`}
-                          className="text-brand-accent underline-offset-2 hover:underline"
+                          className={`${PHONE_TAP_LINK} text-brand-accent underline-offset-2 hover:underline`}
                         >
                           {owner.email}
                         </Link>
                       </td>
-                      <td className="px-4 py-3 text-brand-ink">{owner.restaurant_count}</td>
+                      <td data-label="Restaurants" className={`${STACKED_CELL} text-brand-ink`}>{owner.restaurant_count}</td>
                       {STATUS_ORDER.map((status) => (
-                        <td key={status} className="px-4 py-3 text-brand-ink-muted">
+                        <td key={status} data-label={STATUS_LABELS[status]} className={`${STACKED_CELL} text-brand-ink-muted`}>
                           {owner.by_status[status]}
                         </td>
                       ))}

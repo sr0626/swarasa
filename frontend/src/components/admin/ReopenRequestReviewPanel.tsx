@@ -26,6 +26,7 @@ import type {
   ReopenRequestStatus,
 } from "@/types/locationReopen";
 import { locationHref } from "@/lib/restaurant/urls";
+import { PHONE_TAP_LINK } from "@/components/ui/stackedTable";
 
 interface ReopenRequestReviewPanelProps {
   initialRequests: ReopenRequestQueueItem[];
@@ -148,7 +149,7 @@ function ReopenRequestCard({
           <h2 className="font-display text-lg font-bold text-brand-ink">
             <Link
               href={locationHref(request.brand_slug, request.location_slug)}
-              className="underline-offset-2 hover:underline"
+              className={`${PHONE_TAP_LINK} underline-offset-2 hover:underline`}
             >
               {request.brand_name}
             </Link>

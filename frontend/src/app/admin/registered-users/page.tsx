@@ -40,6 +40,7 @@ import LocalDateTime from "@/components/ui/LocalDateTime";
 import AdminPanelRow, { PANEL_IN_ROW } from "@/components/admin/AdminPanelRow";
 import AdminSummaryStrip from "@/components/admin/AdminSummaryStrip";
 import { registeredUsersSummaryChips, truncatedNote } from "@/lib/adminSummary";
+import { STACKED_CELL, STACKED_HEAD, STACKED_ROW, STACKED_TITLE_CELL } from "@/components/ui/stackedTable";
 
 export const metadata: Metadata = {
   title: "Registered Users",
@@ -167,8 +168,8 @@ export default async function RegisteredUsersPage({ searchParams }: RegisteredUs
           </p>
 
           <div className="mt-3 overflow-x-auto rounded-brand-card border border-brand-border bg-white shadow-brand-card">
-            <table className="w-full min-w-[900px] text-left text-sm">
-              <thead>
+            <table className="w-full text-left text-sm max-md:block md:min-w-[900px]">
+              <thead className={STACKED_HEAD}>
                 <tr className="border-b border-brand-border text-xs font-semibold uppercase tracking-wide text-brand-ink-subtle">
                   <th scope="col" className="px-4 py-3">
                     Email
@@ -190,7 +191,7 @@ export default async function RegisteredUsersPage({ searchParams }: RegisteredUs
                   </th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="max-md:block">
                 {data.results.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="px-4 py-6 text-center text-brand-ink-subtle">
@@ -199,8 +200,8 @@ export default async function RegisteredUsersPage({ searchParams }: RegisteredUs
                   </tr>
                 ) : (
                   data.results.map((user) => (
-                    <tr key={user.cognito_sub} className="border-b border-brand-border last:border-0">
-                      <td className="px-4 py-3 font-medium text-brand-ink">
+                    <tr key={user.cognito_sub} className={STACKED_ROW}>
+                      <td className={`${STACKED_TITLE_CELL} font-medium text-brand-ink`}>
                         {user.email ?? <span className="text-brand-ink-subtle">No email on file</span>}
                         {user.full_name && (
                           <span className="block text-xs font-normal text-brand-ink-muted">
@@ -208,21 +209,21 @@ export default async function RegisteredUsersPage({ searchParams }: RegisteredUs
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-brand-ink-muted">{statusLabel(user.status)}</td>
-                      <td className="px-4 py-3 text-brand-ink-muted">
+                      <td data-label="Status" className={`${STACKED_CELL} text-brand-ink-muted`}>{statusLabel(user.status)}</td>
+                      <td data-label="Location" className={`${STACKED_CELL} text-brand-ink-muted`}>
                         {user.city && user.postal_code ? (
                           `${user.city} ${user.postal_code}`
                         ) : (
                           <span className="text-brand-ink-subtle">Not set</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-brand-ink-muted">
+                      <td data-label="Signed up" className={`${STACKED_CELL} text-brand-ink-muted`}>
                         <LocalDateTime value={user.signup_at} fallback="Unknown" />
                       </td>
-                      <td className="px-4 py-3 text-brand-ink-muted">
+                      <td data-label="Last visited" className={`${STACKED_CELL} text-brand-ink-muted`}>
                         <LocalDateTime value={user.last_seen_at} fallback="Never" />
                       </td>
-                      <td className="px-4 py-3">
+                      <td data-label="Activity" className={STACKED_CELL}>
                         <Link
                           href={`/admin/registered-users/${encodeURIComponent(user.cognito_sub)}`}
                           className="inline-flex min-h-[44px] items-center font-semibold text-brand-accent underline-offset-2 hover:underline"

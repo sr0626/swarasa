@@ -83,7 +83,7 @@ export default async function ReportPage({ params, searchParams }: ReportPagePro
         <p className="mt-4 text-center text-xs text-brand-ink-subtle">
           <Link
             href={brandHref(restaurant.slug)}
-            className="font-semibold text-brand-ink underline"
+            className="inline-flex min-h-[44px] items-center font-semibold text-brand-ink underline"
           >
             Back to {restaurant.name}
           </Link>

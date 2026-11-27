@@ -37,6 +37,7 @@ import { countAppliedFilters, filtersHint } from "@/lib/collapsiblePanel";
 import { ownersSummaryChips } from "@/lib/adminSummary";
 import LocalDateTime from "@/components/ui/LocalDateTime";
 import type { AdminOwnerRow } from "@/types/adminOwners";
+import { PHONE_TAP_LINK, STACKED_CELL, STACKED_HEAD, STACKED_ROW, STACKED_TITLE_CELL } from "@/components/ui/stackedTable";
 
 export const metadata: Metadata = {
   title: "Owners",
@@ -180,8 +181,8 @@ export default async function AdminOwnersPage({ searchParams }: OwnersPageProps)
           </p>
 
           <div className="mt-3 overflow-x-auto rounded-brand-card border border-brand-border bg-white shadow-brand-card">
-            <table className="w-full min-w-[960px] text-left text-sm">
-              <thead>
+            <table className="w-full text-left text-sm max-md:block md:min-w-[960px]">
+              <thead className={STACKED_HEAD}>
                 <tr className="border-b border-brand-border text-xs font-semibold uppercase tracking-wide text-brand-ink-subtle">
                   <th scope="col" className="px-4 py-3">
                     Owner
@@ -209,7 +210,7 @@ export default async function AdminOwnersPage({ searchParams }: OwnersPageProps)
                   </th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="max-md:block">
                 {data.results.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="px-4 py-6 text-center text-brand-ink-subtle">
@@ -252,8 +253,8 @@ function OwnerRow({ owner }: { owner: AdminOwnerRow }) {
   const { by_status: status } = owner;
   const pending = owner.pending_claim_count + owner.pending_reopen_request_count;
   return (
-    <tr className="border-b border-brand-border align-top last:border-0">
-      <td className="px-4 py-3">
+    <tr className={`${STACKED_ROW} align-top`}>
+      <td className={STACKED_TITLE_CELL}>
         {owner.personal_data_deleted ? (
           <>
             <span className="font-medium text-brand-ink-subtle">Deleted account</span>
@@ -275,14 +276,14 @@ function OwnerRow({ owner }: { owner: AdminOwnerRow }) {
           </>
         )}
       </td>
-      <td className="px-4 py-3 text-brand-ink-muted"><LocalDateTime value={owner.joined_at} variant="date" fallback="Unknown" /></td>
-      <td className="px-4 py-3 text-brand-ink">{owner.brand_count}</td>
-      <td className="px-4 py-3 text-brand-ink">
+      <td data-label="Joined" className={`${STACKED_CELL} text-brand-ink-muted`}><LocalDateTime value={owner.joined_at} variant="date" fallback="Unknown" /></td>
+      <td data-label="Brands" className={`${STACKED_CELL} text-brand-ink`}>{owner.brand_count}</td>
+      <td data-label="Locations" className={`${STACKED_CELL} text-brand-ink`}>
         {owner.location_count > 0 || owner.brand_count > 0 ? (
           <Link
             href={`/admin/listings?owner_id=${owner.id}`}
             aria-label={`View ${owner.location_count} locations in the Listings page`}
-            className="font-medium text-brand-accent underline-offset-2 hover:underline"
+            className={`${PHONE_TAP_LINK} justify-end font-medium text-brand-accent underline-offset-2 hover:underline`}
           >
             {owner.location_count}
           </Link>
@@ -290,7 +291,7 @@ function OwnerRow({ owner }: { owner: AdminOwnerRow }) {
           owner.location_count
         )}
       </td>
-      <td className="px-4 py-3 text-xs text-brand-ink-muted">
+      <td data-label="By status" className={`${STACKED_CELL} text-xs text-brand-ink-muted`}>
         {owner.location_count === 0 ? (
           <span className="text-brand-ink-subtle">&mdash;</span>
         ) : (
@@ -303,11 +304,13 @@ function OwnerRow({ owner }: { owner: AdminOwnerRow }) {
           </ul>
         )}
       </td>
-      <td className="px-4 py-3 text-brand-ink-muted">
+      <td data-label="Verified" className={`${STACKED_CELL} text-brand-ink-muted`}>
+        <span>
         {owner.verified_location_count} / {owner.location_count}
+        </span>
       </td>
-      <td className="px-4 py-3 text-brand-ink-muted">{owner.follower_count}</td>
-      <td className="px-4 py-3 text-xs text-brand-ink-muted">
+      <td data-label="Followers" className={`${STACKED_CELL} text-brand-ink-muted`}>{owner.follower_count}</td>
+      <td data-label="Pending" className={`${STACKED_CELL} text-xs text-brand-ink-muted`}>
         {pending === 0 ? (
           <span className="text-brand-ink-subtle">&mdash;</span>
         ) : (
@@ -316,7 +319,7 @@ function OwnerRow({ owner }: { owner: AdminOwnerRow }) {
               <li>
                 <Link
                   href="/admin/claims"
-                  className="text-brand-accent underline-offset-2 hover:underline"
+                  className={`${PHONE_TAP_LINK} text-brand-accent underline-offset-2 hover:underline`}
                 >
                   {owner.pending_claim_count} {owner.pending_claim_count === 1 ? "claim" : "claims"}
                 </Link>
@@ -326,7 +329,7 @@ function OwnerRow({ owner }: { owner: AdminOwnerRow }) {
               <li>
                 <Link
                   href="/admin/reopen-requests"
-                  className="text-brand-accent underline-offset-2 hover:underline"
+                  className={`${PHONE_TAP_LINK} text-brand-accent underline-offset-2 hover:underline`}
                 >
                   {owner.pending_reopen_request_count} reopen{" "}
                   {owner.pending_reopen_request_count === 1 ? "request" : "requests"}

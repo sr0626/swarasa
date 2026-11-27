@@ -9,3 +9,14 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* One deliberate exception to "utilities only": iOS Safari zooms the whole page
+   when a field smaller than 16px gets focus, and the app's fields are 14px.
+   The selectors outrank the single `text-sm` class on each field. */
+@media (max-width: 639px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  :root select,
+  :root textarea {
+    font-size: 1rem;
+  }
+}

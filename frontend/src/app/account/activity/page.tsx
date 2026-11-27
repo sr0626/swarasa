@@ -12,7 +12,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/guards";
-import { loadConsoleIdentity } from "@/lib/auth/consoleIdentity";
 import { ApiError } from "@/lib/api/client";
 import { getMyActivity } from "@/lib/api/auth";
 import ManagerShell from "@/components/portal/ManagerShell";
@@ -42,11 +41,9 @@ export default async function AccountActivityPage() {
         : "Could not load recent activity. Please try again.";
   }
 
-  const me = await loadConsoleIdentity(session);
-
   if (session.role === "manager") {
     return (
-      <ManagerShell me={me}>
+      <ManagerShell>
         <OwnerActivitySection
           initialPage={activityPage}
           loadError={activityError}
@@ -59,7 +56,7 @@ export default async function AccountActivityPage() {
   }
 
   return (
-    <OwnerShell me={me}>
+    <OwnerShell>
       <OwnerActivitySection initialPage={activityPage} loadError={activityError} headingAs="h1" />
     </OwnerShell>
   );
