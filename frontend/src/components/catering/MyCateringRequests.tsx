@@ -18,6 +18,7 @@ import {
   requestStatusLabel,
 } from "@/lib/catering/summary";
 import type { CateringRecipient, CateringRequest } from "@/types/catering";
+import { PHONE_TAP_LINK } from "@/components/ui/stackedTable";
 
 function StatusChip({ children, tone }: { children: string; tone: "ok" | "muted" | "warn" }) {
   const cls =
@@ -39,10 +40,12 @@ function RecipientRow({ r }: { r: CateringRecipient }) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Link
           href={`/restaurant/${r.brand_slug}/${r.location_slug}`}
-          className="min-w-0 break-words text-sm font-semibold text-brand-ink underline"
+          className={`${PHONE_TAP_LINK} min-w-0 break-words text-sm font-semibold text-brand-ink underline`}
         >
-          {r.restaurant_name}
-          <span className="font-normal text-brand-ink-subtle">, {r.city}</span>
+          <span>
+            {r.restaurant_name}
+            <span className="font-normal text-brand-ink-subtle">, {r.city}</span>
+          </span>
         </Link>
         <StatusChip tone={r.status === "quoted" ? "ok" : r.status === "pending" ? "muted" : "warn"}>
           {recipientStatusLabel(r.status)}

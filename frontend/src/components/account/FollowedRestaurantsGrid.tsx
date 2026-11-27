@@ -16,6 +16,7 @@ import RestaurantCard from "@/components/listing/RestaurantCard";
 import { SearchIcon } from "@/components/ui/icons";
 import { cardClass, primaryLinkClass } from "@/components/account/accountShared";
 import type { FollowedBrand } from "@/types/follow";
+import { PHONE_TAP_LINK } from "@/components/ui/stackedTable";
 
 export default function FollowedRestaurantsGrid({
   follows,
@@ -33,7 +34,7 @@ export default function FollowedRestaurantsGrid({
         {!loadError && follows.length > 0 && (
           <Link
             href="/search"
-            className="text-sm font-semibold text-brand-accent hover:text-brand-accent-hover"
+            className={`${PHONE_TAP_LINK} text-sm font-semibold text-brand-accent hover:text-brand-accent-hover`}
           >
             Find more →
           </Link>
