@@ -22,7 +22,7 @@ import {
 } from "@/lib/activity/describeEvent";
 import LocalDateTime from "@/components/ui/LocalDateTime";
 import type { ActivityEvent, ActivityEventType } from "@/types/userActivity";
-import { STACKED_HEAD, STACKED_ROW, STACKED_TITLE_CELL } from "@/components/ui/stackedTable";
+import { STACKED_HEAD, STACKED_ROW, STACKED_TITLE_CELL, PHONE_TAP_LINK } from "@/components/ui/stackedTable";
 
 export const metadata: Metadata = {
   title: "Registered User Activity",
@@ -226,8 +226,8 @@ function FilterLink({
       aria-current={active ? "page" : undefined}
       className={
         active
-          ? "rounded-brand-pill bg-brand-ink px-3.5 py-1.5 font-semibold text-brand-bg"
-          : "rounded-brand-pill border border-brand-border px-3.5 py-1.5 text-brand-ink-muted transition hover:bg-brand-chip"
+          ? `${PHONE_TAP_LINK} justify-center rounded-brand-pill bg-brand-ink px-3.5 py-1.5 font-semibold text-brand-bg`
+          : `${PHONE_TAP_LINK} justify-center rounded-brand-pill border border-brand-border px-3.5 py-1.5 text-brand-ink-muted transition hover:bg-brand-chip`
       }
     >
       {children}

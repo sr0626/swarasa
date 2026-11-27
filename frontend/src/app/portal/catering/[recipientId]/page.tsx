@@ -18,6 +18,7 @@ import {
   requesterLabel,
 } from "@/lib/catering/summary";
 import type { InboxDetail } from "@/types/catering";
+import { PHONE_TAP_LINK } from "@/components/ui/stackedTable";
 
 export const metadata: Metadata = {
   title: "Catering request",
@@ -132,7 +133,7 @@ export default async function PortalCateringDetailPage({
                 <div className="min-w-0">
                   <dt className="font-semibold text-brand-ink">Email</dt>
                   <dd className="break-all text-brand-ink-muted">
-                    <a className="underline" href={`mailto:${detail.requester_email}`}>
+                    <a className={`${PHONE_TAP_LINK} underline`} href={`mailto:${detail.requester_email}`}>
                       {detail.requester_email}
                     </a>
                   </dd>

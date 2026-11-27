@@ -76,6 +76,7 @@ import type {
   ListingCreator,
 } from "@/types/adminListings";
 import { ownerBrandPageLink, ownerLocationPageLink } from "@/lib/restaurant/urls";
+import { PHONE_TAP_LINK } from "@/components/ui/stackedTable";
 
 /** Parsed, URL-derived filter state — see `admin/listings/page.tsx`'s
  * `searchParams` parsing. `undefined` means "no filter" for every field
@@ -588,7 +589,7 @@ function BrandRow({
                 Owner:{" "}
                 <Link
                   href={`/admin/owners?q=${encodeURIComponent(brand.owner_email)}`}
-                  className="text-brand-accent underline-offset-2 hover:underline"
+                  className={`${PHONE_TAP_LINK} text-brand-accent underline-offset-2 hover:underline`}
                 >
                   {brand.owner_email}
                 </Link>
