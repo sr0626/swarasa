@@ -28,7 +28,7 @@ fully satisfied and asked to stop iterating for now, with an explicit intent
 to revisit later, not a final sign-off.
 
 ## Open PRs
-- Only this docs batch (wave 21). No code PRs open (2026-11-26).
+- Only this docs batch (wave 22). No code PRs open (2026-11-26).
 
 ## Live state (2026-11)
 - Migrations on main through `0025_form_guard`, all applied to dev.
@@ -38,12 +38,15 @@ to revisit later, not a final sign-off.
 - Form guard is deployed in **log-only** mode: `form_guard_enforced` is off
   until the user validates the forms and flips it (`set_platform_flag`).
 - UAT run 2026-11-20 to 11-26 (signed-out, admin, owner, diner, manager):
-  findings fixed in #297-#301. Admin and manager fixes in #300 are deployed
-  but not re-checked signed in.
+  findings fixed in #297-#306. A few cases were not run (they need email codes,
+  file upload or a further sign-in).
+- Phone-width checks 2026-11-26: signed-out (iPhone and Android user agents),
+  admin, owner and diner screens pass. Manager screens not yet checked. The
+  small controls fixed in #306 still need a recheck on the live site.
 - Test data left in dev: Zz UAT Kitchen (location 100, subscribed until
-  2026-12-31, manager2 assigned, test deals and menu items), location 101
-  with a pending reopen request, one open admin message, one test report,
-  one cancelled catering request.
+  2026-12-31, test deals and menu items; manager2 removed), location 101
+  closed (reopen request rejected), one open report, one cancelled catering
+  request.
 - 21 real Irving restaurants are live without a phone number, and real
   listings have no cuisine/dietary tags (home page filters mostly return
   nothing). Both need data from the user.
@@ -51,6 +54,17 @@ to revisit later, not a final sign-off.
   AWS WAF CAPTCHA (decided, not built), Amplify GitHub-app migration.
 - Deferred: admin MFA (lowest priority); payments (catering uses a manual
   paid flag in the meantime).
+
+## Landed 2026-11-26, wave 22 (#303-#306)
+- **Closed label** (#303): a closed location reads "Closed"; the owner preview
+  of a hidden listing has the right tab title.
+- **Sign-in and ZIP** (#304): "Keep me signed in" is ticked by default (ticked
+  sessions have no idle sign-out); a ZIP that does not match the state is
+  refused without waiting for the address lookup.
+- **Phone layouts** (#305): no sideways scroll, no zoom on field focus, admin
+  tables as cards, larger controls, a "page not found" screen with ways back.
+  The identity banner is gone from the admin, owner and manager consoles.
+- **Tap targets** (#306): the remaining small links are larger on phones.
 
 ## Landed 2026-11-24 to 11-26, wave 21 (#295-#301)
 - **Validation checklist** (#295): `docs/VALIDATION_CHECKLIST.md`.

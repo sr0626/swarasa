@@ -742,5 +742,11 @@ git push -u origin fix/catering-open-until   # claude
 ```bash
 git push origin fix/catering-open-until   # claude
 git push -u origin docs/wave-295-301   # claude
+git push -u origin fix/closed-label   # claude
+git push -u origin fix/signin-default-and-zip-speed   # claude
+git push -u origin fix/mobile-ui   # claude
+git push origin fix/mobile-ui   # claude
+git push -u origin fix/mobile-tap-targets   # claude
+git push -u origin docs/wave-303-306   # claude
 ```
 

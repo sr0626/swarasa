@@ -3300,6 +3300,13 @@ first layer and does not replace the WAF CAPTCHA decision.
 *Rejected: enforcing from the first deploy (a mistake would block real
 submissions); Rejected: waiting for WAF (cost and infra work still open)*
 
+**The consoles have no identity banner**
+2026-11-26 | User decision: the banner card at the top of the admin, owner and
+manager consoles took too much room on web and phone, so it is removed (PR #305).
+The header's account menu already shows who is signed in. The account page keeps
+a screen-reader-only heading. The diner account header is unchanged.
+*Rejected: keeping a smaller banner (the user asked for it to go)*
+
 ---
 
 ## Agent Architecture
